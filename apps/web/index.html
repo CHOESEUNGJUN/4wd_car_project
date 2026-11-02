@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>미니카 웹 조종</title>
+<style>
+  :root { --bg:#f5f5f4; --fg:#1c1917; --key:#e7e5e4; --on:#2563eb; --muted:#78716c; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#1c1917; --fg:#f5f5f4; --key:#44403c; --muted:#a8a29e; }
+  }
+  :root[data-theme="dark"] { --bg:#1c1917; --fg:#f5f5f4; --key:#44403c; --muted:#a8a29e; }
+  body { margin:0; font:16px system-ui, sans-serif; background:var(--bg); color:var(--fg); display:flex; justify-content:center; }
+  main { width:100%; max-width:360px; padding:16px; box-sizing:border-box; display:flex; flex-direction:column; gap:16px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button { font:inherit; padding:10px 14px; border-radius:10px; border:0; background:var(--key); color:var(--fg); cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  #pad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #pad button { aspect-ratio:1; font-size:32px; }
+  #pad button.on { background:var(--on); color:#fff; }
+  #mode { font-size:22px; font-weight:700; flex:1; }
+  #status, #line, small { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <div class="row">
+    <button id="ble">BLE 연결 (HM-10)</button>
+    <button id="ser">시리얼 연결 (HC-06)</button>
+  </div>
+  <div id="status">연결 안 됨</div>
+  <div class="row"><span id="mode">수동 · 정지</span><button id="toggle" disabled>자동으로</button></div>
+  <div id="pad">
+    <button data-c="q">↺</button><button data-c="g">▲</button><button data-c="w">↻</button>
+    <button data-c="l">◀</button><button data-c="s">■</button><button data-c="r">▶</button>
+    <span></span><button data-c="b">▼</button><span></span>
+  </div>
+  <div id="line"></div>
+  <small>키보드: 방향키 = 전후좌우, Q/E = 제자리 회전, 스페이스 = 정지</small>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+let write = null, auto = false, act = 's', held = null, buf = '';
+const ACT = { g: '직진', b: '후진', l: '좌회전', r: '우회전', q: '제자리 좌회전', w: '제자리 우회전', s: '정지', o: '장애물 정지' };
+
+const status = t => $('status').textContent = t;
+
+function render() {
+  $('mode').textContent = (auto ? '자동' : '수동') + ' · ' + (ACT[act] || '정지');
+  $('toggle').textContent = auto ? '수동으로' : '자동으로';
+  $('toggle').disabled = !write;
+  for (const b of $('pad').querySelectorAll('button')) b.classList.toggle('on', b.dataset.c === held);
+}
+
+// 차가 200ms마다 보내는 상태 줄: "ag,23" = 자동, 직진, 23cm
+function onLine(line) {
+  if (line.length < 2 || (line[0] !== 'a' && line[0] !== 'm')) return;
+  auto = line[0] === 'a';
+  act = line[1];
+  const d = parseInt(line.split(',')[1]);
+  $('line').textContent = isNaN(d) ? '' : d >= 999 ? '앞: 측정 안 됨' : `앞: ${d}cm`;
+}
+
+function onText(t) {
+  for (const ch of t) {
+    if (ch === '\n') { onLine(buf); buf = ''; }
+    else if (ch !== '\r') buf = (buf + ch).slice(-64);
+  }
+  render();
+}
+
+function connected(name) {
+  status('연결: ' + name);
+  write('m');  // 연결 직후 수동으로 맞추고, 차가 돌려주는 'm'으로 표시 동기화
+  render();
+}
+
+function lost() {
+  if (!write) return;
+  write = null; held = null;
+  status('연결 끊김');
+  render();
+}
+
+// HM-10: 서비스 FFE0, 특성 FFE1. 안드로이드·맥 크롬, 아이폰은 Bluefy 브라우저.
+$('ble').onclick = async () => {
+  if (!navigator.bluetooth) return status('이 브라우저는 Web Bluetooth가 없습니다. 크롬(안드로이드·맥)이나 아이폰 Bluefy를 쓰세요.');
+  try {
+    const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [0xffe0] });
+    status('연결 중…');
+    const server = await dev.gatt.connect();
+    const ch = await (await server.getPrimaryService(0xffe0)).getCharacteristic(0xffe1);
+    await ch.startNotifications();
+    ch.addEventListener('characteristicvaluechanged', e => onText(dec.decode(e.target.value)));
+    dev.addEventListener('gattserverdisconnected', lost);
+    // GATT 쓰기는 한 번에 하나만 되므로 줄 세운다
+    let busy = Promise.resolve();
+    write = c => busy = busy.then(() => ch.writeValueWithoutResponse(enc.encode(c))).catch(() => {});
+    connected(dev.name || 'HM-10');
+  } catch (e) { status(e.message); }
+};
+
+// HC-06: 맥에서 먼저 페어링한 뒤 크롬/엣지에서 포트를 고른다(Web Serial).
+$('ser').onclick = async () => {
+  if (!navigator.serial) return status('Web Serial은 맥·PC의 크롬·엣지에서만 됩니다.');
+  try {
+    const port = await navigator.serial.requestPort({
+      allowedBluetoothServiceClassIds: ['00001101-0000-1000-8000-00805f9b34fb'],
+    });
+    await port.open({ baudRate: 9600 });
+    const w = port.writable.getWriter();
+    write = c => w.write(enc.encode(c)).catch(() => {});
+    connected('HC-06 (시리얼)');
+    const r = port.readable.getReader();
+    while (true) {
+      const { value, done } = await r.read();
+      if (done) break;
+      onText(dec.decode(value));
+    }
+  } catch (e) { status(e.message); }
+  lost();
+};
+
+// 누르고 있는 동안 200ms마다 반복 전송. 차의 LINK_MS(600ms) 안전장치와 짝이다.
+setInterval(() => { if (held && held !== 's') write?.(held); }, 200);
+// 0.6초마다 'h': 차가 "앱이 연결되어 있다"를 알 수 있게 (주행에는 영향 없음)
+setInterval(() => write?.('h'), 600);
+
+function press(c) { held = c; write?.(c); render(); }
+// 차가 상태 줄을 보내는 순간에는 받은 글자를 놓칠 수 있어서 정지는 두 번 보낸다
+function release() { if (held === null) return; held = null; write?.('s'); write?.('s'); render(); }
+
+for (const b of $('pad').querySelectorAll('button')) {
+  b.addEventListener('pointerdown', e => { b.setPointerCapture(e.pointerId); press(b.dataset.c); });
+  b.addEventListener('pointerup', release);
+  b.addEventListener('pointercancel', release);
+  b.addEventListener('lostpointercapture', release);
+}
+$('toggle').onclick = () => write?.(auto ? 'm' : 'a');
+
+const keys = { ArrowUp: 'g', ArrowDown: 'b', ArrowLeft: 'l', ArrowRight: 'r', q: 'q', e: 'w', ' ': 's' };
+addEventListener('keydown', e => { const c = keys[e.key]; if (!c || e.repeat) return; e.preventDefault(); press(c); });
+addEventListener('keyup', e => { if (keys[e.key]) release(); });
+// 탭을 벗어나면 누르던 버튼을 놓은 것으로 처리
+document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });
+addEventListener('blur', release);
+render();
+</script>
+</body>
+</html>
