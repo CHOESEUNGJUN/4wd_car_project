@@ -1,0 +1,13 @@
+.DS_Store
+.claude/settings.local.json
+
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+
+# Android
+.gradle/
+local.properties
+.idea/
+*.iml
