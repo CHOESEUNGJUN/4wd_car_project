@@ -19,6 +19,7 @@ const int SLOW = 30;        // 커브 안쪽 바퀴 속도
 const int STOP_CM = 15, RESUME_CM = 20;
 const unsigned long HOLD_MS = 1000;  // 장애물 정지 후 최소 유지
 const unsigned long LINK_MS = 600;   // 이 시간 무명령이면 정지 (앱 반복 주기 200ms보다 충분히 크게)
+const unsigned long SWITCH_HOLD_MS = 500;  // 모드 전환 직후 무조건 정지하는 안전 지연
 
 SoftwareSerial BT(BT_RXD, BT_TXD);
 Servo myservo;
@@ -94,7 +95,7 @@ const unsigned long LINK_SHOW_MS = 1500;  // 앱은 0.6초마다 'h'를 보낸�
 void setMode(Mode m) {
   mode = m; cmd = 's';
   drive(0, 0);
-  holdUntil = millis() + 500;          // 전환 직후 0.5초는 무조건 정지
+  holdUntil = millis() + SWITCH_HOLD_MS;  // 전환 직후 안전 지연 동안 무조건 정지
   act = 's';
 }
 
