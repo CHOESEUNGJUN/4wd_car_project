@@ -48,8 +48,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var scanBtn: Button
     private lateinit var disconnectBtn: Button
-    private lateinit var listScroll: ScrollView
-    private lateinit var listBox: LinearLayout
+    private lateinit var listBox: LinearLayout   // 찾은 기기 목록. 비어 있으면 숨김
     private lateinit var modeLabel: TextView
     private lateinit var distLabel: TextView
     private lateinit var modeBtn: Button
@@ -116,11 +115,7 @@ class MainActivity : Activity() {
         }
         scanBtn = Button(this).apply { text = "기기 찾기"; setOnClickListener { scan() } }
         disconnectBtn = Button(this).apply { text = "끊기"; visibility = View.GONE; setOnClickListener { close() } }
-        listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        listScroll = ScrollView(this).apply {
-            addView(listBox)
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (240 * dp).toInt())
-        }
+        listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         modeLabel = TextView(this).apply { text = "수동 · 정지"; textSize = 22f }
         distLabel = TextView(this).apply { textSize = 16f; gravity = Gravity.CENTER_HORIZONTAL }
         modeBtn = Button(this).apply { text = "자동으로"; setOnClickListener { send(if (auto) 'm' else 'a') } }
@@ -174,7 +169,7 @@ class MainActivity : Activity() {
                 addView(scanBtn)
                 addView(disconnectBtn)
             })
-            addView(listScroll)
+            addView(listBox, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             addView(LinearLayout(this@MainActivity).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 setPadding(0, pad, 0, pad)
@@ -267,10 +262,11 @@ class MainActivity : Activity() {
                 setOnClickListener { connect(d) }
             })
         }
+        listBox.visibility = if (items.isEmpty() || socket != null) View.GONE else View.VISIBLE
     }
 
     private fun showConnected(connected: Boolean) {
-        listScroll.visibility = if (connected) View.GONE else View.VISIBLE
+        listBox.visibility = if (connected || found.isEmpty()) View.GONE else View.VISIBLE
         scanBtn.visibility = if (connected) View.GONE else View.VISIBLE
         disconnectBtn.visibility = if (connected) View.VISIBLE else View.GONE
     }
