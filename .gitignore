@@ -11,3 +11,6 @@ build/
 local.properties
 .idea/
 *.iml
+
+# 빌드한 APK (GitHub Release 로 따로 올림)
+dist/
