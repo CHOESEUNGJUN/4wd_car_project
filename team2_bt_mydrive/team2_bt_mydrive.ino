@@ -73,6 +73,9 @@ int lastLeftSpeed = 0;
 Mode mode = MANUAL;
 char cmd = 's';
 char act = 's';  // 앱에 보내는 지금 동작: g 직진, b 후진, l/r 좌/우, q/w 제자리, s 정지, o 장애물 정지
+// 앱에 보내는 지금 단계 (자세한 디버그용)
+// MAN 수동, HOLD 전환 대기, LINE 라인 추종, NOLINE 선 놓침, DEAD 데드존 찾기, OBST 장애물 정지
+const char* stage = "MAN";
 unsigned long holdUntil = 0, lastRx = 0, lastLink = 0, lastTx = 0;
 
 void setup() {
@@ -89,8 +92,8 @@ void setup() {
   pinMode(LeftMotor_4_pin, OUTPUT);
   pinMode(LeftMotor_E_pin, OUTPUT);
 
-  Serial.begin(9600);
-  BT.begin(9600);
+  Serial.begin(115200);  // 시리얼 모니터도 115200 으로 맞추기 (USB라서 빨라도 됨)
+  BT.begin(9600);        // 블루투스 모듈은 9600 그대로 (HC-06 기본값, SoftwareSerial 은 빠르면 깨짐)
   Serial.println(F("=== 시작 (수동 모드) ==="));
   Serial.print(F("SPEED: "));
   Serial.println(SPEED);
@@ -104,15 +107,16 @@ void loop() {
   debugStatus(frontDist);
 
   // 모드 전환 직후 안전 지연
-  if (millis() < holdUntil) { stopCar(); return; }
+  if (millis() < holdUntil) { stopCar(); stage = "HOLD"; return; }
 
   if (mode == AUTO) {
-    if (obstacleStopped) { act = 'o'; return; }
+    if (obstacleStopped) { act = 'o'; stage = "OBST"; return; }
     followLine();
     return;
   }
 
   // 수동: 끊기면 정지, 장애물 앞에서는 앞으로 가는 명령만 막음
+  stage = "MAN";
   if (millis() - lastRx > LINK_MS) cmd = 's';
   bool blocked = obstacleStopped && (cmd == 'g' || cmd == 'l' || cmd == 'r');
   driveManual(blocked ? 's' : cmd);
@@ -140,11 +144,13 @@ void serviceBT() {
       cmd = c;
     }
   }
-  // 폰에 상태 한 줄: 모드(a/m) + 동작 + ',' + 거리(cm). 예) "ag,23"
+  // 폰에 상태 한 줄: 모드(a/m)+동작, 거리(cm), 라인센서 L C R, 단계. 예) "ag,23,010,LINE"
   if (millis() - lastTx >= 200) {
     lastTx = millis();
     BT.print(mode == AUTO ? 'a' : 'm'); BT.print(act);
-    BT.print(','); BT.println(frontDist >= 9999 ? 999 : frontDist / 10);
+    BT.print(','); BT.print(frontDist >= 9999 ? 999 : frontDist / 10);
+    BT.print(','); BT.print(digitalRead(L_Line)); BT.print(digitalRead(C_Line)); BT.print(digitalRead(R_Line));
+    BT.print(','); BT.println(stage);
   }
 }
 
@@ -225,7 +231,9 @@ void debugStatus(int d) {
   Serial.print(F(" | 라인 "));
   printLine();
   Serial.print(F(" | 동작 "));
-  Serial.println(action);
+  Serial.print(action);
+  Serial.print(F(" | 단계 "));
+  Serial.println(stage);
 }
 
 void printLine() {
@@ -267,6 +275,7 @@ void lostLineMove() {
 
   if (rs == 0 && ls == 0) return;
 
+  stage = "DEAD";
   if (LOST_MODE == 1) {
     Serial.println(F("[데드존] 원래 방향으로 선 찾는 중"));
     drive(rd, ld, LOST_SPEED, LOST_SPEED);
@@ -297,9 +306,11 @@ void followLine() {
   int R = digitalRead(R_Line);
 
   if (L == 1 && C == 1 && R == 1) {
+    stage = "NOLINE";
     if (lost_since == 0) {
       lost_since = millis();
       lostLineMove();
+      stage = "NOLINE";
     }
 
     if (millis() - lost_since >= 10000) {
@@ -313,6 +324,7 @@ void followLine() {
   }
 
   lost_since = 0;
+  stage = "LINE";
 
   int state = L * 4 + C * 2 + R;
 

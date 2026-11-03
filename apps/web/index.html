@@ -20,6 +20,7 @@
   #pad button.on { background:var(--on); color:#fff; }
   #mode { font-size:22px; font-weight:700; flex:1; }
   #status, #line, small { color:var(--muted); }
+  #stage { font-weight:600; }
 </style>
 </head>
 <body>
@@ -35,6 +36,7 @@
     <button data-c="l">◀</button><button data-c="s">■</button><button data-c="r">▶</button>
     <span></span><button data-c="b">▼</button><span></span>
   </div>
+  <div id="stage"></div>
   <div id="line"></div>
   <small>키보드: 방향키 = 전후좌우, Q/E = 제자리 회전, 스페이스 = 정지</small>
 </main>
@@ -53,13 +55,25 @@ function render() {
   for (const b of $('pad').querySelectorAll('button')) b.classList.toggle('on', b.dataset.c === held);
 }
 
-// 차가 200ms마다 보내는 상태 줄: "ag,23" = 자동, 직진, 23cm
+const STAGE = {
+  MAN: '수동 조종', HOLD: '전환 대기 (0.5초)', CAL: '회전 시간 측정',
+  LINE: '라인 추종', CORNER: '코너 회전', NOLINE: '선 놓침',
+  DEAD: '데드존: 선 찾는 중', SWAY: '좌우로 흔들며 선 찾기', LOST: '선 못 찾음 (정지)',
+  OBST: '장애물 대기',
+};
+
+// 차가 200ms마다 보내는 상태 줄: "ag,23,010,LINE" = 자동, 직진, 23cm, 라인센서 L C R, 단계 (뒤 두 칸은 없을 수도 있음)
 function onLine(line) {
-  if (line.length < 2 || (line[0] !== 'a' && line[0] !== 'm')) return;
-  auto = line[0] === 'a';
-  act = line[1];
-  const d = parseInt(line.split(',')[1]);
-  $('line').textContent = isNaN(d) ? '' : d >= 999 ? '앞: 측정 안 됨' : `앞: ${d}cm`;
+  const f = line.split(',');
+  if (f[0].length < 2 || (f[0][0] !== 'a' && f[0][0] !== 'm')) return;
+  auto = f[0][0] === 'a';
+  act = f[0][1];
+  const d = parseInt(f[1]);
+  const dist = isNaN(d) ? '' : d >= 999 ? '앞: 측정 안 됨' : `앞: ${d}cm`;
+  const sensors = f[2] ? '센서 ' + [...f[2]].map(c => c === '1' ? '●' : '○').join(' ') : '';
+  const st = f[3] || '';
+  $('stage').textContent = st.startsWith('AV') ? `회피 ${st.slice(2)}단계` : (STAGE[st] || st);
+  $('line').textContent = [dist, sensors].filter(Boolean).join('  ·  ');
 }
 
 function onText(t) {

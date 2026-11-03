@@ -171,18 +171,30 @@ class MainActivity : Activity() {
         }
     }
 
-    // "ag,23" → 모드 a, 동작 g, 거리 23
+    private val stageNames = mapOf(
+        "MAN" to "수동 조종", "HOLD" to "전환 대기 (0.5초)", "CAL" to "회전 시간 측정",
+        "LINE" to "라인 추종", "CORNER" to "코너 회전", "NOLINE" to "선 놓침",
+        "DEAD" to "데드존: 선 찾는 중", "SWAY" to "좌우로 흔들며 선 찾기", "LOST" to "선 못 찾음 (정지)",
+        "OBST" to "장애물 대기",
+    )
+
+    // "ag,23,010,LINE" → 모드 a, 동작 g, 거리 23, 라인센서 L C R, 단계 (뒤 두 칸은 없을 수도 있음)
     private fun onLine(line: String) {
-        if (line.length < 2 || (line[0] != 'a' && line[0] != 'm')) return
-        auto = line[0] == 'a'
-        modeLabel.text = (if (auto) "자동" else "수동") + " · " + (actNames[line[1]] ?: "정지")
+        val f = line.split(',')
+        if (f[0].length < 2 || (f[0][0] != 'a' && f[0][0] != 'm')) return
+        auto = f[0][0] == 'a'
+        modeLabel.text = (if (auto) "자동" else "수동") + " · " + (actNames[f[0][1]] ?: "정지")
         modeBtn.text = if (auto) "수동으로" else "자동으로"
-        val d = line.substringAfter(',', "").toIntOrNull()
-        distLabel.text = when {
+        val d = f.getOrNull(1)?.toIntOrNull()
+        val dist = when {
             d == null -> ""
             d >= 999 -> "앞: 측정 안 됨"
             else -> "앞: ${d}cm"
         }
+        val sensors = f.getOrNull(2)?.let { s -> "센서 " + s.map { if (it == '1') "●" else "○" }.joinToString(" ") } ?: ""
+        val stage = f.getOrNull(3)?.let { s -> if (s.startsWith("AV")) "회피 ${s.drop(2)}단계" else stageNames[s] ?: s } ?: ""
+        distLabel.text = listOf(stage, listOf(dist, sensors).filter { it.isNotEmpty() }.joinToString("  ·  "))
+            .filter { it.isNotEmpty() }.joinToString("\n")
     }
 
     private fun close() {
