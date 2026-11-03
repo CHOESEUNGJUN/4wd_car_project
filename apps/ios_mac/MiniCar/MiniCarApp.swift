@@ -29,7 +29,12 @@ struct ContentView: View {
                         .buttonStyle(.borderedProminent)
                 }
                 pad
-                Text(car.distText).font(.body.monospaced()).foregroundStyle(.secondary)
+                VStack(spacing: 4) {
+                    Text(car.stageText).font(.headline)
+                    Text([car.distText, car.sensorText].filter { !$0.isEmpty }.joined(separator: "  ·  "))
+                        .font(.body.monospaced())
+                }
+                .foregroundStyle(.secondary)
             }
             .disabled(!car.connected)
             .opacity(car.connected ? 1 : 0.4)

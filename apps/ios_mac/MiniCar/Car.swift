@@ -13,10 +13,13 @@ final class Car: NSObject, ObservableObject {
     @Published var found: [CBPeripheral] = []
     @Published var scanning = false
     @Published var connected = false
-    // 아래 셋은 차가 200ms마다 보내는 상태 줄("ag,23" = 자동, 직진, 23cm)로만 바꾼다
+    // 아래는 차가 200ms마다 보내는 상태 줄로만 바꾼다
+    // "ag,23,010,LINE" = 자동, 직진, 23cm, 라인센서 L C R, 단계 (뒤 두 칸은 없을 수도 있음)
     @Published var auto = false
     @Published var act: Character = "s"
     @Published var dist: Int?
+    @Published var sensors = ""
+    @Published var stage = ""
     @Published var held: Character?
     @Published private(set) var peripheral: CBPeripheral?
 
@@ -88,6 +91,24 @@ final class Car: NSObject, ObservableObject {
         return dist >= 999 ? "앞: 측정 안 됨" : "앞: \(dist)cm"
     }
 
+    static let stageNames: [String: String] = [
+        "MAN": "수동 조종", "HOLD": "전환 대기 (0.5초)", "CAL": "회전 시간 측정",
+        "LINE": "라인 추종", "CORNER": "코너 회전", "NOLINE": "선 놓침",
+        "DEAD": "데드존: 선 찾는 중", "SWAY": "좌우로 흔들며 선 찾기", "LOST": "선 못 찾음 (정지)",
+        "OBST": "장애물 대기",
+    ]
+
+    // 단계 설명. 회피는 "AV3" → "회피 3단계"
+    var stageText: String {
+        if stage.hasPrefix("AV") { return "회피 \(stage.dropFirst(2))단계" }
+        return Self.stageNames[stage] ?? stage
+    }
+
+    // 라인센서 "010" → "○ ● ○" (● = 1)
+    var sensorText: String {
+        sensors.isEmpty ? "" : "센서 " + sensors.map { $0 == "1" ? "●" : "○" }.joined(separator: " ")
+    }
+
     func send(_ c: Character) {
         guard let p = peripheral, let tx else { return }
         let type: CBCharacteristicWriteType = tx.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
@@ -157,12 +178,15 @@ extension Car: CBCentralManagerDelegate, CBPeripheralDelegate {
         }
     }
 
-    // "ag,23" → 모드 a, 동작 g, 거리 23
+    // "ag,23,010,LINE" → 모드 a, 동작 g, 거리 23, 센서 010, 단계 LINE
     private func onLine(_ line: String) {
-        let c = Array(line)
+        let f = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        let c = Array(f[0])
         guard c.count >= 2, c[0] == "a" || c[0] == "m" else { return }
         auto = c[0] == "a"
         act = c[1]
-        dist = line.split(separator: ",").last.flatMap { Int($0) }
+        dist = f.count > 1 ? Int(f[1]) : nil
+        sensors = f.count > 2 ? f[2] : ""
+        stage = f.count > 3 ? f[3] : ""
     }
 }

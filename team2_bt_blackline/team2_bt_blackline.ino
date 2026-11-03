@@ -116,6 +116,11 @@ int obstLeftMM = 0, obstRightMM = 0;   // 잰 장애물 폭 (정면 기준 왼�
 Mode mode = MANUAL;
 char cmd = 's';
 char act = 's';                    // 앱에 보내는 지금 동작: g 직진, b 후진, l/r 좌/우, q/w 제자리, s 정지, o 장애물 정지
+// 앱에 보내는 지금 단계 (자세한 디버그용)
+// MAN 수동, HOLD 전환 대기, CAL 회전 측정, LINE 라인 추종, CORNER 코너 회전, NOLINE 선 놓침(잠깐 유지),
+// SWAY 좌우로 흔들며 찾기, LOST 못 찾고 정지, OBST 장애물 대기, AV1~AV8 회피 단계
+const char* stage = "MAN";
+const char* const AV_STAGE[] = {"AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AV7", "AV8"};
 bool calibrated = false;           // 회전 시간 자동 측정을 했는지
 unsigned long holdUntil = 0, lastRx = 0, lastLink = 0, lastTx = 0, lastLog = 0;
 
@@ -130,8 +135,8 @@ void setup() {
   pinMode(LeftMotor_3_pin, OUTPUT);
   pinMode(LeftMotor_4_pin, OUTPUT);
   pinMode(LeftMotor_E_pin, OUTPUT);
-  Serial.begin(9600);
-  BT.begin(9600);
+  Serial.begin(115200);  // 시리얼 모니터도 115200 으로 맞추기 (USB라서 빨라도 됨)
+  BT.begin(9600);        // 블루투스 모듈은 9600 그대로 (HC-06 기본값, SoftwareSerial 은 빠르면 깨짐)
   stopCar();
 }
 
@@ -139,7 +144,7 @@ void loop() {
   serviceBT();
 
   // 모드 전환 직후 안전 지연
-  if (millis() < holdUntil) { stopCar(); return; }
+  if (millis() < holdUntil) { stopCar(); stage = "HOLD"; return; }
 
   if (mode == AUTO) {
     if (!calibrated) { calibrated = true; calibrateTurns(); return; }   // 처음 자동일 때 한 번
@@ -149,6 +154,7 @@ void loop() {
   }
 
   // 수동: 끊기면 정지, 장애물 앞에서는 앞으로 가는 명령만 막음
+  stage = "MAN";
   if (millis() - lastPing >= (unsigned long)PING_MS) Ultrasonic();
   if (millis() - lastRx > LINK_MS) cmd = 's';
   bool blocked = frontDist < AVOID_MM && (cmd == 'g' || cmd == 'l' || cmd == 'r');
@@ -178,18 +184,21 @@ void serviceBT() {
     }
   }
   unsigned long now = millis();
-  // 폰에 상태 한 줄: 모드(a/m) + 동작 + ',' + 거리(cm). 예) "ag,23"
+  // 폰에 상태 한 줄: 모드(a/m)+동작, 거리(cm), 라인센서 L C R, 단계. 예) "ag,23,010,LINE"
   if (now - lastTx >= 200) {
     lastTx = now;
     BT.print(mode == AUTO ? 'a' : 'm'); BT.print(act);
-    BT.print(','); BT.println(frontDist >= 9999 ? 999 : frontDist / 10);
+    BT.print(','); BT.print(frontDist >= 9999 ? 999 : frontDist / 10);
+    BT.print(','); BT.print(digitalRead(L_Line)); BT.print(digitalRead(C_Line)); BT.print(digitalRead(R_Line));
+    BT.print(','); BT.println(stage);
   }
-  if (now - lastLog >= 500) {
+  if (now - lastLog >= 200) {      // 115200 이라 0.2초마다 찍어도 주행에 지장 없음
     lastLog = now;
     bool linked = lastLink != 0 && now - lastLink < LINK_SHOW_MS;
     Serial.print(linked ? F("링크=O ") : F("링크=X "));
     Serial.print(mode == AUTO ? F("AUTO ") : F("MAN  "));
-    Serial.print(F("act=")); Serial.print(act);
+    Serial.print(F("단계=")); Serial.print(stage);
+    Serial.print(F(" act=")); Serial.print(act);
     Serial.print(F(" 거리=")); Serial.print(frontDist);
     Serial.print(F("mm 라인=")); Serial.print(digitalRead(L_Line));
     Serial.print(digitalRead(C_Line)); Serial.println(digitalRead(R_Line));
@@ -246,6 +255,7 @@ void driveLR(int left, int right) {
 void waitUntilClear() {
   stopCar();
   act = 'o';
+  stage = "OBST";
   EduServo.write(SERVO_CENTER);
   int clear = 0;
   while (clear < CLEAR_COUNT) {
@@ -278,18 +288,21 @@ void followLine() {
   int L = digitalRead(L_Line), C = digitalRead(C_Line), R = digitalRead(R_Line);
 
   if (L == 0 && C == 0 && R == 0) {   // 선 놓침 -> 잠깐은 하던 동작 유지, 계속 안 보이면 좌우로 흔들며 찾기
-    if (lostStopped) return;                   // 이미 흔들어 봤는데 못 찾고 멈춘 상태
+    if (lostStopped) { stage = "LOST"; return; }   // 이미 흔들어 봤는데 못 찾고 멈춘 상태
+    stage = "NOLINE";
     if (lost_since == 0) lost_since = millis();
     if (millis() - lost_since < LOST_GRACE_MS) return;   // 센서 사이로 잠깐 빠진 것일 수 있음 -> 하던 동작 유지
     lost_since = 0;
     if (swaySearch()) { last_state = -1; return; }
     if (mode != AUTO) return;                  // 흔드는 중에 수동으로 바뀜
+    stage = "LOST";
     lostStopped = true;
     last_state = -1;
     return;
   }
   lostStopped = false;
   lost_since = 0;
+  stage = "LINE";
 
   // 1,?,1 : 양쪽 센서가 동시에 선을 봄 -> 바로 멈추지 않고 LINE_GRACE_MS 동안 하던 동작 유지
   if (L == 1 && R == 1) {
@@ -331,6 +344,7 @@ void avoidMode(int d0) {
 
   int step = 1;
   while (step != 0 && mode == AUTO) {
+    stage = AV_STAGE[step - 1];
     switch (step) {
       case 1:  // 폭 재기 -> 짧은 쪽으로 방향 정하기. 아무것도 없으면 가짜 감지라 취소
         measureObstacle(d0);
@@ -500,6 +514,7 @@ bool runUntilAny(int ms) {
 //   처음 다시 만남 = 약 180도, 그다음 = 약 360도 -> 1도당 시간과 출발할 때 늦는 시간으로 90도 / 45도 계산
 void calibrateTurns() {
   if (!AUTO_CAL || !centerOnLine()) return;      // 선 위에 없으면 측정 안 함 (설정값 그대로)
+  stage = "CAL";
   calibrateTurn(true);
   pause(300);
   if (mode != AUTO) return;
@@ -544,6 +559,7 @@ bool centerOnLine() { return readLine(C_Line) == 0; }      // 가운데 센서�
 
 // 코너 : 끝 센서만 선을 봄 -> 가운데 센서가 선을 다시 볼 때까지 TURN_SPEED 로 확실히 돌기 (최대 CORNER_MAX_MS)
 void cornerTurn(bool toRight) {
+  stage = "CORNER";
   spin(toRight, TURN_SPEED);
   if (runUntil(CORNER_MAX_MS, C_Line)) goForward();   // 가운데 센서가 선을 보면 바로 전진
   last_state = -1;
@@ -555,6 +571,7 @@ bool swaySearch() {
   bool toRight = (lastSide > 0) && !LEFT_CORNER_ONLY;   // 왼쪽 코너만 있는 트랙이면 항상 왼쪽부터
   int prevAmp = 0, amp = SWAY_START_MS;
   unsigned long start = millis();
+  stage = "SWAY";
   while (mode == AUTO && millis() - start < SWAY_MAX_MS) {
     spin(toRight, TURN_SPEED);
     if (runUntilAny(prevAmp + amp)) { goForward(); return true; }   // 찾으면 멈추지 않고 바로 전진
