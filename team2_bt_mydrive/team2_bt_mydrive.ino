@@ -2,7 +2,8 @@
 // - 자동 모드 주행 : 붙여 준 주행 코드(SPEED 200, 데드존 찾기, 장애물 mm) 그대로
 // - 핀 번호 : 원래 파일(team2_bt_mode, 교안 공통 핀 약속) 기준
 // - 블루투스/모드 전환/안전장치/상태 줄 : team2_bt_mode 와 같음 (앱 3종 그대로 사용)
-// 붙여 준 코드에 없던 spinRight, stopCar, drive 는 같은 방식으로 채움.
+// 주행 함수(goForward, spinLeft, spinRight, stopCar, drive)는 원본 풀버전과 같고,
+// 상태 표시용 act 한 줄씩만 더함. 핀은 원본(A4/A3/A2)이 아니라 원래 파일 기준(A5/A4/A3).
 #include <SoftwareSerial.h>
 #include <Servo.h>
 
