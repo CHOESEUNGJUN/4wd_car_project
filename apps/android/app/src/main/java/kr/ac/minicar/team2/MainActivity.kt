@@ -24,9 +24,11 @@ import android.widget.Button
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.TextView
 import java.util.UUID
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 // HC-06(클래식 블루투스, SPP) 조종 앱. 교안 2팀 STEP 4 앱과 같은 동작:
 // 누르는 동안 200ms마다 명령 반복, 떼면 's', 모드 버튼은 'a'/'m'.
@@ -51,6 +53,17 @@ class MainActivity : Activity() {
     private lateinit var modeLabel: TextView
     private lateinit var distLabel: TextView
     private lateinit var modeBtn: Button
+
+    // PID 설정 (버전 C). 슬라이더 값 = 실제 값 x scale
+    private class PidRow(val key: Char, val name: String, val max: Int, val scale: Float) {
+        lateinit var bar: SeekBar
+        lateinit var label: TextView
+        fun text() = if (scale == 1f) bar.progress.toString() else "%.1f".format(bar.progress / scale)
+    }
+    private val pidRows = listOf(
+        PidRow('P', "Kp", 200, 1f), PidRow('I', "Ki", 50, 10f),
+        PidRow('D', "Kd", 300, 1f), PidRow('B', "기본 속도", 255, 1f),
+    )
 
     private val actNames = mapOf(
         'g' to "직진", 'b' to "후진", 'l' to "좌회전", 'r' to "우회전",
@@ -112,6 +125,31 @@ class MainActivity : Activity() {
         distLabel = TextView(this).apply { textSize = 16f; gravity = Gravity.CENTER_HORIZONTAL }
         modeBtn = Button(this).apply { text = "자동으로"; setOnClickListener { send(if (auto) 'm' else 'a') } }
 
+        // PID 패널 : 슬라이더에서 손을 떼면 "#P60" 처럼 차로 보냄 (버전 C 에서만 반응)
+        val pidBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+        for (r in pidRows) {
+            r.label = TextView(this).apply { text = "${r.name}  -"; textSize = 15f }
+            r.bar = SeekBar(this).apply {
+                max = r.max
+                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                    override fun onProgressChanged(s: SeekBar, p: Int, fromUser: Boolean) { r.label.text = "${r.name}  ${r.text()}" }
+                    override fun onStartTrackingTouch(s: SeekBar) {}
+                    override fun onStopTrackingTouch(s: SeekBar) { sendText("#${r.key}${r.text()}\n") }
+                })
+            }
+            pidBox.addView(r.label)
+            pidBox.addView(r.bar, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }
+        val pidToggle = Button(this).apply {
+            text = "PID 설정 ▼"
+            setOnClickListener {
+                val show = pidBox.visibility != View.VISIBLE
+                pidBox.visibility = if (show) View.VISIBLE else View.GONE
+                text = if (show) "PID 설정 ▲" else "PID 설정 ▼"
+                if (show) sendText("#?\n")   // 차에 저장된 지금 값 받아 오기
+            }
+        }
+
         val grid = GridLayout(this).apply { columnCount = 3 }
         listOf('q' to "↺", 'g' to "▲", 'w' to "↻",
                'l' to "◀", 's' to "■", 'r' to "▶",
@@ -119,16 +157,17 @@ class MainActivity : Activity() {
             grid.addView(key(c, label, (88 * dp).toInt(), (6 * dp).toInt()))
         }
 
-        setContentView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(pad, pad, pad, pad)
+        setContentView(ScrollView(this).apply {
             // 안드로이드 15부터는 화면이 상태바 밑까지 깔려서, 그만큼 띄우지 않으면 맨 위가 가려진다
             if (Build.VERSION.SDK_INT >= 30) setOnApplyWindowInsetsListener { v, insets ->
                 val b = insets.getInsets(WindowInsets.Type.systemBars())
-                v.setPadding(pad + b.left, pad + b.top, pad + b.right, pad + b.bottom)
+                v.setPadding(b.left, b.top, b.right, b.bottom)
                 insets
             }
+            addView(LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(pad, pad, pad, pad)
             addView(LinearLayout(this@MainActivity).apply {
                 gravity = Gravity.CENTER_VERTICAL
                 addView(status)
@@ -144,7 +183,9 @@ class MainActivity : Activity() {
             })
             addView(grid)
             addView(distLabel)
-        })
+            addView(pidToggle)
+            addView(pidBox, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        }) })
         ui.post(repeat)
     }
 
@@ -175,6 +216,11 @@ class MainActivity : Activity() {
     private fun send(c: Char) {
         val s = socket ?: return
         io.execute { try { s.outputStream.write(c.code) } catch (_: Exception) {} }
+    }
+
+    private fun sendText(t: String) {
+        val s = socket ?: return
+        io.execute { try { s.outputStream.write(t.toByteArray()) } catch (_: Exception) {} }
     }
 
     // ---- 기기 찾기 ----
@@ -247,6 +293,7 @@ class MainActivity : Activity() {
                 msg = "연결 끊김"
                 ui.post { status.text = "연결: ${d.name}"; showConnected(true) }
                 send('m')  // 연결 직후 수동으로 맞춘다
+                sendText("#?\n")  // 버전 C 면 PID 값을 돌려줌 (A, B 는 무시)
                 val input = s!!.inputStream
                 while (true) {
                     val b = input.read()
@@ -277,11 +324,21 @@ class MainActivity : Activity() {
         "MAN" to "수동 조종", "HOLD" to "전환 대기 (0.5초)", "CAL" to "회전 시간 측정",
         "LINE" to "라인 추종", "CORNER" to "코너 회전", "NOLINE" to "선 놓침",
         "DEAD" to "데드존: 선 찾는 중", "SWAY" to "좌우로 흔들며 선 찾기", "LOST" to "선 못 찾음 (정지)",
-        "OBST" to "장애물 대기",
+        "OBST" to "장애물 대기", "CROSS" to "교차선 통과", "END" to "선 끝 (정지)",
     )
 
-    // "ag,23,010,LINE" → 모드 a, 동작 g, 거리 23, 라인센서 L C R, 단계 (뒤 두 칸은 없을 수도 있음)
+    // 차가 돌려준 PID 값 "#P60.0,I0.00,D40.0,B140" → 슬라이더에 반영
+    private fun onPidLine(line: String) {
+        for (part in line.drop(1).split(',')) {
+            val r = pidRows.find { it.key == part.firstOrNull() } ?: continue
+            val v = part.drop(1).toFloatOrNull() ?: continue
+            r.bar.progress = (v * r.scale).roundToInt().coerceIn(0, r.max)
+        }
+    }
+
+    // "ag,23,010,LINE,1,60" → 모드 a, 동작 g, 거리 23, 라인센서 L C R, 단계, 오차, 보정 (뒤쪽 칸은 없을 수도 있음)
     private fun onLine(line: String) {
+        if (line.startsWith("#")) { onPidLine(line); return }
         val f = line.split(',')
         if (f[0].length < 2 || (f[0][0] != 'a' && f[0][0] != 'm')) return
         auto = f[0][0] == 'a'
@@ -295,7 +352,8 @@ class MainActivity : Activity() {
         }
         val sensors = f.getOrNull(2)?.let { s -> "센서 " + s.map { if (it == '1') "●" else "○" }.joinToString(" ") } ?: ""
         val stage = f.getOrNull(3)?.let { s -> if (s.startsWith("AV")) "회피 ${s.drop(2)}단계" else stageNames[s] ?: s } ?: ""
-        distLabel.text = listOf(stage, listOf(dist, sensors).filter { it.isNotEmpty() }.joinToString("  ·  "))
+        val pid = if (f.size > 5) "오차 ${f[4]}  ·  보정 ${f[5]}" else ""
+        distLabel.text = listOf(stage, listOf(dist, sensors).filter { it.isNotEmpty() }.joinToString("  ·  "), pid)
             .filter { it.isNotEmpty() }.joinToString("\n")
     }
 
