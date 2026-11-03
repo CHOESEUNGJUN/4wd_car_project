@@ -15,6 +15,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.GridLayout
 import android.widget.LinearLayout
@@ -76,6 +77,12 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(pad, pad, pad, pad)
+            // 안드로이드 15부터는 화면이 상태바 밑까지 깔려서, 그만큼 띄우지 않으면 맨 위 연결 버튼이 가려진다
+            if (Build.VERSION.SDK_INT >= 30) setOnApplyWindowInsetsListener { v, insets ->
+                val b = insets.getInsets(WindowInsets.Type.systemBars())
+                v.setPadding(pad + b.left, pad + b.top, pad + b.right, pad + b.bottom)
+                insets
+            }
             addView(connect)
             addView(status)
             addView(LinearLayout(this@MainActivity).apply {
