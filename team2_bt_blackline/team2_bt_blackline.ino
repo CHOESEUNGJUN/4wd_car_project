@@ -67,6 +67,9 @@ int SWEEP_MAX_DEG  = 70;      // 정면 기준 좌우 몇 도까지
 int SWEEP_STEP_DEG = 10;      // 몇 도씩
 int SERVO_STEP_MS  = 150;     // 한 칸 움직이고 기다리는 시간
 int SERVO_BIG_MS   = 500;     // 크게 돌릴 때 기다리는 시간
+// 서보는 움직일 때만 신호를 켜고, 마지막으로 움직인 뒤 이 시간이 지나면 끈다.
+// 켜 두면 블루투스(SoftwareSerial)가 글자를 주고받을 때마다 서보 펄스가 흐트러져 센서가 덜덜 떤다.
+const unsigned long SERVO_HOLD_MS = 600;
 int OBST_EXTRA_MM  = 150;     // (정면 거리 + 이 값) 안쪽이면 같은 장애물
 int SIDE_MAX_MM    = 400;     // 장애물 끝이 안 보이면 이 값으로 침
 int SIDE_LOOK_DEG  = 90;      // 지나갈 때 옆을 보는 각도
@@ -124,10 +127,10 @@ const char* stage = "MAN";
 const char* const AV_STAGE[] = {"AV1", "AV2", "AV3", "AV4", "AV5", "AV6", "AV7", "AV8"};
 bool calibrated = false;           // 회전 시간 자동 측정을 했는지
 unsigned long holdUntil = 0, lastRx = 0, lastLink = 0, lastTx = 0, lastLog = 0;
+unsigned long servoOffAt = 0;      // 이 시각이 지나면 서보 신호를 끔 (0 = 꺼져 있음)
 
 void setup() {
-  EduServo.attach(servoPin);
-  EduServo.write(SERVO_CENTER);
+  servoTo(SERVO_CENTER);
   pinMode(echoPin, INPUT);
   pinMode(trigPin, OUTPUT);
   pinMode(RightMotor_E_pin, OUTPUT);
@@ -168,6 +171,7 @@ void loop() {
 // ============================================================
 // 들어온 글자 처리 + 0.2초마다 상태 줄 송신 + 0.5초마다 시리얼 로그. 기다리는 동안에도 계속 불러 준다.
 void serviceBT() {
+  if (servoOffAt && millis() > servoOffAt) { EduServo.detach(); servoOffAt = 0; }   // 다 움직였으면 서보 신호 끔
   while (BT.available()) {
     char c = BT.read();
     // 명령표에 없는 글자(터미널 앱의 \r \n 등)는 무시
@@ -215,13 +219,20 @@ void setMode(Mode m) {
   mode = m;
   cmd = 's';
   stopCar();
-  EduServo.write(SERVO_CENTER);      // 회피 중이었으면 서보를 정면으로
+  servoTo(SERVO_CENTER);             // 회피 중이었으면 서보를 정면으로
   // 자동으로 갈 때만 안전 지연 동안 무조건 정지. 수동으로 갈 때는 즉시 (멈추고 바로 조종 가능)
   holdUntil = (m == AUTO) ? millis() + SWITCH_HOLD_MS : 0;
   last_state = -1;                   // 자동으로 들어갈 때 라인 상태를 처음부터 다시 판단
   lostStopped = false;
   lost_since = 0;
   both_since = 0;
+}
+
+// 서보를 angle 로 돌림. 신호는 SERVO_HOLD_MS 뒤 serviceBT 에서 끈다 (그 사이 또 부르면 연장)
+void servoTo(int angle) {
+  if (!EduServo.attached()) EduServo.attach(servoPin);
+  EduServo.write(angle);
+  servoOffAt = millis() + SERVO_HOLD_MS;
 }
 
 // 기다리는 동안 블루투스를 계속 확인. 수동으로 바뀌면 바로 돌아옴 (delay 대신 씀)
@@ -263,7 +274,7 @@ void waitUntilClear() {
   stopCar();
   act = 'o';
   stage = "OBST";
-  EduServo.write(SERVO_CENTER);
+  servoTo(SERVO_CENTER);
   int clear = 0;
   while (clear < CLEAR_COUNT) {
     pause(PING_MS);
@@ -402,7 +413,7 @@ void avoidMode(int d0) {
         break;
     }
   }
-  if (mode != AUTO) { stopCar(); EduServo.write(SERVO_CENTER); }
+  if (mode != AUTO) { stopCar(); servoTo(SERVO_CENTER); }
 }
 
 // 선 찾으며 직진. 찾으면 가운데 센서가 선을 넘어갈 때까지 더 가고 true
@@ -462,7 +473,7 @@ void measureObstacle(int d0) {
 // 서보를 정면 기준 offset 도 (- 왼쪽, + 오른쪽)로 돌리고 거리(mm) 재기. 항상 멈춘 상태에서 잼
 int lookAt(int offset, int waitMs) {
   stopCar();
-  EduServo.write(SERVO_CENTER + (SERVO_FLIP ? -offset : offset));
+  servoTo(SERVO_CENTER + (SERVO_FLIP ? -offset : offset));
   pause(waitMs);
   return Ultrasonic();
 }
