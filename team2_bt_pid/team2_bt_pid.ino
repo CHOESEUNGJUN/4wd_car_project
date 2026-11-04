@@ -8,8 +8,12 @@
  *    +1 / +2 : 선이 오른쪽   0 1 1 / 0 0 1
  *    -1 / -2 : 선이 왼쪽     1 1 0 / 1 0 0
  *    ±3 : 선 놓침 (마지막으로 본 쪽)  0 0 0
- *  보정 = Kp*오차 + Ki*누적오차 + Kd*(오차 - 직전 오차)
- *  왼쪽 = 기본 속도 + 보정, 오른쪽 = 기본 속도 - 보정  (보정이 + 면 오른쪽으로 돎)
+ *  오차 0, ±1 (직선, 완만한 커브) : PID
+ *    보정 = Kp*오차 + Ki*누적오차 + D항
+ *    왼쪽 = 기본 속도 + 보정, 오른쪽 = 기본 속도 - 보정  (보정이 + 면 오른쪽으로 돎)
+ *  오차 ±2, ±3 (코너, 선 놓침) : 조향이 없으니 제자리 회전 (안쪽 바퀴 뒤로, 바깥 바퀴 앞으로)
+ *    가운데 센서가 선을 다시 보면 PID 로 돌아감
+ *  자세한 설명 : docs/PID.md
  */
 
 #include <SoftwareSerial.h>
@@ -20,10 +24,11 @@
 // ============================================================
 
 // --- PID ---
-const float KP = 40;        // 오차 1 당 보정. 좌우로 흔들리면 내림
-const float KI = 0;         // 누적 오차(오차 x 초) 1 당 보정. 긴 커브에서 점점 더 꺾게 함. 0 부터 조금씩
+const float KP = 50;        // 오차 1 당 보정. 좌우로 흔들리면 내림
+const float KI = 0.2;         // 누적 오차(오차 x 초) 1 당 보정. 긴 커브에서 점점 더 꺾게 함. 0 부터 조금씩
 const float KD = 30;        // 오차가 한 칸 바뀔 때 반대로 잡아 주는 양. 흔들림이 남으면 올림
 const int BASE = 120;       // 기본 속도 (0~255)
+const int CORNER_SPEED = 170;   // 코너(오차 ±2)·선 놓침(±3)에서 제자리 회전 속도. 코너에서 덜 돌면 올림
 const unsigned long PID_MS = 20;      // PID 계산 주기
 const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 않게)
 // 디지털 센서는 오차가 0 -> 1 처럼 계단으로 바뀌어서 D 가 한 번(20ms)만 생기면 모터가 반응하기 전에 사라진다.
@@ -43,16 +48,16 @@ const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
 // --- 블루투스 / 모드 ---
 const unsigned long LINK_MS = 450;         // 수동: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
 // --- 수동 조종 힘 (바닥에서 4륜은 바퀴가 미끄러지며 돌아서 힘이 많이 듦. 차에 맞게 조정) ---
-const int MAN_FWD = 200;            // 전진·후진
+const int MAN_FWD = 130;            // 전진·후진
 const int MAN_CURVE_OUT = 255;      // 곡선 회전 바깥 바퀴
-const int MAN_CURVE_IN = 110;       // 곡선 회전 안쪽 바퀴
+const int MAN_CURVE_IN = 80;       // 곡선 회전 안쪽 바퀴
 const int MAN_SPIN = 230;           // 제자리 회전
 const int MIN_PWM = 90;             // 0 이 아니면 최소 이만큼 (작으면 바닥에서 모터가 안 돎)
 const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘
 const unsigned long KICK_MS = 80;   // 그 시간
 const float TRIM_L = 1.0, TRIM_R = 1.0;   // 한쪽이 빠르면 빠른 쪽을 0.9 처럼 낮춰 맞춤
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
-const unsigned long AUTO_LINK_MS = 1500;   // 자동 중 폰 신호가 이만큼 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
+const unsigned long AUTO_LINK_MS = 5000;   // 자동 중 폰 신호가 5초 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
 const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸다
 
 // ============================================================
@@ -182,6 +187,19 @@ void pidLine() {
     if (e != 0) lastSide = e > 0 ? 1 : -1;
   }
 
+  // 코너(끝 센서만 선을 봄, ±2) 또는 선 놓침(±3) : 조향이 없으니 제자리 회전으로 돈다.
+  // 안쪽 바퀴를 세우고 끌면 바닥에서 바퀴가 걸려(락) 잘 안 돌아서, 안쪽은 뒤로 바깥은 앞으로 돌린다.
+  // 가운데 센서가 선을 다시 보면(오차 ±1 이하) 아래 PID 로 돌아간다.
+  if (abs(e) >= 2) {
+    int dir = e > 0 ? 1 : -1;                       // + 오른쪽으로 돎
+    driveLR(dir * CORNER_SPEED, -dir * CORNER_SPEED);
+    if (abs(e) == 2) stage = "CORNER";
+    integ = 0; dTerm = 0; lastErr = e;              // PID 로 돌아갈 때 쌓인 값 때문에 튀지 않게
+    pidErr = e; pidOut = 0;
+    act = dir > 0 ? 'w' : 'q';
+    return;
+  }
+
   if ((e > 0 && integ < 0) || (e < 0 && integ > 0)) integ = 0;   // 반대쪽으로 넘어가면 누적 초기화
   integ = constrain(integ + e * dt, -I_LIMIT, I_LIMIT);
   dTerm = dTerm * D_DECAY + KD * (e - lastErr);   // 바뀐 순간 생기고 약 0.1초에 걸쳐 줄어듦
@@ -191,10 +209,8 @@ void pidLine() {
   pidOut = u;
 
   int left = BASE + (int)u, right = BASE - (int)u;
-  // 선 위(오차 ±2 이내)에서는 안쪽 바퀴를 0 까지만 줄이고 뒤로 돌리지 않는다.
-  // 뒤로 돌리면 차가 확 꺾여 선을 지나쳐 반대쪽으로 넘어가며 좌우로 흔들린다. 선을 놓쳤을 때(±3)만 허용.
-  int lo = abs(e) <= 2 ? 0 : -255;
-  driveLR(constrain(left, lo, 255), constrain(right, lo, 255));
+  // PID 구간(오차 ±1 이내)에서는 안쪽 바퀴를 0 까지만 줄이고 뒤로 돌리지 않는다 (확 꺾여 좌우로 흔들리는 것 방지)
+  driveLR(constrain(left, 0, 255), constrain(right, 0, 255));
   act = u > 20 ? 'r' : u < -20 ? 'l' : 'g';
 }
 
