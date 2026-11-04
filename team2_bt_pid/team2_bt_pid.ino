@@ -30,10 +30,11 @@ const float KD = 30;        // 오차가 한 칸 바뀔 때 반대로 잡아 주
 const int BASE = 120;       // 기본 속도 (0~255)
 // --- 코너(오차 ±2)·선 놓침(±3) : 바깥 바퀴와 안쪽 바퀴 힘을 따로 ---
 //   CORNER_IN  -170 : 제자리 회전 (확실히 돌지만 접지력이 많이 필요. 요철에서 미끄러짐)
-//   CORNER_IN   -60 : 앞으로 나가며 원을 그리듯 돎 (요철에 덜 걸림)
+//   CORNER_IN  -110 : 안쪽은 천천히 뒤로, 바깥은 앞으로 (4바퀴 모두 돌면서 돎)
 //   CORNER_IN     0 : 안쪽 바퀴를 세우고 바깥만 돌림 (예전 방식)
 const int CORNER_OUT = 220;     // 바깥 바퀴 (앞으로)
-const int CORNER_IN = -60;      // 안쪽 바퀴 (- 는 뒤로). 코너를 덜 돌면 -100 쪽으로, 요철에 걸리면 0 쪽으로
+const int CORNER_IN = -110;     // 안쪽 바퀴 (- 는 뒤로). 감속기가 작아 힘이 약하므로 0 이 아니면 최소 MIN_PWM(90),
+                                //   방향이 바뀌는 순간 0.08초 최대 힘(KICK). 안 돌면 -130 쪽으로, 요철에서 미끄러지면 -90 쪽으로
 const unsigned long PID_MS = 20;      // PID 계산 주기
 const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 않게)
 // 디지털 센서는 오차가 0 -> 1 처럼 계단으로 바뀌어서 D 가 한 번(20ms)만 생기면 모터가 반응하기 전에 사라진다.
@@ -197,8 +198,9 @@ void pidLine() {
   // 가운데 센서가 선을 다시 보면(오차 ±1 이하) 아래 PID 로 돌아간다.
   if (abs(e) >= 2) {
     int dir = e > 0 ? 1 : -1;                       // + 오른쪽으로 돎
-    if (dir > 0) driveLR(CORNER_OUT, CORNER_IN);   // 오른쪽 코너 : 왼쪽이 바깥
-    else         driveLR(CORNER_IN, CORNER_OUT);   // 왼쪽 코너 : 오른쪽이 바깥
+    // 수동 조종과 같은 힘 다듬기(최소 MIN_PWM, 방향 바뀔 때 KICK)를 거쳐서 4바퀴가 실제로 돌게 한다
+    if (dir > 0) driveManualLR(CORNER_OUT, CORNER_IN);   // 오른쪽 코너 : 왼쪽이 바깥
+    else         driveManualLR(CORNER_IN, CORNER_OUT);   // 왼쪽 코너 : 오른쪽이 바깥
     if (abs(e) == 2) stage = "CORNER";
     integ = 0; dTerm = 0; lastErr = e;              // PID 로 돌아갈 때 쌓인 값 때문에 튀지 않게
     pidErr = e; pidOut = 0;
