@@ -82,6 +82,7 @@ int clearCount = 0;
 
 int pidErr = 0;           // 지금 오차 (-3~3)
 float pidOut = 0;         // 지금 보정값
+int motorL = 0, motorR = 0;   // 실제로 모터에 준 속도 (-255~255, 음수는 뒤로). 시리얼 로그용
 int lastErr = 0, lastSide = 0;
 float integ = 0, dTerm = 0;
 unsigned long lastPid = 0, lostSince = 0, crossSince = 0;
@@ -257,13 +258,24 @@ void serviceBT() {
     bool linked = lastLink != 0 && now - lastLink < LINK_SHOW_MS;
     Serial.print(linked ? F("링크=O ") : F("링크=X "));
     Serial.print(mode == AUTO ? F("AUTO ") : F("MAN  "));
+    // 예) 링크=O AUTO 단계=LINE act=r cmd=s 라인=011 오차=1 P=40 D=12 보정=52 모터L=172 R=68 거리=230mm 장애물=X | Kp40 Ki0.00 Kd30 B120
     Serial.print(F("단계=")); Serial.print(stage);
+    Serial.print(F(" act=")); Serial.print(act);
+    Serial.print(F(" cmd=")); Serial.print(cmd);
     Serial.print(F(" 라인=")); Serial.print(digitalRead(L_Line));
     Serial.print(digitalRead(C_Line)); Serial.print(digitalRead(R_Line));
     Serial.print(F(" 오차=")); Serial.print(pidErr);
+    Serial.print(F(" P=")); Serial.print((int)(KP * pidErr));
+    Serial.print(F(" D=")); Serial.print((int)dTerm);
     Serial.print(F(" 보정=")); Serial.print((int)pidOut);
+    Serial.print(F(" 모터L=")); Serial.print(motorL);
+    Serial.print(F(" R=")); Serial.print(motorR);
     Serial.print(F(" 거리=")); Serial.print(frontDist);
-    Serial.println(F("mm"));
+    Serial.print(F("mm 장애물=")); Serial.print(obstacleStopped ? 'O' : 'X');
+    Serial.print(F(" | Kp")); Serial.print(KP, 0);
+    Serial.print(F(" Ki")); Serial.print(KI, 2);
+    Serial.print(F(" Kd")); Serial.print(KD, 0);
+    Serial.print(F(" B")); Serial.println(BASE);
   }
 }
 
@@ -341,6 +353,8 @@ void driveLR(int left, int right) {
 void stopCar() { act = 's'; drive(HIGH, HIGH, 0, 0); }
 
 void drive(int rightDir, int leftDir, int rightSpeed, int leftSpeed) {   // 방향 HIGH 앞 / LOW 뒤
+  motorL = leftDir == HIGH ? leftSpeed : -leftSpeed;
+  motorR = rightDir == HIGH ? rightSpeed : -rightSpeed;
   digitalWrite(RightMotor_1_pin, rightDir);
   digitalWrite(RightMotor_2_pin, !rightDir);
   digitalWrite(LeftMotor_3_pin, leftDir);
