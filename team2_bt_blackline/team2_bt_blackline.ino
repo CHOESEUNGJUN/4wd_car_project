@@ -86,7 +86,16 @@ unsigned long LOST_GRACE_MS = 300;  // 선이 안 보여도 이 시간 동안은
 unsigned long LINE_GRACE_MS = 500;  // 양쪽 센서가 동시에 선을 봐도(1,?,1) 이 시간 동안은 하던 동작 유지. 그 뒤에도 계속이면 정지
 
 // --- 블루투스 / 모드 ---
-const unsigned long LINK_MS = 600;         // 수동: 이 시간 무명령이면 정지 (앱 반복 주기 200ms보다 충분히 크게)
+const unsigned long LINK_MS = 450;         // 수동: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
+// --- 수동 조종 힘 (바닥에서 4륜은 바퀴가 미끄러지며 돌아서 힘이 많이 듦. 차에 맞게 조정) ---
+const int MAN_FWD = 200;            // 전진·후진
+const int MAN_CURVE_OUT = 255;      // 곡선 회전 바깥 바퀴
+const int MAN_CURVE_IN = 110;       // 곡선 회전 안쪽 바퀴
+const int MAN_SPIN = 230;           // 제자리 회전
+const int MIN_PWM = 90;             // 0 이 아니면 최소 이만큼 (작으면 바닥에서 모터가 안 돎)
+const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘
+const unsigned long KICK_MS = 80;   // 그 시간
+const float TRIM_L = 1.0, TRIM_R = 1.0;   // 한쪽이 빠르면 빠른 쪽을 0.9 처럼 낮춰 맞춤
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
 const unsigned long AUTO_LINK_MS = 1500;   // 자동 중 폰 신호가 이만큼 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
 const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸다
@@ -249,15 +258,44 @@ bool autoAborted() {
 
 void driveManual(char c) {
   switch (c) {
-    case 'g': driveLR( 150,  150); break;  // 전진
-    case 'b': driveLR(-150, -150); break;  // 후진
-    case 'l': driveLR(  60,  150); break;  // 좌회전(곡선)
-    case 'r': driveLR( 150,   60); break;  // 우회전(곡선)
-    case 'q': driveLR(-120,  120); break;  // 제자리 좌회전
-    case 'w': driveLR( 120, -120); break;  // 제자리 우회전
-    default:  stopCar(); return;           // 's' 포함
+    case 'g': driveManualLR( MAN_FWD,  MAN_FWD); break;              // 전진
+    case 'b': driveManualLR(-MAN_FWD, -MAN_FWD); break;              // 후진
+    case 'l': driveManualLR( MAN_CURVE_IN,  MAN_CURVE_OUT); break;   // 좌회전(곡선)
+    case 'r': driveManualLR( MAN_CURVE_OUT, MAN_CURVE_IN); break;    // 우회전(곡선)
+    case 'q': driveManualLR(-MAN_SPIN,  MAN_SPIN); break;            // 제자리 좌회전
+    case 'w': driveManualLR( MAN_SPIN, -MAN_SPIN); break;            // 제자리 우회전
+    default:  brakeCar(); act = 's'; return;              // 's' 포함 : 브레이크로 바로 섬
   }
   act = c;
+}
+
+// 수동 조종용 모터 힘 다듬기
+//   - 출발하거나 방향이 바뀌는 순간 KICK_MS 동안 최대 힘 (처음에 안 도는 것 방지)
+//   - 0 이 아닌데 MIN_PWM 보다 작으면 MIN_PWM
+//   - TRIM 으로 좌우 모터 차이 맞춤
+int kickSignL = 0, kickSignR = 0;
+unsigned long kickUntilL = 0, kickUntilR = 0;
+
+int shapePwm(int v, float trim, int &lastSign, unsigned long &kickUntil) {
+  int s = (v > 0) - (v < 0);
+  if (s == 0) { lastSign = 0; return 0; }
+  if (s != lastSign) { lastSign = s; kickUntil = millis() + KICK_MS; }
+  int a = min((int)(abs(v) * trim), 255);
+  if (millis() < kickUntil) a = KICK_PWM;
+  else if (a < MIN_PWM) a = MIN_PWM;
+  return s * a;
+}
+
+void driveManualLR(int left, int right) {
+  driveLR(shapePwm(left, TRIM_L, kickSignL, kickUntilL), shapePwm(right, TRIM_R, kickSignR, kickUntilR));
+}
+
+// 브레이크 : 모터 양쪽 선을 같이 LOW 로 묶어 바퀴를 바로 세움 (그냥 0 이면 굴러가다 섬)
+void brakeCar() {
+  kickSignL = kickSignR = 0;
+  digitalWrite(RightMotor_1_pin, LOW); digitalWrite(RightMotor_2_pin, LOW);
+  digitalWrite(LeftMotor_3_pin, LOW);  digitalWrite(LeftMotor_4_pin, LOW);
+  analogWrite(RightMotor_E_pin, 255);  analogWrite(LeftMotor_E_pin, 255);
 }
 
 // 왼쪽, 오른쪽 속도(-255~255, 음수는 후진)로 drive 호출
