@@ -60,7 +60,7 @@ const int MAN_CURVE_IN = 80;       // 곡선 회전 안쪽 바퀴
 const int MAN_SPIN = 230;           // 제자리 회전
 const int MIN_PWM = 90;             // 0 이 아니면 최소 이만큼 (작으면 바닥에서 모터가 안 돎)
 const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘
-const unsigned long KICK_MS = 80;   // 그 시간
+const unsigned long KICK_MS = 120;  // 그 시간 (배터리가 약해도 출발하게 0.08 -> 0.12초)
 const float TRIM_L = 1.0, TRIM_R = 1.0;   // 한쪽이 빠르면 빠른 쪽을 0.9 처럼 낮춰 맞춤
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
 const unsigned long AUTO_LINK_MS = 5000;   // 자동 중 폰 신호가 5초 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
@@ -218,7 +218,8 @@ void pidLine() {
 
   int left = BASE + (int)u, right = BASE - (int)u;
   // PID 구간(오차 ±1 이내)에서는 안쪽 바퀴를 0 까지만 줄이고 뒤로 돌리지 않는다 (확 꺾여 좌우로 흔들리는 것 방지)
-  driveLR(constrain(left, 0, 255), constrain(right, 0, 255));
+  // 출발 킥과 최소 힘(MIN_PWM)을 거쳐서 보냄. 안 거치면 배터리가 약할 때 기본 속도만으로는 감속기를 못 돌려 출발을 못 한다
+  driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
   act = u > 20 ? 'r' : u < -20 ? 'l' : 'g';
 }
 
