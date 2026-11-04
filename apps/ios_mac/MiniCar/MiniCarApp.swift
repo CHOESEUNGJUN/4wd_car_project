@@ -16,17 +16,30 @@ struct MiniCarApp: App {
 
 struct ContentView: View {
     @EnvironmentObject var car: Car
+    @State private var askAuto = false
 
     var body: some View {
         VStack(spacing: 20) {
             connection
-            // 연결 전에도 보이게 두고, 누를 수만 없게 한다
+            // 원격 제어 불가(빨강) / 자동 전환 안전 지연(주황)
+            if !car.linkOK || car.holding {
+                Text(car.bannerText)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(10)
+                    .background(car.holding ? Color.orange : Color.red, in: RoundedRectangle(cornerRadius: 10))
+            }
+            // 연결 전에도 보이게 두고, 원격 제어가 안 되면 누를 수만 없게 한다
             VStack(spacing: 20) {
                 HStack {
                     Text(car.statusText).font(.title2.bold())
                     Spacer()
-                    Button(car.auto ? "수동으로" : "자동으로") { car.send(car.auto ? "m" : "a") }
-                        .buttonStyle(.borderedProminent)
+                    // 수동으로는 즉시, 자동으로는 한 번 물어본 뒤
+                    Button(car.auto ? "수동으로" : "자동으로") {
+                        if car.auto { car.send("m") } else { askAuto = true }
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
                 pad
                 VStack(spacing: 4) {
@@ -36,12 +49,18 @@ struct ContentView: View {
                 }
                 .foregroundStyle(.secondary)
             }
-            .disabled(!car.connected)
-            .opacity(car.connected ? 1 : 0.4)
+            .disabled(!car.linkOK)
+            .opacity(car.linkOK ? 1 : 0.4)
             Spacer()
         }
         .padding()
         .frame(minWidth: 320, minHeight: 520)
+        .alert("자동 모드로 전환하시겠습니까?", isPresented: $askAuto) {
+            Button("전환") { car.requestAuto() }
+            Button("취소", role: .cancel) {}
+        } message: {
+            Text("차가 0.5초 멈춘 뒤 라인을 따라 출발합니다.\n차를 선 위에 올려 두세요.")
+        }
     }
 
     @ViewBuilder var connection: some View {

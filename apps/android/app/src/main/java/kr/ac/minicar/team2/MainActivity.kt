@@ -3,6 +3,7 @@ package kr.ac.minicar.team2
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -16,6 +17,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -53,6 +55,17 @@ class MainActivity : Activity() {
     private lateinit var distLabel: TextView
     private lateinit var modeBtn: Button
 
+    // 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 1초 넘게 안 오면 "원격 제어 불가"
+    private val LINK_TIMEOUT_MS = 1000L
+    private lateinit var banner: TextView
+    private val controls = mutableListOf<View>()   // 끊기면 막을 것: 방향 버튼, 모드 버튼, PID
+    private var lastStatusAt = 0L
+    private var everConnected = false
+    // 자동 전환 안전 지연 배너 : 차가 보내는 단계가 HOLD 이거나, 방금 전환을 눌렀을 때
+    private val SWITCH_HOLD_MS = 500L
+    private var holdShownUntil = 0L
+    private var lastStage = ""
+
     // PID 설정 (버전 C). 슬라이더 값 = 실제 값 x scale
     private class PidRow(val key: Char, val name: String, val max: Int, val scale: Float) {
         lateinit var bar: SeekBar
@@ -72,6 +85,7 @@ class MainActivity : Activity() {
     private var tick = 0
     private val repeat = object : Runnable {
         override fun run() {
+            updateLink()
             held?.let { if (it != 's') send(it) }
             // 0.6초마다 'h': 차가 "앱이 연결되어 있다"를 알 수 있게 (주행에는 영향 없음)
             if (++tick % 3 == 0) send('h')
@@ -118,7 +132,29 @@ class MainActivity : Activity() {
         listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
         modeLabel = TextView(this).apply { text = "수동 · 정지"; textSize = 22f }
         distLabel = TextView(this).apply { textSize = 16f; gravity = Gravity.CENTER_HORIZONTAL }
-        modeBtn = Button(this).apply { text = "자동으로"; setOnClickListener { send(if (auto) 'm' else 'a') } }
+        // 수동으로는 즉시, 자동으로는 한 번 물어본 뒤 (차가 0.5초 안전 지연 후 출발)
+        modeBtn = Button(this).apply { text = "자동으로"; setOnClickListener {
+            if (auto) { send('m'); return@setOnClickListener }
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("자동 모드로 전환하시겠습니까?")
+                .setMessage("차가 0.5초 멈춘 뒤 라인을 따라 출발합니다.\n차를 선 위에 올려 두세요.")
+                .setPositiveButton("전환") { _, _ ->
+                    send('a')
+                    holdShownUntil = SystemClock.uptimeMillis() + SWITCH_HOLD_MS
+                    updateLink()
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        } }
+        banner = TextView(this).apply {
+            textSize = 17f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(android.graphics.Color.WHITE)
+            setBackgroundColor(android.graphics.Color.rgb(200, 40, 40))
+            gravity = Gravity.CENTER
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        controls += modeBtn
 
         // PID 패널 : 슬라이더에서 손을 떼면 "#P60" 처럼 차로 보냄 (버전 C 에서만 반응)
         val pidBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
@@ -134,6 +170,7 @@ class MainActivity : Activity() {
             }
             pidBox.addView(r.label)
             pidBox.addView(r.bar, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            controls += r.bar
         }
         val pidToggle = Button(this).apply {
             text = "PID 설정 ▼"
@@ -144,6 +181,7 @@ class MainActivity : Activity() {
                 if (show) sendText("#?\n")   // 차에 저장된 지금 값 받아 오기
             }
         }
+        controls += pidToggle
 
         val grid = GridLayout(this).apply { columnCount = 3 }
         listOf('q' to "↺", 'g' to "▲", 'w' to "↻",
@@ -169,6 +207,7 @@ class MainActivity : Activity() {
                 addView(scanBtn)
                 addView(disconnectBtn)
             })
+            addView(banner, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             addView(listBox, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             addView(LinearLayout(this@MainActivity).apply {
                 gravity = Gravity.CENTER_VERTICAL
@@ -181,7 +220,27 @@ class MainActivity : Activity() {
             addView(pidToggle)
             addView(pidBox, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }) })
+        updateLink()
         ui.post(repeat)
+    }
+
+    // 원격 제어 가능한지 판단해서 배너와 버튼을 바꿈 (0.2초마다)
+    private fun updateLink() {
+        val now = SystemClock.uptimeMillis()
+        val ok = socket != null && now - lastStatusAt < LINK_TIMEOUT_MS
+        val holding = ok && (now < holdShownUntil || lastStage == "HOLD")
+        banner.visibility = if (ok && !holding) View.GONE else View.VISIBLE
+        banner.setBackgroundColor(if (ok) android.graphics.Color.rgb(220, 140, 0) else android.graphics.Color.rgb(200, 40, 40))
+        banner.text = when {
+            ok -> "자동 모드 전환 중 · 0.5초 안전 지연"
+            socket != null -> "⚠ 차 응답 없음 · 원격 제어 불가"
+            everConnected -> "⚠ 블루투스 끊김 · 원격 제어 불가"
+            else -> "연결 안 됨 · 원격 제어 불가"
+        }
+        if (!ok) held = null   // 누르고 있던 버튼은 놓은 것으로 (차는 0.6초 무명령이면 스스로 멈춤)
+        for (v in controls) {
+            if (v.isEnabled != ok) { v.isEnabled = ok; v.alpha = if (ok) 1f else 0.35f; v.isPressed = false }
+        }
     }
 
     private fun key(c: Char?, label: String, size: Int, margin: Int) = Button(this).apply {
@@ -191,6 +250,7 @@ class MainActivity : Activity() {
             width = size; height = size; setMargins(margin, margin, margin, margin)
         }
         if (c == null) { visibility = View.INVISIBLE; return@apply }
+        controls += this
         setOnTouchListener { v, e ->
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> { held = c; send(c); v.isPressed = true }
@@ -287,6 +347,8 @@ class MainActivity : Activity() {
                 }
                 socket = s
                 msg = "연결 끊김"
+                lastStatusAt = SystemClock.uptimeMillis()   // 첫 상태 줄이 올 때까지 1초 기다려 줌
+                everConnected = true
                 ui.post { status.text = "연결: ${d.name}"; showConnected(true) }
                 send('m')  // 연결 직후 수동으로 맞춘다
                 sendText("#?\n")  // 버전 C 면 PID 값을 돌려줌 (A, B 는 무시)
@@ -334,8 +396,10 @@ class MainActivity : Activity() {
 
     // "ag,23,010,LINE,1,60" → 모드 a, 동작 g, 거리 23, 라인센서 L C R, 단계, 오차, 보정 (뒤쪽 칸은 없을 수도 있음)
     private fun onLine(line: String) {
+        lastStatusAt = SystemClock.uptimeMillis()   // 차가 살아 있음
         if (line.startsWith("#")) { onPidLine(line); return }
         val f = line.split(',')
+        lastStage = f.getOrNull(3) ?: ""
         if (f[0].length < 2 || (f[0][0] != 'a' && f[0][0] != 'm')) return
         auto = f[0][0] == 'a'
         modeLabel.text = (if (auto) "자동" else "수동") + " · " + (actNames[f[0][1]] ?: "정지")
