@@ -258,24 +258,18 @@ void serviceBT() {
     bool linked = lastLink != 0 && now - lastLink < LINK_SHOW_MS;
     Serial.print(linked ? F("링크=O ") : F("링크=X "));
     Serial.print(mode == AUTO ? F("AUTO ") : F("MAN  "));
-    // 예) 링크=O AUTO 단계=LINE act=r cmd=s 라인=011 오차=1 P=40 D=12 보정=52 모터L=172 R=68 거리=230mm 장애물=X | Kp40 Ki0.00 Kd30 B120
+    // 예) 링크=O MAN  단계=MAN act=g cmd=g 라인=010 오차=0 보정=0 모터L=150 R=150 거리=230mm 장애물=X
     Serial.print(F("단계=")); Serial.print(stage);
     Serial.print(F(" act=")); Serial.print(act);
     Serial.print(F(" cmd=")); Serial.print(cmd);
     Serial.print(F(" 라인=")); Serial.print(digitalRead(L_Line));
     Serial.print(digitalRead(C_Line)); Serial.print(digitalRead(R_Line));
     Serial.print(F(" 오차=")); Serial.print(pidErr);
-    Serial.print(F(" P=")); Serial.print((int)(KP * pidErr));
-    Serial.print(F(" D=")); Serial.print((int)dTerm);
     Serial.print(F(" 보정=")); Serial.print((int)pidOut);
     Serial.print(F(" 모터L=")); Serial.print(motorL);
     Serial.print(F(" R=")); Serial.print(motorR);
     Serial.print(F(" 거리=")); Serial.print(frontDist);
-    Serial.print(F("mm 장애물=")); Serial.print(obstacleStopped ? 'O' : 'X');
-    Serial.print(F(" | Kp")); Serial.print(KP, 0);
-    Serial.print(F(" Ki")); Serial.print(KI, 2);
-    Serial.print(F(" Kd")); Serial.print(KD, 0);
-    Serial.print(F(" B")); Serial.println(BASE);
+    Serial.print(F("mm 장애물=")); Serial.println(obstacleStopped ? 'O' : 'X');
   }
 }
 
