@@ -53,8 +53,8 @@ class MainActivity : Activity() {
     private lateinit var distLabel: TextView
     private lateinit var modeBtn: Button
 
-    // 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 1초 넘게 안 오면 "원격 제어 불가"
-    private val LINK_TIMEOUT_MS = 1000L
+    // 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 5초 넘게 안 오면 "원격 제어 불가"
+    private val LINK_TIMEOUT_MS = 5000L
     private lateinit var banner: TextView
     private val controls = mutableListOf<View>()   // 끊기면 막을 것: 방향 버튼, 모드 버튼
     private var lastStatusAt = 0L

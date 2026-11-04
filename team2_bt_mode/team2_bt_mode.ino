@@ -20,7 +20,7 @@ const int STOP_CM = 15, RESUME_CM = 20;
 const unsigned long HOLD_MS = 1000;  // 장애물 정지 후 최소 유지
 const unsigned long LINK_MS = 600;   // 이 시간 무명령이면 정지 (앱 반복 주기 200ms보다 충분히 크게)
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
-const unsigned long AUTO_LINK_MS = 1500;   // 자동 중 폰 신호가 이만큼 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
+const unsigned long AUTO_LINK_MS = 5000;   // 자동 중 폰 신호가 5초 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
 
 SoftwareSerial BT(BT_RXD, BT_TXD);
 Servo myservo;

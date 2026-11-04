@@ -94,11 +94,11 @@ function onText(t) {
   render();
 }
 
-// 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 1초 넘게 안 오면 "원격 제어 불가"
+// 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 5초 넘게 안 오면 "원격 제어 불가"
 let lastStatusAt = 0, everConnected = false, holdUntil = 0, stage = '';
 function updateLink() {
   const now = Date.now();
-  const ok = !!write && now - lastStatusAt < 1000;
+  const ok = !!write && now - lastStatusAt < 5000;
   const holding = ok && (now < holdUntil || stage === 'HOLD');   // 자동 전환 안전 지연 중
   const b = $('banner');
   b.hidden = ok && !holding;

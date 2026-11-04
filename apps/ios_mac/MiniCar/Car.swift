@@ -22,7 +22,7 @@ final class Car: NSObject, ObservableObject {
     @Published var stage = ""
     @Published var held: Character?
     @Published private(set) var peripheral: CBPeripheral?
-    // 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 1초 넘게 안 오면 false
+    // 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 5초 넘게 안 오면 false
     @Published var linkOK = false
     // 자동 전환 안전 지연 중 (차가 보내는 단계가 HOLD 이거나, 방금 전환을 눌렀을 때)
     @Published var holding = false
@@ -34,7 +34,7 @@ final class Car: NSObject, ObservableObject {
     private var lastStatusAt: Date?
     private var everConnected = false
     private var holdShownUntil = Date.distantPast
-    static let linkTimeout: TimeInterval = 1.0
+    static let linkTimeout: TimeInterval = 5.0
     static let switchHold: TimeInterval = 0.5
 
     override init() {
