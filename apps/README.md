@@ -1,11 +1,13 @@
-# 미니카 2팀 조종 앱
+# 미니카 2팀 조종 앱 : 굴노
+
+앱 이름은 **굴노** (안드로이드, 아이폰·맥, 웹 제목 모두). 아이콘은 차 바퀴 사진을 오려서 만들었다 — 원본은 `icon/gulno-1024.png`, 오린 바퀴는 `icon/wheel-cutout.png`.
 
 전체 동작, 명령표, 상태 줄 형식은 [저장소 README](../README.md) 참고.
 차량 스케치는 버전 A(`team2_bt_mydrive`) / B(`team2_bt_blackline`) / 교안(`team2_bt_mode`) 어느 것이든 같은 앱으로 쓴다 (HC-06, HM-10 모두 3·4번 핀, 9600).
 
 | 폰/PC | 모듈 | 앱 | 실행 |
 |---|---|---|---|
-| 안드로이드 | HC-06 | `android/` | `dist/minicar-team2.apk` 설치, 또는 Android Studio 로 `android/` 열고 ▶ |
+| 안드로이드 | HC-06 | `android/` | `dist/gulno.apk` 설치, 또는 Android Studio 로 `android/` 열고 ▶ |
 | 아이폰 | HM-10 | `ios_mac/` | Xcode 로 `MiniCar.xcodeproj` → Signing 에서 내 Apple ID 팀 → 아이폰 연결 → ▶ |
 | 맥 | HM-10 | `ios_mac/` | 같은 프로젝트, 실행 대상 My Mac → ▶ |
 | 맥 | HC-06 | `web/index.html` | 맥에서 HC-06 페어링 → 크롬으로 열기 → 시리얼 연결 |
