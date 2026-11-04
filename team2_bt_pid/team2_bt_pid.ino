@@ -36,7 +36,7 @@ const unsigned long LOST_STOP_MS = 1500;   // 선을 이만큼 못 보면 정지
 const unsigned long CROSS_STOP_MS = 500;   // 센서 3개 모두 검정이 이만큼 계속되면 정지 (선 끝)
 
 // --- 장애물 ---
-const int AVOID_MM = 100;             // 이 거리 안이면 정지 (자동), 전진 금지 (수동)
+const int AVOID_MM = 50;              // 이 거리(5cm) 안이면 정지 (자동), 전진 금지 (수동). 버전 A 와 같음
 const int CLEAR_COUNT = 5;            // 연속 이만큼 안 보여야 다시 출발
 const unsigned long PING_MS = 60;     // 초음파 쏘는 간격
 const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
