@@ -26,11 +26,9 @@ import android.widget.Button
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import java.util.UUID
 import java.util.concurrent.Executors
-import kotlin.math.roundToInt
 
 // HC-06(클래식 블루투스, SPP) 조종 앱. 교안 2팀 STEP 4 앱과 같은 동작:
 // 누르는 동안 200ms마다 명령 반복, 떼면 's', 모드 버튼은 'a'/'m'.
@@ -58,24 +56,13 @@ class MainActivity : Activity() {
     // 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 1초 넘게 안 오면 "원격 제어 불가"
     private val LINK_TIMEOUT_MS = 1000L
     private lateinit var banner: TextView
-    private val controls = mutableListOf<View>()   // 끊기면 막을 것: 방향 버튼, 모드 버튼, PID
+    private val controls = mutableListOf<View>()   // 끊기면 막을 것: 방향 버튼, 모드 버튼
     private var lastStatusAt = 0L
     private var everConnected = false
     // 자동 전환 안전 지연 배너 : 차가 보내는 단계가 HOLD 이거나, 방금 전환을 눌렀을 때
     private val SWITCH_HOLD_MS = 500L
     private var holdShownUntil = 0L
     private var lastStage = ""
-
-    // PID 설정 (버전 C). 슬라이더 값 = 실제 값 x scale
-    private class PidRow(val key: Char, val name: String, val max: Int, val scale: Float) {
-        lateinit var bar: SeekBar
-        lateinit var label: TextView
-        fun text() = if (scale == 1f) bar.progress.toString() else "%.1f".format(bar.progress / scale)
-    }
-    private val pidRows = listOf(
-        PidRow('P', "Kp", 200, 1f), PidRow('I', "Ki", 50, 10f),
-        PidRow('D', "Kd", 300, 1f), PidRow('B', "기본 속도", 255, 1f),
-    )
 
     private val actNames = mapOf(
         'g' to "직진", 'b' to "후진", 'l' to "좌회전", 'r' to "우회전",
@@ -156,32 +143,6 @@ class MainActivity : Activity() {
         }
         controls += modeBtn
 
-        // PID 패널 : 슬라이더에서 손을 떼면 "#P60" 처럼 차로 보냄 (버전 C 에서만 반응)
-        val pidBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
-        for (r in pidRows) {
-            r.label = TextView(this).apply { text = "${r.name}  -"; textSize = 15f }
-            r.bar = SeekBar(this).apply {
-                max = r.max
-                setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                    override fun onProgressChanged(s: SeekBar, p: Int, fromUser: Boolean) { r.label.text = "${r.name}  ${r.text()}" }
-                    override fun onStartTrackingTouch(s: SeekBar) {}
-                    override fun onStopTrackingTouch(s: SeekBar) { sendText("#${r.key}${r.text()}\n") }
-                })
-            }
-            pidBox.addView(r.label)
-            pidBox.addView(r.bar, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            controls += r.bar
-        }
-        val pidToggle = Button(this).apply {
-            text = "PID 설정 ▼"
-            setOnClickListener {
-                val show = pidBox.visibility != View.VISIBLE
-                pidBox.visibility = if (show) View.VISIBLE else View.GONE
-                text = if (show) "PID 설정 ▲" else "PID 설정 ▼"
-                if (show) sendText("#?\n")   // 차에 저장된 지금 값 받아 오기
-            }
-        }
-        controls += pidToggle
 
         val grid = GridLayout(this).apply { columnCount = 3 }
         listOf('q' to "↺", 'g' to "▲", 'w' to "↻",
@@ -217,8 +178,6 @@ class MainActivity : Activity() {
             })
             addView(grid)
             addView(distLabel)
-            addView(pidToggle)
-            addView(pidBox, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
         }) })
         updateLink()
         ui.post(repeat)
@@ -271,11 +230,6 @@ class MainActivity : Activity() {
     private fun send(c: Char) {
         val s = socket ?: return
         io.execute { try { s.outputStream.write(c.code) } catch (_: Exception) {} }
-    }
-
-    private fun sendText(t: String) {
-        val s = socket ?: return
-        io.execute { try { s.outputStream.write(t.toByteArray()) } catch (_: Exception) {} }
     }
 
     // ---- 기기 찾기 ----
@@ -351,7 +305,6 @@ class MainActivity : Activity() {
                 everConnected = true
                 ui.post { status.text = "연결: ${d.name}"; showConnected(true) }
                 send('m')  // 연결 직후 수동으로 맞춘다
-                sendText("#?\n")  // 버전 C 면 PID 값을 돌려줌 (A, B 는 무시)
                 val input = s!!.inputStream
                 while (true) {
                     val b = input.read()
@@ -385,19 +338,9 @@ class MainActivity : Activity() {
         "OBST" to "장애물 대기", "CROSS" to "교차선 통과", "END" to "선 끝 (정지)",
     )
 
-    // 차가 돌려준 PID 값 "#P60.0,I0.00,D40.0,B140" → 슬라이더에 반영
-    private fun onPidLine(line: String) {
-        for (part in line.drop(1).split(',')) {
-            val r = pidRows.find { it.key == part.firstOrNull() } ?: continue
-            val v = part.drop(1).toFloatOrNull() ?: continue
-            r.bar.progress = (v * r.scale).roundToInt().coerceIn(0, r.max)
-        }
-    }
-
     // "ag,23,010,LINE,1,60" → 모드 a, 동작 g, 거리 23, 라인센서 L C R, 단계, 오차, 보정 (뒤쪽 칸은 없을 수도 있음)
     private fun onLine(line: String) {
         lastStatusAt = SystemClock.uptimeMillis()   // 차가 살아 있음
-        if (line.startsWith("#")) { onPidLine(line); return }
         val f = line.split(',')
         lastStage = f.getOrNull(3) ?: ""
         if (f[0].length < 2 || (f[0][0] != 'a' && f[0][0] != 'm')) return
