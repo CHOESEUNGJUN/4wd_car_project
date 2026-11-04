@@ -87,8 +87,12 @@ float integ = 0, dTerm = 0;
 unsigned long lastPid = 0, lostSince = 0, crossSince = 0;
 
 void setup() {
+  // 초음파 센서를 정면으로 돌린 뒤 서보 신호를 끈다. 켜 두면 블루투스(SoftwareSerial)가
+  // 글자를 주고받을 때마다 서보 펄스가 흐트러져 센서가 덜덜 떤다. 신호를 꺼도 그 자리에 그대로 있다.
   EduServo.attach(servoPin);
   EduServo.write(90);
+  delay(400);
+  EduServo.detach();
   pinMode(echoPin, INPUT);
   pinMode(trigPin, OUTPUT);
   pinMode(RightMotor_E_pin, OUTPUT);

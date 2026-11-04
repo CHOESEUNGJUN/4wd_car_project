@@ -111,7 +111,9 @@ void setup() {
   pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
   pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);
   pinMode(TRIG, OUTPUT); pinMode(ECHO, INPUT);
-  myservo.attach(2); myservo.write(90);  // 초음파 센서를 정면으로
+  // 초음파 센서를 정면으로 돌린 뒤 서보 신호를 끈다. 켜 두면 블루투스(SoftwareSerial)가
+  // 글자를 주고받을 때마다 서보 펄스가 흐트러져 센서가 덜덜 떤다. 신호를 꺼도 그 자리에 그대로 있다.
+  myservo.attach(2); myservo.write(90); delay(400); myservo.detach();
   Serial.begin(9600);
   BT.begin(9600);
 }

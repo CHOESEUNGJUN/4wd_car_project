@@ -21,7 +21,8 @@ long readCm() {
 
 void setup() {
   pinMode(TRIG, OUTPUT); pinMode(ECHO, INPUT);
-  myservo.attach(2); myservo.write(90);
+  // 정면으로 돌린 뒤 서보 신호를 끔 (켜 두면 블루투스 통신 때문에 덜덜 떤다)
+  myservo.attach(2); myservo.write(90); delay(400); myservo.detach();
   Serial.begin(9600);
   BT.begin(9600);
   Serial.println("진단 시작. 폰에서 글자를 보내 보세요.");
