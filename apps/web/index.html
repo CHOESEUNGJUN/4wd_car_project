@@ -23,6 +23,9 @@
   #stage { font-weight:600; }
   #pid label { display:block; margin-top:8px; }
   #pid input { width:100%; }
+  .banner { padding:10px; border-radius:10px; color:#fff; font-weight:700; text-align:center; background:#c62828; }
+  .banner.hold { background:#e08a00; }
+  .banner[hidden] { display:none; }
 </style>
 </head>
 <body>
@@ -32,6 +35,7 @@
     <button id="ser">시리얼 연결 (HC-06)</button>
   </div>
   <div id="status">연결 안 됨</div>
+  <div id="banner" class="banner">연결 안 됨 · 원격 제어 불가</div>
   <div class="row"><span id="mode">수동 · 정지</span><button id="toggle" disabled>자동으로</button></div>
   <div id="pad">
     <button data-c="q">↺</button><button data-c="g">▲</button><button data-c="w">↻</button>
@@ -60,7 +64,6 @@ const status = t => $('status').textContent = t;
 function render() {
   $('mode').textContent = (auto ? '자동' : '수동') + ' · ' + (ACT[act] || '정지');
   $('toggle').textContent = auto ? '수동으로' : '자동으로';
-  $('toggle').disabled = !write;
   for (const b of $('pad').querySelectorAll('button')) b.classList.toggle('on', b.dataset.c === held);
 }
 
@@ -90,8 +93,10 @@ $('pid').addEventListener('toggle', () => { if ($('pid').open) write?.('#?\n'); 
 
 // 차가 200ms마다 보내는 상태 줄: "ag,23,010,LINE" = 자동, 직진, 23cm, 라인센서 L C R, 단계 (뒤 두 칸은 없을 수도 있음)
 function onLine(line) {
+  lastStatusAt = Date.now();   // 차가 살아 있음
   if (line[0] === '#') return onPidLine(line);
   const f = line.split(',');
+  stage = f[3] || '';
   if (f[0].length < 2 || (f[0][0] !== 'a' && f[0][0] !== 'm')) return;
   auto = f[0][0] === 'a';
   act = f[0][1];
@@ -112,7 +117,26 @@ function onText(t) {
   render();
 }
 
+// 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 1초 넘게 안 오면 "원격 제어 불가"
+let lastStatusAt = 0, everConnected = false, holdUntil = 0, stage = '';
+function updateLink() {
+  const now = Date.now();
+  const ok = !!write && now - lastStatusAt < 1000;
+  const holding = ok && (now < holdUntil || stage === 'HOLD');   // 자동 전환 안전 지연 중
+  const b = $('banner');
+  b.hidden = ok && !holding;
+  b.classList.toggle('hold', holding);
+  b.textContent = holding ? '자동 모드 전환 중 · 0.5초 안전 지연'
+    : write ? '⚠ 차 응답 없음 · 원격 제어 불가'
+    : everConnected ? '⚠ 블루투스 끊김 · 원격 제어 불가' : '연결 안 됨 · 원격 제어 불가';
+  for (const el of document.querySelectorAll('#pad button, #toggle, #pid input')) el.disabled = !ok;
+  if (!ok && held) { held = null; render(); }   // 누르던 버튼은 놓은 것으로 (차는 0.6초 무명령이면 스스로 멈춤)
+}
+setInterval(updateLink, 200);
+
 function connected(name) {
+  lastStatusAt = Date.now();   // 첫 상태 줄이 올 때까지 1초 기다려 줌
+  everConnected = true;
   status('연결: ' + name);
   write('m');  // 연결 직후 수동으로 맞추고, 차가 돌려주는 'm'으로 표시 동기화
   write('#?\n');  // 버전 C 면 PID 값을 돌려줌 (A, B 는 무시)
@@ -180,10 +204,21 @@ for (const b of $('pad').querySelectorAll('button')) {
   b.addEventListener('pointercancel', release);
   b.addEventListener('lostpointercapture', release);
 }
-$('toggle').onclick = () => write?.(auto ? 'm' : 'a');
+// 수동으로는 즉시, 자동으로는 한 번 물어본 뒤 (차가 0.5초 안전 지연 후 출발)
+$('toggle').onclick = () => {
+  if (auto) return write?.('m');
+  if (!confirm('자동 모드로 전환하시겠습니까?\n\n차가 0.5초 멈춘 뒤 라인을 따라 출발합니다. 차를 선 위에 올려 두세요.')) return;
+  write?.('a');
+  holdUntil = Date.now() + 500;
+  updateLink();
+};
 
 const keys = { ArrowUp: 'g', ArrowDown: 'b', ArrowLeft: 'l', ArrowRight: 'r', q: 'q', e: 'w', ' ': 's' };
-addEventListener('keydown', e => { const c = keys[e.key]; if (!c || e.repeat) return; e.preventDefault(); press(c); });
+addEventListener('keydown', e => {
+  const c = keys[e.key];
+  if (!c || e.repeat || document.querySelector('#pad button').disabled) return;   // 원격 제어 불가면 키보드도 막음
+  e.preventDefault(); press(c);
+});
 addEventListener('keyup', e => { if (keys[e.key]) release(); });
 // 탭을 벗어나면 누르던 버튼을 놓은 것으로 처리
 document.addEventListener('visibilitychange', () => { if (document.hidden) release(); });

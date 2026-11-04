@@ -24,7 +24,7 @@ const int LOST_MODE = 1;  // 0 = 원래 방향의 반대로, 1 = 원래 방향 �
 
 // ===== 블루투스 / 모드 설정 =====
 const unsigned long LINK_MS = 600;         // 수동: 이 시간 무명령이면 정지 (앱 반복 주기 200ms보다 충분히 크게)
-const unsigned long SWITCH_HOLD_MS = 500;  // 모드 전환 직후 무조건 정지하는 안전 지연
+const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
 const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸다
 
 // ===== 핀 (원래 파일 기준) =====
@@ -158,7 +158,8 @@ void setMode(Mode m) {
   mode = m;
   cmd = 's';
   stopCar();
-  holdUntil = millis() + SWITCH_HOLD_MS;
+  // 자동으로 갈 때만 안전 지연 동안 무조건 정지. 수동으로 갈 때는 즉시 (멈추고 바로 조종 가능)
+  holdUntil = (m == AUTO) ? millis() + SWITCH_HOLD_MS : 0;
   last_state = -1;   // 자동으로 들어갈 때 라인 상태를 처음부터 다시 판단
   lost_since = 0;
 }

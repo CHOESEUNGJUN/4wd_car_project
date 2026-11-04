@@ -22,11 +22,20 @@ final class Car: NSObject, ObservableObject {
     @Published var stage = ""
     @Published var held: Character?
     @Published private(set) var peripheral: CBPeripheral?
+    // 원격 제어 가능 여부 : 차가 0.2초마다 보내는 상태 줄이 1초 넘게 안 오면 false
+    @Published var linkOK = false
+    // 자동 전환 안전 지연 중 (차가 보내는 단계가 HOLD 이거나, 방금 전환을 눌렀을 때)
+    @Published var holding = false
 
     private var central: CBCentralManager!
     private var tx: CBCharacteristic?
     private var rxBuf = ""
     private var timer: Timer?
+    private var lastStatusAt: Date?
+    private var everConnected = false
+    private var holdShownUntil = Date.distantPast
+    static let linkTimeout: TimeInterval = 1.0
+    static let switchHold: TimeInterval = 0.5
 
     override init() {
         super.init()
@@ -35,6 +44,7 @@ final class Car: NSObject, ObservableObject {
         var tick = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             guard let self else { return }
+            self.updateLink()
             if let c = self.held, c != "s" { self.send(c) }
             // 0.6초마다 'h': 차가 "앱이 연결되어 있다"를 알 수 있게 (주행에는 영향 없음)
             tick += 1
@@ -69,6 +79,28 @@ final class Car: NSObject, ObservableObject {
     func press(_ c: Character) {
         held = c
         send(c)
+    }
+
+    // 자동 전환 (화면에서 확인을 누른 뒤). 수동 전환은 send("m") 으로 바로
+    func requestAuto() {
+        send("a")
+        holdShownUntil = Date().addingTimeInterval(Self.switchHold)
+        updateLink()
+    }
+
+    // 0.2초마다: 원격 제어 가능한지, 안전 지연 중인지
+    func updateLink() {
+        let ok = connected && lastStatusAt.map { Date().timeIntervalSince($0) < Self.linkTimeout } == true
+        if linkOK != ok { linkOK = ok }
+        let h = ok && (Date() < holdShownUntil || stage == "HOLD")
+        if holding != h { holding = h }
+        if !ok && held != nil { held = nil }   // 누르고 있던 버튼은 놓은 것으로 (차는 0.6초 무명령이면 스스로 멈춤)
+    }
+
+    var bannerText: String {
+        if holding { return "자동 모드 전환 중 · 0.5초 안전 지연" }
+        if connected { return "⚠ 차 응답 없음 · 원격 제어 불가" }
+        return everConnected ? "⚠ 블루투스 끊김 · 원격 제어 불가" : "연결 안 됨 · 원격 제어 불가"
     }
 
     func release() {
@@ -162,6 +194,8 @@ extension Car: CBCentralManagerDelegate, CBPeripheralDelegate {
         tx = ch
         p.setNotifyValue(true, for: ch)
         connected = true
+        everConnected = true
+        lastStatusAt = Date()   // 첫 상태 줄이 올 때까지 1초 기다려 줌
         status = "연결됨"
         send("m")  // 연결 직후 수동으로 맞춘다. 차가 돌려주는 'm'으로 표시가 맞춰진다.
     }
@@ -180,6 +214,7 @@ extension Car: CBCentralManagerDelegate, CBPeripheralDelegate {
 
     // "ag,23,010,LINE" → 모드 a, 동작 g, 거리 23, 센서 010, 단계 LINE
     private func onLine(_ line: String) {
+        lastStatusAt = Date()   // 차가 살아 있음
         let f = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
         let c = Array(f[0])
         guard c.count >= 2, c[0] == "a" || c[0] == "m" else { return }

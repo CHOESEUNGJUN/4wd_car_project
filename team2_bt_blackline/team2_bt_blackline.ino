@@ -84,7 +84,7 @@ unsigned long LINE_GRACE_MS = 500;  // 양쪽 센서가 동시에 선을 봐도(
 
 // --- 블루투스 / 모드 ---
 const unsigned long LINK_MS = 600;         // 수동: 이 시간 무명령이면 정지 (앱 반복 주기 200ms보다 충분히 크게)
-const unsigned long SWITCH_HOLD_MS = 500;  // 모드 전환 직후 무조건 정지하는 안전 지연
+const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
 const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸다
 
 // ============================================================
@@ -210,7 +210,8 @@ void setMode(Mode m) {
   cmd = 's';
   stopCar();
   EduServo.write(SERVO_CENTER);      // 회피 중이었으면 서보를 정면으로
-  holdUntil = millis() + SWITCH_HOLD_MS;
+  // 자동으로 갈 때만 안전 지연 동안 무조건 정지. 수동으로 갈 때는 즉시 (멈추고 바로 조종 가능)
+  holdUntil = (m == AUTO) ? millis() + SWITCH_HOLD_MS : 0;
   last_state = -1;                   // 자동으로 들어갈 때 라인 상태를 처음부터 다시 판단
   lostStopped = false;
   lost_since = 0;
