@@ -24,8 +24,6 @@
   #mode { font-size:22px; font-weight:700; flex:1; }
   #status, #line, small { color:var(--muted); }
   #stage { font-weight:600; }
-  #pid label { display:block; margin-top:8px; }
-  #pid input { width:100%; }
   .banner { padding:10px; border-radius:10px; color:#fff; font-weight:700; text-align:center; background:#c62828; }
   .banner.hold { background:#e08a00; }
   .banner[hidden] { display:none; }
@@ -47,13 +45,6 @@
   </div>
   <div id="stage"></div>
   <div id="line"></div>
-  <details id="pid">
-    <summary>PID 설정 (버전 C)</summary>
-    <label>Kp <b id="vP">-</b><input type="range" data-k="P" min="0" max="200" step="1"></label>
-    <label>Ki <b id="vI">-</b><input type="range" data-k="I" min="0" max="5" step="0.1"></label>
-    <label>Kd <b id="vD">-</b><input type="range" data-k="D" min="0" max="300" step="0.5"></label>
-    <label>기본 속도 <b id="vB">-</b><input type="range" data-k="B" min="0" max="255" step="1"></label>
-  </details>
   <small>키보드: 방향키 = 전후좌우, Q/E = 제자리 회전, 스페이스 = 정지</small>
 </main>
 <script>
@@ -77,27 +68,10 @@ const STAGE = {
   OBST: '장애물 대기', CROSS: '교차선 통과', END: '선 끝 (정지)',
 };
 
-// 차가 돌려준 PID 값 "#P60.0,I0.00,D40.0,B140" → 슬라이더에 반영
-function onPidLine(line) {
-  for (const part of line.slice(1).split(',')) {
-    const inp = document.querySelector(`#pid input[data-k="${part[0]}"]`);
-    if (!inp) continue;
-    inp.value = parseFloat(part.slice(1));
-    $('v' + part[0]).textContent = inp.value;
-  }
-}
-
-// 슬라이더를 놓으면 "#P60" 처럼 차로 보냄 (버전 C 에서만 반응, EEPROM 에 저장됨)
-for (const inp of document.querySelectorAll('#pid input')) {
-  inp.addEventListener('input', () => $('v' + inp.dataset.k).textContent = inp.value);
-  inp.addEventListener('change', () => write?.(`#${inp.dataset.k}${inp.value}\n`));
-}
-$('pid').addEventListener('toggle', () => { if ($('pid').open) write?.('#?\n'); });
 
 // 차가 200ms마다 보내는 상태 줄: "ag,23,010,LINE" = 자동, 직진, 23cm, 라인센서 L C R, 단계 (뒤 두 칸은 없을 수도 있음)
 function onLine(line) {
   lastStatusAt = Date.now();   // 차가 살아 있음
-  if (line[0] === '#') return onPidLine(line);
   const f = line.split(',');
   stage = f[3] || '';
   if (f[0].length < 2 || (f[0][0] !== 'a' && f[0][0] !== 'm')) return;
@@ -132,7 +106,7 @@ function updateLink() {
   b.textContent = holding ? '자동 모드 전환 중 · 0.5초 안전 지연'
     : write ? '⚠ 차 응답 없음 · 원격 제어 불가'
     : everConnected ? '⚠ 블루투스 끊김 · 원격 제어 불가' : '연결 안 됨 · 원격 제어 불가';
-  for (const el of document.querySelectorAll('#pad button, #toggle, #pid input')) el.disabled = !ok;
+  for (const el of document.querySelectorAll('#pad button, #toggle')) el.disabled = !ok;
   if (!ok && held) { held = null; render(); }   // 누르던 버튼은 놓은 것으로 (차는 0.6초 무명령이면 스스로 멈춤)
 }
 setInterval(updateLink, 200);
@@ -142,7 +116,6 @@ function connected(name) {
   everConnected = true;
   status('연결: ' + name);
   write('m');  // 연결 직후 수동으로 맞추고, 차가 돌려주는 'm'으로 표시 동기화
-  write('#?\n');  // 버전 C 면 PID 값을 돌려줌 (A, B 는 무시)
   render();
 }
 
