@@ -1,6 +1,6 @@
 /* 2팀 블루투스 수동/자동 + PID 라인트레이서 (버전 C)
  *  - 자동 모드 주행 : 라인센서 3개(0/1)로 오차를 만들고 PID 로 좌우 속도를 정함. 밝은 바탕 + 검은 선
- *  - Kp, Ki, Kd, 기본 속도는 폰 앱/웹 슬라이더로 바로 바꿈 (업로드 필요 없음, EEPROM 에 저장)
+ *  - Kp, Ki, Kd, 기본 속도는 아래 [설정] 숫자를 고쳐서 업로드 (앱 PID 슬라이더는 쓰지 않음)
  *  - 블루투스/모드 전환/안전장치/상태 줄 : 버전 A, B 와 같음 (앱 그대로 사용)
  *
  *  오차 (검은 선 = 1)        L C R
@@ -14,17 +14,16 @@
 
 #include <SoftwareSerial.h>
 #include <Servo.h>
-#include <EEPROM.h>
 
 // ============================================================
 // [설정]
 // ============================================================
 
-// --- PID (처음 값. 폰에서 바꾸면 EEPROM 값이 우선) ---
-float KP = 40;        // 오차 1 당 보정. 좌우로 흔들리면 내림
-float KI = 0;         // 누적 오차(오차 x 초) 1 당 보정. 긴 커브에서 점점 더 꺾게 함. 0 부터 조금씩
-float KD = 30;        // 오차가 한 칸 바뀔 때 반대로 잡아 주는 양. 흔들림이 남으면 올림
-int BASE = 120;       // 기본 속도 (0~255)
+// --- PID ---
+const float KP = 40;        // 오차 1 당 보정. 좌우로 흔들리면 내림
+const float KI = 0;         // 누적 오차(오차 x 초) 1 당 보정. 긴 커브에서 점점 더 꺾게 함. 0 부터 조금씩
+const float KD = 30;        // 오차가 한 칸 바뀔 때 반대로 잡아 주는 양. 흔들림이 남으면 올림
+const int BASE = 120;       // 기본 속도 (0~255)
 const unsigned long PID_MS = 20;      // PID 계산 주기
 const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 않게)
 // 디지털 센서는 오차가 0 -> 1 처럼 계단으로 바뀌어서 D 가 한 번(20ms)만 생기면 모터가 반응하기 전에 사라진다.
@@ -67,10 +66,8 @@ int trigPin = 13, echoPin = 12, servoPin = 2;      // 초음파, 서보
 #define BT_RXD 3                                   // 블루투스 모듈 TXD -> D3
 #define BT_TXD 4                                   // 블루투스 모듈 RXD -> D4
 
-// enum, struct 는 첫 함수보다 위에 둔다(아두이노 IDE가 함수 선언을 첫 함수 앞에 끼워 넣음).
+// enum 은 첫 함수보다 위에 둔다(아두이노 IDE가 함수 선언을 첫 함수 앞에 끼워 넣음).
 enum Mode { MANUAL, AUTO };
-struct Saved { unsigned int magic; float kp, ki, kd; int base; };
-const unsigned int SAVE_MAGIC = 0xC0DF;   // 저장 형식이나 기본값을 새로 쓰고 싶으면 숫자를 바꿔서 옛 값을 무시 (C0DF: 흔들림 수정 후 기본값)
 
 // ============================================================
 SoftwareSerial BT(BT_RXD, BT_TXD);
@@ -113,10 +110,11 @@ void setup() {
   pinMode(LeftMotor_E_pin, OUTPUT);
   Serial.begin(115200);  // 시리얼 모니터도 115200
   BT.begin(9600);        // 블루투스 모듈은 9600
-  loadPid();
   stopCar();
-  Serial.print(F("=== 버전 C (PID) 시작 === "));
-  printPid(Serial);
+  Serial.print(F("=== 버전 C (PID) 시작 === Kp ")); Serial.print(KP);
+  Serial.print(F(" Ki ")); Serial.print(KI);
+  Serial.print(F(" Kd ")); Serial.print(KD);
+  Serial.print(F(" 기본 속도 ")); Serial.println(BASE);
 }
 
 void loop() {
@@ -220,19 +218,10 @@ void updateObstacle() {
 // 블루투스
 // ============================================================
 // 들어온 글자 처리 + 0.2초마다 상태 줄 송신 + 0.2초마다 시리얼 로그
-// '#' 로 시작해서 줄바꿈으로 끝나는 건 설정 명령: #P60  #I0.5  #D40  #B140  #? (지금 값 보내기)
 void serviceBT() {
-  static char pbuf[12];
-  static int plen = -1;          // -1 = 설정 명령 받는 중 아님
   while (BT.available()) {
     char c = BT.read();
-    if (plen >= 0) {
-      if (c == '\n' || c == '\r') { pbuf[plen] = 0; applyParam(pbuf); plen = -1; }
-      else if (plen < (int)sizeof(pbuf) - 1) pbuf[plen++] = c;
-      continue;
-    }
-    if (c == '#') { plen = 0; lastLink = millis(); continue; }
-    // 명령표에 없는 글자(터미널 앱의 \r \n 등)는 무시
+    // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
     if (c == 0 || !strchr("gblrsqwamh", c)) continue;
     lastLink = millis();
     // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
@@ -280,45 +269,6 @@ void serviceBT() {
     Serial.print(F(" 거리=")); Serial.print(frontDist);
     Serial.print(F("mm 장애물=")); Serial.println(obstacleStopped ? 'O' : 'X');
   }
-}
-
-// "P60" / "I0.5" / "D40" / "B140" / "?" 적용 → 저장 → 지금 값을 폰에 돌려줌
-void applyParam(const char* s) {
-  float v = atof(s + 1);
-  switch (s[0]) {
-    case 'P': KP = constrain(v, 0, 500); break;
-    case 'I': KI = constrain(v, 0, 50); break;
-    case 'D': KD = constrain(v, 0, 1000); break;
-    case 'B': BASE = constrain((int)v, 0, 255); break;
-    case '?': sendPid(); return;
-    default: return;
-  }
-  integ = 0;
-  savePid();
-  sendPid();
-  Serial.print(F("PID 변경: "));
-  printPid(Serial);
-}
-
-// "#P60.0,I0.0,D40.0,B140"
-void printPid(Print& out) {
-  out.print(F("#P")); out.print(KP, 1);
-  out.print(F(",I")); out.print(KI, 2);
-  out.print(F(",D")); out.print(KD, 1);
-  out.print(F(",B")); out.println(BASE);
-}
-void sendPid() { printPid(BT); }
-
-void loadPid() {
-  Saved s;
-  EEPROM.get(0, s);
-  if (s.magic != SAVE_MAGIC) return;   // 저장한 적 없음 → 위 [설정] 값
-  KP = s.kp; KI = s.ki; KD = s.kd; BASE = s.base;
-}
-
-void savePid() {
-  Saved s = { SAVE_MAGIC, KP, KI, KD, BASE };
-  EEPROM.put(0, s);   // 바뀐 바이트만 씀
 }
 
 void setMode(Mode m) {
