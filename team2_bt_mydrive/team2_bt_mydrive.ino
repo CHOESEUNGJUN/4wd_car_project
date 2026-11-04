@@ -25,6 +25,7 @@ const int LOST_MODE = 1;  // 0 = 원래 방향의 반대로, 1 = 원래 방향 �
 // ===== 블루투스 / 모드 설정 =====
 const unsigned long LINK_MS = 600;         // 수동: 이 시간 무명령이면 정지 (앱 반복 주기 200ms보다 충분히 크게)
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
+const unsigned long AUTO_LINK_MS = 1500;   // 자동 중 폰 신호가 이만큼 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
 const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸다
 
 // ===== 핀 (원래 파일 기준) =====
@@ -143,6 +144,11 @@ void serviceBT() {
       if (mode == AUTO) setMode(MANUAL);  // 자동 중 조종 명령 = 사람이 개입
       cmd = c;
     }
+  }
+  // 자동 중 폰 신호('h' 등)가 AUTO_LINK_MS 넘게 없으면 끊긴 것 → 정지하고 수동으로 (긴 동작 중에도 여기서 걸림)
+  if (mode == AUTO && millis() - lastLink > AUTO_LINK_MS) {
+    setMode(MANUAL);
+    Serial.println(F("[연결 끊김] 자동 주행 중지"));
   }
   // 폰에 상태 한 줄: 모드(a/m)+동작, 거리(cm), 라인센서 L C R, 단계. 예) "ag,23,010,LINE"
   if (millis() - lastTx >= 200) {

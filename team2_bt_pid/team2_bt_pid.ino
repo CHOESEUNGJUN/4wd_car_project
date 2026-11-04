@@ -41,6 +41,7 @@ const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
 // --- 블루투스 / 모드 ---
 const unsigned long LINK_MS = 600;         // 수동: 이 시간 무명령이면 정지
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
+const unsigned long AUTO_LINK_MS = 1500;   // 자동 중 폰 신호가 이만큼 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
 const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸다
 
 // ============================================================
@@ -224,6 +225,11 @@ void serviceBT() {
     }
   }
   unsigned long now = millis();
+  // 자동 중 폰 신호('h' 등)가 AUTO_LINK_MS 넘게 없으면 끊긴 것 → 정지하고 수동으로
+  if (mode == AUTO && millis() - lastLink > AUTO_LINK_MS) {
+    setMode(MANUAL);
+    Serial.println(F("[연결 끊김] 자동 주행 중지"));
+  }
   // 폰에 상태 한 줄: 모드+동작, 거리(cm), 라인센서 L C R, 단계, 오차, 보정. 예) "ar,23,011,LINE,1,60"
   if (now - lastTx >= 200) {
     lastTx = now;
