@@ -34,7 +34,7 @@ const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순�
 const unsigned long KICK_MS = 80;   // 그 시간
 const float TRIM_L = 1.0, TRIM_R = 1.0;   // 한쪽이 빠르면 빠른 쪽을 0.9 처럼 낮춰 맞춤
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
-const unsigned long AUTO_LINK_MS = 1500;   // 자동 중 폰 신호가 이만큼 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
+const unsigned long AUTO_LINK_MS = 5000;   // 자동 중 폰 신호가 5초 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
 const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸다
 
 // ===== 핀 (원래 파일 기준) =====
