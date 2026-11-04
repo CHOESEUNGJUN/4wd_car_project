@@ -21,12 +21,15 @@
 // ============================================================
 
 // --- PID (처음 값. 폰에서 바꾸면 EEPROM 값이 우선) ---
-float KP = 60;        // 오차 1 당 보정
+float KP = 40;        // 오차 1 당 보정. 좌우로 흔들리면 내림
 float KI = 0;         // 누적 오차(오차 x 초) 1 당 보정. 긴 커브에서 점점 더 꺾게 함. 0 부터 조금씩
-float KD = 40;        // 오차가 한 칸 바뀔 때 반대로 잡아 주는 양. 좌우로 흔들리면 올림
-int BASE = 140;       // 기본 속도 (0~255)
+float KD = 30;        // 오차가 한 칸 바뀔 때 반대로 잡아 주는 양. 흔들림이 남으면 올림
+int BASE = 120;       // 기본 속도 (0~255)
 const unsigned long PID_MS = 20;      // PID 계산 주기
 const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 않게)
+// 디지털 센서는 오차가 0 -> 1 처럼 계단으로 바뀌어서 D 가 한 번(20ms)만 생기면 모터가 반응하기 전에 사라진다.
+// 그래서 D 는 바뀐 순간 생긴 값을 20ms 마다 이 비율로 줄이며 약 0.1초 동안 이어지게 한다.
+const float D_DECAY = 0.8;
 
 // --- 선 놓침 / 교차선 ---
 const unsigned long LOST_STOP_MS = 1500;   // 선을 이만큼 못 보면 정지 (그동안은 마지막 쪽으로 크게 꺾으며 찾음)
@@ -58,7 +61,7 @@ int trigPin = 13, echoPin = 12, servoPin = 2;      // 초음파, 서보
 // enum, struct 는 첫 함수보다 위에 둔다(아두이노 IDE가 함수 선언을 첫 함수 앞에 끼워 넣음).
 enum Mode { MANUAL, AUTO };
 struct Saved { unsigned int magic; float kp, ki, kd; int base; };
-const unsigned int SAVE_MAGIC = 0xC0DE;   // 저장 형식이 바뀌면 숫자를 바꿔서 옛 값을 무시
+const unsigned int SAVE_MAGIC = 0xC0DF;   // 저장 형식이나 기본값을 새로 쓰고 싶으면 숫자를 바꿔서 옛 값을 무시 (C0DF: 흔들림 수정 후 기본값)
 
 // ============================================================
 SoftwareSerial BT(BT_RXD, BT_TXD);
@@ -80,7 +83,7 @@ int clearCount = 0;
 int pidErr = 0;           // 지금 오차 (-3~3)
 float pidOut = 0;         // 지금 보정값
 int lastErr = 0, lastSide = 0;
-float integ = 0;
+float integ = 0, dTerm = 0;
 unsigned long lastPid = 0, lostSince = 0, crossSince = 0;
 
 void setup() {
@@ -137,7 +140,7 @@ int lineError(int L, int C, int R) {
   return 0;   // 1,0,1 / 1,1,1 은 가운데로 봄
 }
 
-void resetPid() { integ = 0; lastErr = 0; lastPid = 0; }
+void resetPid() { integ = 0; dTerm = 0; lastErr = 0; lastPid = 0; }
 
 void pidLine() {
   unsigned long now = millis();
@@ -169,12 +172,17 @@ void pidLine() {
 
   if ((e > 0 && integ < 0) || (e < 0 && integ > 0)) integ = 0;   // 반대쪽으로 넘어가면 누적 초기화
   integ = constrain(integ + e * dt, -I_LIMIT, I_LIMIT);
-  float u = KP * e + KI * integ + KD * (e - lastErr);
+  dTerm = dTerm * D_DECAY + KD * (e - lastErr);   // 바뀐 순간 생기고 약 0.1초에 걸쳐 줄어듦
+  float u = KP * e + KI * integ + dTerm;
   lastErr = e;
   pidErr = e;
   pidOut = u;
 
-  driveLR(constrain(BASE + (int)u, -255, 255), constrain(BASE - (int)u, -255, 255));
+  int left = BASE + (int)u, right = BASE - (int)u;
+  // 선 위(오차 ±2 이내)에서는 안쪽 바퀴를 0 까지만 줄이고 뒤로 돌리지 않는다.
+  // 뒤로 돌리면 차가 확 꺾여 선을 지나쳐 반대쪽으로 넘어가며 좌우로 흔들린다. 선을 놓쳤을 때(±3)만 허용.
+  int lo = abs(e) <= 2 ? 0 : -255;
+  driveLR(constrain(left, lo, 255), constrain(right, lo, 255));
   act = u > 20 ? 'r' : u < -20 ? 'l' : 'g';
 }
 
