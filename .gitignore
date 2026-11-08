@@ -14,3 +14,7 @@ local.properties
 
 # 빌드한 APK (GitHub Release 로 따로 올림)
 dist/
+
+# 시뮬레이션 결과 (서버에서 만들어짐)
+sim/results/
+.venv/
