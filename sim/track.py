@@ -4,6 +4,7 @@
   python sim/track.py team2 --cell 30 --corner-in -110 --battery 6.2
   python sim/track.py oval                        예제 타원
   python sim/track.py sim/tracks/my.png --start 20,50,0 --lap 20,50 --laps 2
+  python sim/track.py team2 --replay gulno_KP50_KD30_xxx.csv   실제 주행 기록(굴노 디버그 앱 CSV)과 비교
 
 내장 트랙(team2, oval)은 sim/tracks/<이름>.png 로 그림도 저장한다.
 직접 그린 PNG : 흰(밝은) 바탕에 검은 선. --scale 은 픽셀 하나가 몇 cm (기본 0.5)
@@ -189,7 +190,8 @@ def run(track, ground, p, a):
             if stage in ('NOLINE', 'LOST') and prev_stage not in ('NOLINE', 'LOST'):
                 lost_events += 1
             prev_stage = stage
-            log.append((round(t, 2), round(X * 100, 1), round(Y * 100, 1), round(math.degrees(TH) % 360), stage, e))
+            log.append((round(t, 2), round(X * 100, 1), round(Y * 100, 1), round(math.degrees(TH) % 360), stage, e,
+                        _shape(cmdL, dict(stL), t, p), _shape(cmdR, dict(stR), t, p)))
             if stop:
                 break
             if start_s is None and t > 2.0:
@@ -244,13 +246,69 @@ def run(track, ground, p, a):
                  'laps_s': laps, 'lost_events': lost_events, 'dist_m': round(dist, 2), 't_end': round(t, 1)}
 
 
+def load_real(path):
+    """굴노 디버그 앱 CSV -> 자동 주행 줄만, 0초 = 자동이 되고 HOLD(0.5초 정지)가 끝난 순간"""
+    with open(path, encoding='utf-8') as f:
+        rows = [r for r in csv.DictReader(f) if r['mode'] == 'a']
+    go = next((r for r in rows if r['stage'] != 'HOLD'), None)
+    if go is None:
+        sys.exit('자동 주행 기록이 없습니다')
+    t0 = int(go['t_ms'])
+    out = []
+    for r in rows:
+        t = (int(r['t_ms']) - t0) / 1000
+        if t < 0:
+            continue
+        num = lambda k: int(r[k]) if r.get(k, '').lstrip('-').isdigit() else None
+        out.append({'t': t, 'stage': r['stage'], 'err': num('err'), })
+    return out
+
+
+def save_compare(track, sim_log, real, info, a, name):
+    """위 : 맵 (시뮬 경로, 5초마다 시각) / 아래 : 같은 시간축에 실제·시뮬 오차, 단계.
+    실제 위치는 기록에 없다. 0.1초 모터 값으로 경로를 되살려 보면 몇 초 만에 어긋나서(0.02초마다 바뀌는 조향을 놓침) 쓰지 않는다.
+    실제 그래프에서 이상한 시각을 찾고 -> 맵에서 시뮬이 그 시각에 어디였는지 보고 -> 실제 차가 거기서 뭘 했는지 비교"""
+    out = os.path.join(HERE, 'results')
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, datetime.datetime.now().strftime('%Y-%m-%d_%H%M') + f'_replay_{name}')
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    Wc, Hc = track.W * track.scale, track.H * track.scale
+    fig = plt.figure(figsize=(11, 10 * Hc / Wc + 6))
+    gs = fig.add_gridspec(3, 1, height_ratios=[10 * Hc / Wc, 2.2, 1])
+    ax = fig.add_subplot(gs[0])
+    ax.imshow(track.img, cmap='gray', extent=[0, Wc, 0, Hc], vmin=0, vmax=1)
+    ax.plot([r[1] for r in sim_log], [r[2] for r in sim_log], c='tab:green', lw=1.5, label='sim (PID)')
+    for r in sim_log:                                 # 5초마다 시각
+        if abs(r[0] % 5) < 0.01 and r[0] > 0:
+            ax.plot(r[1], r[2], 'k.', ms=5)
+            ax.annotate(f'{r[0]:.0f}s', (r[1], r[2]), fontsize=8, xytext=(3, 3), textcoords='offset points')
+    ax.plot(a.start[0], a.start[1], 'b*', ms=14)
+    ax.set_title(f"{name} | KP {a.kp} KD {a.kd} CORNER {a.corner_out}/{a.corner_in} bat {a.battery}V mass {a.mass}kg | sim: {info['result']} merge {info['merge_s']}s laps {info['laps_s']}", fontsize=9)
+    ax.legend(loc='upper left', fontsize=8)
+    ax2 = fig.add_subplot(gs[1])
+    ax2.step([r['t'] for r in real if r['err'] is not None], [r['err'] for r in real if r['err'] is not None], where='post', c='tab:red', label='real err')
+    ax2.step([r[0] for r in sim_log], [r[5] for r in sim_log], where='post', c='tab:green', alpha=.6, label='sim err')
+    ax2.set_ylabel('err'); ax2.set_yticks(range(-3, 4)); ax2.grid(alpha=.3); ax2.legend(fontsize=8, loc='upper right')
+    ax3 = fig.add_subplot(gs[2], sharex=ax2)
+    sc = {'LINE': 'tab:green', 'CORNER': 'tab:orange', 'CROSS': 'tab:blue', 'NOLINE': 'tab:red', 'LOST': 'black', 'END': 'black', 'OBST': 'tab:gray'}
+    for y, rows in ((1, [(r['t'], r['stage']) for r in real]), (0, [(r[0], r[4]) for r in sim_log])):
+        for (t0, st), (t1, _) in zip(rows, rows[1:]):
+            ax3.barh(y, t1 - t0, left=t0, color=sc.get(st, 'white'), height=.8)
+    ax3.set_yticks([0, 1]); ax3.set_yticklabels(['sim', 'real']); ax3.set_xlabel('s (0 = auto start)')
+    fig.tight_layout()
+    fig.savefig(path + '.png', dpi=110)
+    return path
+
+
 def save(track, log, info, a, name, panel_cm, origin):
     out = os.path.join(HERE, 'results')
     os.makedirs(out, exist_ok=True)
     path = os.path.join(out, datetime.datetime.now().strftime('%Y-%m-%d_%H%M') + f'_track_{name}')
     with open(path + '.csv', 'w', newline='', encoding='utf-8') as f:
         wr = csv.writer(f)
-        wr.writerow(['t_s', 'x_cm', 'y_cm', 'heading_deg', 'stage', 'err'])
+        wr.writerow(['t_s', 'x_cm', 'y_cm', 'heading_deg', 'stage', 'err', 'motorL', 'motorR'])
         wr.writerows(log)
     import matplotlib
     matplotlib.use('Agg')
@@ -308,6 +366,7 @@ if __name__ == '__main__':
     ap.add_argument('--mu', type=float, default=0.5)
     ap.add_argument('--battery', type=float, default=7.0)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--replay', help='굴노 디버그 앱 CSV : 실제 주행과 시뮬을 같은 시각으로 비교')
     a = ap.parse_args()
 
     if a.track in BUILTIN:
@@ -341,6 +400,15 @@ if __name__ == '__main__':
     print(f"무게 {a.mass}kg x {p.g} = {a.mass * p.g:.2f}N, 배터리 {a.battery}V : 킥 없이 출발하는 최소 PWM = {min_start_pwm(p)} "
           f"(BASE {a.base}, 출발 순간 킥 {p.kick_pwm} {p.kick_ms}ms)")
     tr = Track(img, a.scale)
+    if a.replay:
+        real = load_real(a.replay)
+        a.time = real[-1]['t']                        # 시뮬도 실제와 같은 길이만큼
+        log, info = run(tr, ground, p, a)
+        path = save_compare(tr, log, real, info, a, os.path.splitext(os.path.basename(a.replay))[0])
+        print('시뮬 :', info)
+        print(f"실제 : {real[-1]['t']:.1f}초 기록, 선 놓침 {sum(1 for x, y in zip(real, real[1:]) if y['stage'] == 'NOLINE' and x['stage'] != 'NOLINE')}번")
+        print(f"저장 : {path}.png")
+        sys.exit()
     log, info = run(tr, ground, p, a)
     path = save(tr, log, info, a, name, panel_cm, origin)
     print(info)

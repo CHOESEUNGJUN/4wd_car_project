@@ -31,7 +31,7 @@ import android.widget.TextView
 import java.util.UUID
 import java.util.concurrent.Executors
 
-// [디버그용 - 제출용 아님] 굴노 앱 + 상태 줄 CSV 기록 (KP KD 맞추기용). 차에는 team2_bt_pid_debug 를 올린다.
+// [디버그용 - 제출용 아님] 굴노 앱 + 상태 줄 CSV 기록 (KP KD 맞추기용). 자동이 되면 저절로 기록, 수동이 되면 저장 창. 차에는 team2_bt_pid_debug 를 올린다.
 // HC-06(클래식 블루투스, SPP) 조종 앱. 교안 2팀 STEP 4 앱과 같은 동작:
 // 누르는 동안 200ms마다 명령 반복, 떼면 's', 모드 버튼은 'a'/'m'.
 // 상태 표시는 차가 200ms마다 보내는 줄("ag,23,010,LINE")로만 바꾼다.
@@ -62,6 +62,7 @@ class MainActivity : Activity() {
     private var recording = false
     private var recStart = 0L
     private var rows = 0
+    private var autoRec = false   // 자동 전환 때 저절로 시작한 기록이면 수동으로 돌아올 때 저절로 저장
     private lateinit var memo: EditText
     private lateinit var recBtn: Button
     private lateinit var recLabel: TextView
@@ -368,7 +369,12 @@ class MainActivity : Activity() {
     private fun onLine(line: String) {
         lastStatusAt = SystemClock.uptimeMillis()   // 차가 살아 있음
         val f = line.split(',')
-        if (recording) record(f)
+        // [디버그] 자동이 되는 순간 기록 시작(0초), 수동으로 돌아오면 저장 창
+        val ok = f[0].length >= 2 && (f[0][0] == 'a' || f[0][0] == 'm')   // 깨진 줄은 무시
+        val nowAuto = ok && f[0][0] == 'a'
+        if (ok && nowAuto && !auto && !recording) { toggleRecord(); autoRec = true }
+        if (ok && recording) record(f)
+        if (ok && !nowAuto && auto && recording && autoRec) toggleRecord()
         lastStage = f.getOrNull(3) ?: ""
         if (f[0].length < 2 || (f[0][0] != 'a' && f[0][0] != 'm')) return
         auto = f[0][0] == 'a'
@@ -392,11 +398,12 @@ class MainActivity : Activity() {
     private fun toggleRecord() {
         if (!recording) {
             csv.setLength(0); csv.append(CSV_HEADER)
-            rows = 0; recStart = SystemClock.uptimeMillis(); recording = true
+            rows = 0; recStart = SystemClock.uptimeMillis(); recording = true; autoRec = false
             recBtn.text = "■ 기록 끝·저장"; recLabel.text = "CSV : 기록 중 0줄"
             return
         }
         recording = false
+        autoRec = false
         recBtn.text = "● 기록 시작"
         if (rows == 0) { recLabel.text = "CSV : 받은 줄이 없어 저장 안 함"; return }
         val tag = memo.text.toString().trim().replace(Regex("[^0-9A-Za-z가-힣._-]+"), "_")
