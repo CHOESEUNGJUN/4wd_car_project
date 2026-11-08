@@ -8,6 +8,7 @@
 | `sim/model.py` | 물리 모델. 숫자는 전부 `Params` |
 | `sim/run.py` | 실험 실행 (CPU 코어 나눠서), 결과 CSV + 그래프 PNG |
 | `sim/experiments.yaml` | 실험 조건, 기본값, 실측값, 맞출 값 후보 |
+| `sim/track.py`, `sim/tracks/` | 그린 트랙 위에서 버전 C 로직으로 달리기 (6장) |
 | `sim/results/` | 결과 (git 에 안 올라감) |
 
 ## 1. 우분투에 처음 설치
@@ -57,6 +58,21 @@ python sim/run.py start           # 출발 : PWM x 배터리 x 킥 있음/없음
 - **코너** (바깥 220, 요철 있는 합판) : 안쪽 −90 이 가장 잘 돎. −170(제자리 회전)은 바퀴만 비비고 가장 덜 돎. 그래서 버전 C 의 `CORNER_IN` 이 −90.
 - 마찰계수 0.4~0.5 에서 코너가 0.7 보다 3~5배 잘 돈다 (옆으로 미끄러져야 방향이 바뀌므로).
 
-## 6. 다음 : 트랙 맵
+## 6. 트랙 맵 (`sim/track.py`)
 
-직접 그린 트랙(선 모양)을 넣고, 버전 C 의 라인센서·PID·코너 로직을 그대로 흉내 내서 한 바퀴 돌리는 기능을 추가할 예정.
+그린 트랙 위에서 버전 C 의 라인센서 3개·PID·코너(바깥 CORNER_OUT / 안쪽 CORNER_IN)·선 놓침(NOLINE → 1.5초면 LOST 정지)·교차(END) 로직을 그대로 돌린다. 물리는 위와 같은 모델.
+
+**트랙 그리기** : 흰 바탕에 검은 선(실제 테이프 폭, 보통 2cm)을 그림판·김프 등으로 그려 PNG 로 `sim/tracks/` 에 저장. 기본은 픽셀 하나 = 0.5cm (가로 400픽셀 = 2m). 다르면 `--scale`.
+
+```bash
+python sim/track.py --make-oval sim/tracks/oval.png     # 예제 타원 (2m x 1.1m)
+python sim/track.py sim/tracks/oval.png                   # 30초 달리기
+python sim/track.py sim/tracks/my.png --start 20,50,90 --time 60 --kp 50 --kd 30 --corner-in -90
+```
+
+- `--start x,y,방향` : 차 가운데 위치 cm (그림 왼쪽 아래가 0,0), 방향 도 (0 = 오른쪽, 90 = 위). 선 위, 선 방향으로 둔다.
+- 바꿀 수 있는 값 : `--kp --ki --kd --base --corner-out --corner-in`, `--sensor-x`(차 가운데→센서 cm, 기본 7), `--sensor-gap`(센서 간격 cm, 기본 1.5), `--mu --battery --bump --seed`. **센서 위치는 실제 차에서 재서 넣을 것.**
+- 결과 : `sim/results/<날짜>_track_<이름>.png` (트랙 위 주행 경로, 초록 LINE / 주황 CORNER / 빨강 NOLINE) + `.csv` (20ms 마다 시간·위치·방향·단계·오차). 터미널에 `lap_s`(한 바퀴 시간, 못 돌면 None), `lost_events`(선 놓친 횟수), `end_stage`.
+
+예제 타원 80초 (참고, 실측 전) : CORNER_IN −90 → 한 바퀴 74.7초, 선 안 놓침 / 0 → 29.5초지만 19번 놓치고 결국 LOST / +90 → 못 돎.
+코너가 느린 것은 4륜이 옆으로 비벼야 도는 모델 특성. 실제 차의 한 바퀴 시간을 재서 비교하면 모델이 맞는지 알 수 있다.
