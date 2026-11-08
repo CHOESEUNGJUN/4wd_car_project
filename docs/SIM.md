@@ -60,19 +60,27 @@ python sim/run.py start           # 출발 : PWM x 배터리 x 킥 있음/없음
 
 ## 6. 트랙 맵 (`sim/track.py`)
 
-그린 트랙 위에서 버전 C 의 라인센서 3개·PID·코너(바깥 CORNER_OUT / 안쪽 CORNER_IN)·선 놓침(NOLINE → 1.5초면 LOST 정지)·교차(END) 로직을 그대로 돌린다. 물리는 위와 같은 모델.
-
-**트랙 그리기** : 흰 바탕에 검은 선(실제 테이프 폭, 보통 2cm)을 그림판·김프 등으로 그려 PNG 로 `sim/tracks/` 에 저장. 기본은 픽셀 하나 = 0.5cm (가로 400픽셀 = 2m). 다르면 `--scale`.
+트랙 위에서 버전 C 의 라인센서 3개·PID·코너(바깥 CORNER_OUT / 안쪽 CORNER_IN)·선 놓침(NOLINE → 1.5초면 LOST 정지)·교차(CROSS, 0.5초면 END) 로직을 그대로 돌린다. 물리는 위와 같은 모델(무게 x 중력, 모터·감속기, 배터리, 바닥 마찰).
 
 ```bash
-python sim/track.py --make-oval sim/tracks/oval.png     # 예제 타원 (2m x 1.1m)
-python sim/track.py sim/tracks/oval.png                   # 30초 달리기
-python sim/track.py sim/tracks/my.png --start 20,50,90 --time 60 --kp 50 --kd 30 --corner-in -90
+python sim/track.py team2                 # 2팀 트랙 : 출발 -> 바깥 고리 합류 -> 2바퀴
+python sim/track.py team2 --cell 30 --corner-in -110 --battery 6.2 --seed 3
+python sim/track.py oval                  # 예제 타원
+python sim/track.py sim/tracks/my.png --start 20,50,90 --lap 20,50 --laps 2   # 직접 그린 PNG
 ```
 
-- `--start x,y,방향` : 차 가운데 위치 cm (그림 왼쪽 아래가 0,0), 방향 도 (0 = 오른쪽, 90 = 위). 선 위, 선 방향으로 둔다.
-- 바꿀 수 있는 값 : `--kp --ki --kd --base --corner-out --corner-in`, `--sensor-x`(차 가운데→센서 cm, 기본 7), `--sensor-gap`(센서 간격 cm, 기본 1.5), `--mu --battery --bump --seed`. **센서 위치는 실제 차에서 재서 넣을 것.**
-- 결과 : `sim/results/<날짜>_track_<이름>.png` (트랙 위 주행 경로, 초록 LINE / 주황 CORNER / 빨강 NOLINE) + `.csv` (20ms 마다 시간·위치·방향·단계·오차). 터미널에 `lap_s`(한 바퀴 시간, 못 돌면 None), `lost_events`(선 놓친 횟수), `end_stage`.
+**2팀 트랙 (`team2`)** : 그림 그대로 (바깥 둥근 사각형 + 가운데 출발선에서 U 턴·불룩한 곡선을 지나 오른쪽 변에 합류). 선은 절연테이프 폭 1.9cm.
+- 회색 칸 한 변 `--cell` (기본 **30cm, 짐작한 값 → 실제 트랙에서 재서 넣기**). 바깥 고리가 13 x 9.75칸 (30cm 면 3.9m x 2.9m).
+- 빨간 점선 = 판 이음새, 2칸마다. 판마다 높이 **±0.2mm** 무작위 (`--panel-mm`, 판 배치는 `--seed` 로 바꿈).
+- 합류점(오른쪽 변, 보라색 원)을 처음 지나면 합류, 그다음부터 지날 때마다 한 바퀴. `--laps 2` 채우면 DONE.
+- 시작할 때 **킥 없이 출발하는 최소 PWM** 을 먼저 계산해 보여 준다 (무게 `--mass` 기본 0.65kg, 배터리 `--battery`). BASE 가 이보다 작아도 출발 킥(255, 0.12초)으로 출발하지만, 멈췄다 다시 갈 때 위험.
+- 그림은 `sim/tracks/team2.png` 로도 저장.
 
-예제 타원 80초 (참고, 실측 전) : CORNER_IN −90 → 한 바퀴 74.7초, 선 안 놓침 / 0 → 29.5초지만 19번 놓치고 결국 LOST / +90 → 못 돎.
-코너가 느린 것은 4륜이 옆으로 비벼야 도는 모델 특성. 실제 차의 한 바퀴 시간을 재서 비교하면 모델이 맞는지 알 수 있다.
+**직접 그린 PNG** : 흰 바탕에 검은 선(테이프 폭), 픽셀 하나 = `--scale` cm (기본 0.5). `--start x,y,방향` (cm, 왼쪽 아래 0,0, 방향 0 = 오른쪽 90 = 위), `--lap x,y` 바퀴 세는 점, `--panel` 판 한 변 cm.
+
+바꿀 수 있는 값 : `--kp --ki --kd --base --corner-out --corner-in`, `--sensor-x`(차 가운데→센서 cm, 기본 7), `--sensor-gap`(센서 간격 cm, 기본 1.5), `--mass --mu --battery --seed --time`. **센서 위치는 실제 차에서 재서 넣을 것.**
+
+결과 : `sim/results/<날짜>_track_<이름>.png` (주행 경로 : 초록 LINE / 주황 CORNER / 파랑 CROSS / 빨강 NOLINE) + `.csv` (20ms 마다 시간·위치·방향·단계·오차). 터미널 : `result`(DONE / LOST / END / NOSTART), `start_s`(5cm 움직인 시각), `merge_s`(합류 시각), `laps_s`(바퀴별 시간), `lost_events`(선 놓친 횟수).
+
+**지금 결과 (기본값, 실측 전)** : 7.0V 에서 킥 없이 출발 최소 PWM 100 → BASE 120 으로 0.56초에 출발. 82.5초에 합류, 2바퀴 142.9초 / 141.4초, 선 놓침 1번, DONE.
+직선에서도 시간의 절반 가까이 CORNER(±2) 상태 : 테이프 1.9cm 에 센서 간격 1.5cm 라 ±1(가운데+옆 센서 동시) 구간이 좁아서, 조금만 비뚤어져도 바로 코너 회전으로 넘어가 지그재그로 간다 → 느린 이유. 실제 차의 한 바퀴 시간과 비교해 보기.
