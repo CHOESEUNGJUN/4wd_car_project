@@ -18,3 +18,4 @@ dist/
 # 시뮬레이션 결과 (서버에서 만들어짐)
 sim/results/
 .venv/
+__pycache__/
