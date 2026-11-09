@@ -226,10 +226,12 @@ void pidLine() {
   pidErr = e;
   pidOut = u;
 
-  int left = BASE + (int)u, right = BASE - (int)u;
-  // PID 구간(오차 ±1 이내)에서는 안쪽 바퀴를 0 까지만 줄이고 뒤로 돌리지 않는다 (확 꺾여 좌우로 흔들리는 것 방지)
+  int left = constrain(BASE + (int)u, 0, 255), right = constrain(BASE - (int)u, 0, 255);
+  // ±1 보정 : 안쪽 바퀴를 바깥 힘의 절반으로 살짝 뒤로 (미끄러운 트랙에서 속도 차이만으로는 덜 돎). 직진(0)은 둘 다 앞으로
+  if (e > 0)      right = -left / 2;
+  else if (e < 0) left = -right / 2;
   // 출발 킥과 최소 힘(MIN_PWM)을 거쳐서 보냄. 안 거치면 배터리가 약할 때 기본 속도만으로는 감속기를 못 돌려 출발을 못 한다
-  driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
+  driveManualLR(left, right);
   act = u > 20 ? 'r' : u < -20 ? 'l' : 'g';
 }
 

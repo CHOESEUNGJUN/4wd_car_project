@@ -192,6 +192,10 @@ def run(track, ground, p, a):
                 u = a.kp * e + a.ki * integ + dterm
                 cmdL = max(0, min(255, a.base + int(u)))
                 cmdR = max(0, min(255, a.base - int(u)))
+                if e > 0:                             # ±1 : 안쪽 바퀴를 바깥 절반 힘으로 뒤로
+                    cmdR = -(cmdL // 2)
+                elif e < 0:
+                    cmdL = -(cmdR // 2)
             err = e
             if stage in ('NOLINE', 'LOST') and prev_stage not in ('NOLINE', 'LOST'):
                 lost_events += 1
