@@ -15,7 +15,7 @@
 
 ```bash
 sudo apt install -y git python3-venv gh
-gh auth login            # 비공개 저장소라 GitHub 로그인
+gh auth login            # 푸시할 때 GitHub 로그인 (받기만 하면 git clone 으로도 됨)
 gh repo clone CHOESEUNGJUN/4wd_car_project
 cd 4wd_car_project
 python3 -m venv .venv
