@@ -177,7 +177,7 @@ def run(track, ground, p, a):
                 cmdL = cmdR = 0
                 integ = dterm = 0
                 last_err = 0
-            elif e:                                   # 꺾기는 모두 바깥 CORNER_OUT, 안쪽 CORNER_IN (좌우 반대)
+            elif abs(e) >= 2:                         # 코너 : 바깥 CORNER_OUT, 안쪽 CORNER_IN
                 cmdL, cmdR = (a.corner_out, a.corner_in) if e > 0 else (a.corner_in, a.corner_out)
                 if abs(e) == 2:
                     stage = 'CORNER'
