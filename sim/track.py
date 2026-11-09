@@ -142,7 +142,6 @@ def run(track, ground, p, a):
     next_load = next_pid = 0.0
     integ = dterm = 0.0                               # 버전 C 상태
     last_err = last_side = 0
-    center_last = False
     lost_since = cross_since = None
     cmdL = cmdR = 0
     stage, err = 'LINE', 0
@@ -164,13 +163,14 @@ def run(track, ground, p, a):
             elif not (L or C or R):                   # 선 놓침 : 1.5초면 정지, 그동안 마지막 쪽으로 크게
                 cross_since = None
                 lost_since = t if lost_since is None else lost_since
-                stage, stop = ('LOST', True) if t - lost_since >= 1.5 else ('NOLINE', False)
-                e = 0 if center_last and (t - lost_since) * 1000 < a.gap_ms else last_side * 3   # 틈이면 잠깐 직진
+                lost = t - lost_since
+                limit = 1.5 + (a.back_ms / 1000 if last_side else 0)   # 마지막 쪽 1.5초, 그다음 반대쪽
+                stage, stop = ('LOST', True) if lost >= limit else ('NOLINE', False)
+                e = (last_side if lost < 1.5 else -last_side) * 3
             else:
                 cross_since = lost_since = None
                 stage = 'LINE'
                 e = {(0, 1, 0): 0, (0, 1, 1): 1, (0, 0, 1): 2, (1, 1, 0): -1, (1, 0, 0): -2}.get((L, C, R), 0)
-                center_last = e == 0                  # 마지막으로 본 게 가운데 센서뿐 -> 놓쳐도 센서 사이 틈일 수 있음
                 if e:
                     last_side = 1 if e > 0 else -1
             if stop:
@@ -368,7 +368,7 @@ if __name__ == '__main__':
     ap.add_argument('--corner-in', type=int, default=-90)
     ap.add_argument('--sensor-x', type=float, default=12.0, help='차 가운데에서 가운데 라인센서까지 앞쪽 거리 cm (사진 짐작)')
     ap.add_argument('--sensor-gap', type=float, default=4.9, help='라인센서 사이 간격 cm (실측)')
-    ap.add_argument('--gap-ms', type=int, default=0, help='시험용 : 가운데 센서만 보다 놓치면 이만큼 ms 직진하며 기다림 (0 = 지금 차 코드와 같음, 바로 마지막 쪽으로 회전)')
+    ap.add_argument('--back-ms', type=int, default=3000, help='마지막 쪽으로 1.5초 찾아도 없으면 반대쪽으로 이만큼 ms 더 찾기 (0 = 예전, 바로 정지)')
     ap.add_argument('--mass', type=float, default=0.25, help='차 무게 kg')
     ap.add_argument('--mu', type=float, default=0.5)
     ap.add_argument('--battery', type=float, default=7.0)

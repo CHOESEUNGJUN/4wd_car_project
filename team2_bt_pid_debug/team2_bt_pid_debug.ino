@@ -49,7 +49,9 @@ const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 
 const float D_DECAY = 0.8;
 
 // --- 선 놓침 / 교차선 ---
-const unsigned long LOST_STOP_MS = 1500;   // 선을 이만큼 못 보면 정지 (그동안은 마지막 쪽으로 크게 꺾으며 찾음)
+const unsigned long LOST_STOP_MS = 1500;   // 선을 놓치면 이만큼 마지막으로 본 쪽으로 크게 꺾으며 찾음
+const unsigned long BACK_SEARCH_MS = 3000; // 그래도 없으면 반대쪽으로 이만큼 더 찾고 정지.
+                                           // 센서 간격(4.9cm)이 테이프(1.9cm)보다 넓어 코너 뒤 넘치면 선이 반대쪽 틈에 있음
 const unsigned long CROSS_STOP_MS = 500;   // 센서 3개 모두 검정이 이만큼 계속되면 정지 (선 끝)
 
 // --- 장애물 ---
@@ -190,9 +192,10 @@ void pidLine() {
 
   if (!L && !C && !R) {                      // 선 놓침 : 마지막으로 본 쪽으로 크게 꺾으며 찾기
     if (lostSince == 0) lostSince = now;
-    if (now - lostSince >= LOST_STOP_MS) { stopCar(); stage = "LOST"; resetPid(); return; }
+    unsigned long lost = now - lostSince;
+    if (lost >= LOST_STOP_MS + (lastSide != 0 ? BACK_SEARCH_MS : 0)) { stopCar(); stage = "LOST"; resetPid(); return; }
     stage = "NOLINE";
-    e = lastSide * 3;
+    e = (lost < LOST_STOP_MS ? lastSide : -lastSide) * 3;   // 마지막 쪽 먼저, 못 찾으면 반대쪽
   } else if (!(L && C && R)) {
     lostSince = 0;
     stage = "LINE";
