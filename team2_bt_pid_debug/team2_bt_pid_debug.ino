@@ -64,7 +64,7 @@ const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
 // --- 블루투스 / 모드 ---
 const unsigned long LINK_MS = 450;         // 수동: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
 // --- 수동 조종 힘 (바닥에서 4륜은 바퀴가 미끄러지며 돌아서 힘이 많이 듦. 차에 맞게 조정) ---
-const int MAN_FWD = 110;            // 전진·후진 (새 배터리에서 130 은 빠름. MIN_PWM 90 보다 작으면 출발 못 함)
+const int MAN_FWD = 100;            // 전진·후진 (새 배터리에서 130 은 빠름. MIN_PWM 90 보다 작으면 출발 못 함)
 const int MAN_CURVE_OUT = 180;      // 곡선 회전 바깥 바퀴 (255 에서 줄임)
 const int MAN_CURVE_IN = 80;       // 곡선 회전 안쪽 바퀴
 const int MAN_SPIN = 170;           // 제자리 회전 (230 에서 줄임)
