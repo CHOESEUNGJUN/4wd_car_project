@@ -146,7 +146,9 @@ void loop() {
   if (millis() < holdUntil) { stopCar(); stage = "HOLD"; return; }
 
   if (mode == AUTO) {
-    if (obstacleStopped) { stopCar(); act = 'o'; stage = "OBST"; resetPid(); return; }
+    // 장애물 : 정지하고 기다림. 치워지면(CLEAR_COUNT 번 연속 안 보이면) 그 자리에서 다시 라인 추종.
+    // 기다린 시간이 선 놓침·교차 시간에 들어가지 않게 타이머를 비움 (안 비우면 출발하자마자 LOST)
+    if (obstacleStopped) { stopCar(); act = 'o'; stage = "OBST"; resetPid(); lostSince = 0; crossSince = 0; return; }
     pidLine();
     return;
   }
