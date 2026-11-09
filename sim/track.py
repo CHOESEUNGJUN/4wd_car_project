@@ -1,7 +1,7 @@
 """트랙 맵 주행 시뮬레이션 : 트랙 위에서 버전 C 로직(라인센서 3개, PID, 코너, 선 놓침)으로 달린다
 
   python sim/track.py team2                       2팀 트랙 : 출발 -> 바깥 고리 합류 -> 2바퀴 (판 이음새 요철 ±0.2mm)
-  python sim/track.py team2 --cell 30 --corner-in -110 --battery 6.2
+  python sim/track.py team2 --corner-in -110 --battery 6.2 --sensor-gap 1.5
   python sim/track.py oval                        예제 타원
   python sim/track.py sim/tracks/my.png --start 20,50,0 --lap 20,50 --laps 2
   python sim/track.py team2 --replay gulno_KP50_KD30_xxx.csv   실제 주행 기록(굴노 디버그 앱 CSV)과 비교
@@ -41,16 +41,20 @@ def _rounded_rect(w, h, r):
 
 
 def team2():
-    """그려 준 그림 그대로. 회색 칸 1개 = cell cm, 빨간 점선(판 이음새) = 2칸마다"""
-    outer = _rounded_rect(13, 9.75, 1.75)          # 바깥 고리 (시계 방향으로 돎)
-    entry = ([(5.85, 5.0)]                          # 출발선
-             + _arc(8.0, 5.45, 0.45, -90, 0)        # 오른쪽 아래로 꺾음
-             + _arc(9.105, 6.4, 0.655, 180, 0)      # U 턴 (아래로 내려갔다 올라옴)
-             + _arc(8.96, 4.55, 0.8, 0, -90)        # 위에서 왼쪽으로
-             + _arc(8.9, 3.15, 0.6, 90, 270)        # 왼쪽으로 불룩하게 돌아 위로
-             + _arc(11.4, 4.15, 1.6, -90, 0))       # 오른쪽 위 큰 곡선 -> 바깥 오른쪽 변에 합류
-    return {'paths': [outer, entry], 'w': 13, 'h': 9.75,
-            'start': (5.85, 5.0, 0), 'lap': (13.0, 4.15), 'panel_cells': 2}
+    """실제 2팀 코스 (2026-11-09 사진, 폰 S21 울트라 16.5cm 로 크기 맞춤). 단위 cm, 그림처럼 y 는 아래로.
+    출발 = 가운데 짧은 선 끝에서 위로 -> 오른쪽 U 턴 -> 안쪽 고리(오른쪽 아래 -> 왼쪽) -> 왼쪽 위에서 S 곡선
+    -> 불룩한 반원을 돌아 위 변에 합류(왼쪽으로) -> 바깥 고리 2바퀴. 퍼즐 판 한 변 약 17.3cm"""
+    W = 71.5                                       # 바깥 고리 한 변 (테이프 가운데 기준)
+    outer = _rounded_rect(W, W, 8)
+    entry = ([(34.2, 45.7)]                        # 출발선 끝
+             + _arc(43.1, 26.2, 8.9, 180, 360)      # 위로 올라가 오른쪽 U 턴
+             + _arc(45.0, 47.1, 7.0, 0, 90)         # 오른쪽 아래 모서리
+             + _arc(23.8, 47.1, 7.0, 90, 180)       # 왼쪽 아래 모서리
+             + _arc(23.8, 25.0, 7.0, 180, 270)      # 왼쪽 위 모서리 -> 오른쪽으로
+             + _arc(25.5, 9.0, 9.0, 90, -90))       # 불룩한 반원 -> 위 변에 왼쪽으로 합류
+    return {'paths': [outer, entry], 'w': W, 'h': W, 'cell': 1, 'margin': 5, 'scale': 0.2,
+            'start': (34.2, 45.7, 90), 'start_is_sensor': True, 'lap': (0, W / 2),
+            'panel_cells': 17.3, 'panel_origin': (-9.1, -7.6)}
 
 
 def oval():
@@ -138,6 +142,7 @@ def run(track, ground, p, a):
     next_load = next_pid = 0.0
     integ = dterm = 0.0                               # 버전 C 상태
     last_err = last_side = 0
+    center_last = False
     lost_since = cross_since = None
     cmdL = cmdR = 0
     stage, err = 'LINE', 0
@@ -160,11 +165,12 @@ def run(track, ground, p, a):
                 cross_since = None
                 lost_since = t if lost_since is None else lost_since
                 stage, stop = ('LOST', True) if t - lost_since >= 1.5 else ('NOLINE', False)
-                e = last_side * 3
+                e = 0 if center_last and (t - lost_since) * 1000 < a.gap_ms else last_side * 3   # 틈이면 잠깐 직진
             else:
                 cross_since = lost_since = None
                 stage = 'LINE'
                 e = {(0, 1, 0): 0, (0, 1, 1): 1, (0, 0, 1): 2, (1, 1, 0): -1, (1, 0, 0): -2}.get((L, C, R), 0)
+                center_last = e == 0                  # 마지막으로 본 게 가운데 센서뿐 -> 놓쳐도 센서 사이 틈일 수 있음
                 if e:
                     last_side = 1 if e > 0 else -1
             if stop:
@@ -360,9 +366,10 @@ if __name__ == '__main__':
     ap.add_argument('--base', type=int, default=120)
     ap.add_argument('--corner-out', type=int, default=220)
     ap.add_argument('--corner-in', type=int, default=-90)
-    ap.add_argument('--sensor-x', type=float, default=7.0, help='차 가운데에서 라인센서까지 앞쪽 거리 cm')
-    ap.add_argument('--sensor-gap', type=float, default=1.5, help='라인센서 사이 간격 cm')
-    ap.add_argument('--mass', type=float, default=0.65, help='차 무게 kg')
+    ap.add_argument('--sensor-x', type=float, default=12.0, help='차 가운데에서 가운데 라인센서까지 앞쪽 거리 cm (사진 짐작)')
+    ap.add_argument('--sensor-gap', type=float, default=4.9, help='라인센서 사이 간격 cm (실측)')
+    ap.add_argument('--gap-ms', type=int, default=0, help='시험용 : 가운데 센서만 보다 놓치면 이만큼 ms 직진하며 기다림 (0 = 지금 차 코드와 같음, 바로 마지막 쪽으로 회전)')
+    ap.add_argument('--mass', type=float, default=0.25, help='차 무게 kg')
     ap.add_argument('--mu', type=float, default=0.5)
     ap.add_argument('--battery', type=float, default=7.0)
     ap.add_argument('--seed', type=int, default=0)
@@ -371,15 +378,20 @@ if __name__ == '__main__':
 
     if a.track in BUILTIN:
         d = BUILTIN[a.track]()
-        img, to_cm = render(d, a.cell, a.scale)
+        cell = d.get('cell', a.cell)
+        a.scale = d.get('scale', a.scale)             # 작은 트랙은 더 촘촘한 그림
+        img, to_cm = render(d, cell, a.scale, margin_cells=d.get('margin', 0.5))
         os.makedirs(os.path.join(HERE, 'tracks'), exist_ok=True)
         import matplotlib.image as mpimg
         mpimg.imsave(os.path.join(HERE, 'tracks', a.track + '.png'), img, cmap='gray', vmin=0, vmax=1)
         sx, sy = to_cm(*d['start'][:2])
+        if d.get('start_is_sensor'):                  # 출발점 = 센서 위치 -> 차 가운데는 sensor_x 만큼 뒤
+            h = math.radians(d['start'][2])
+            sx, sy = sx - a.sensor_x * math.cos(h), sy - a.sensor_x * math.sin(h)
         a.start = a.start or f"{sx},{sy},{d['start'][2]}"
         a.lap = a.lap or '%s,%s' % to_cm(*d['lap'])
-        panel_cm = a.panel if a.panel is not None else d['panel_cells'] * a.cell
-        origin = to_cm(0, 0)                          # 판 이음새는 바깥 고리 왼쪽 위에서부터
+        panel_cm = a.panel if a.panel is not None else d['panel_cells'] * cell
+        origin = to_cm(*d.get('panel_origin', (0, 0)))                          # 판 이음새는 바깥 고리 왼쪽 위에서부터
         name = a.track
     else:
         import matplotlib.image as mpimg
