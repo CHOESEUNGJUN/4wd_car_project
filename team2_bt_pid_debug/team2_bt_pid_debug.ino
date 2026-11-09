@@ -203,15 +203,14 @@ void pidLine() {
     if (e != 0) lastSide = e > 0 ? 1 : -1;
   }
 
-  // 코너(끝 센서만 선을 봄, ±2) 또는 선 놓침(±3) : 바깥 바퀴 CORNER_OUT, 안쪽 바퀴 CORNER_IN 으로 돈다.
-  // (조향이 없으니 좌우 바퀴 힘 차이로 돈다. CORNER_IN 이 음수면 안쪽 바퀴가 뒤로 돌아 더 날카롭게 돎)
-  // 가운데 센서가 선을 다시 보면(오차 ±1 이하) 아래 PID 로 돌아간다.
-  if (abs(e) >= 2) {
+  // 선 놓침(±3) : 바깥 바퀴 CORNER_OUT, 안쪽 바퀴 CORNER_IN 으로 제자리 회전하며 찾는다.
+  // 코너(±2, 끝 센서만 선을 봄)는 아래 PID 로 : 바깥 약 220, 안쪽은 그 절반 힘으로 뒤로.
+  // 선을 다시 보면 아래 PID 로 돌아간다.
+  if (abs(e) >= 3) {
     int dir = e > 0 ? 1 : -1;                       // + 오른쪽으로 돎
     // 수동 조종과 같은 힘 다듬기(최소 MIN_PWM, 방향 바뀔 때 KICK)를 거쳐서 4바퀴가 실제로 돌게 한다
     if (dir > 0) driveManualLR(CORNER_OUT, CORNER_IN);   // 오른쪽 코너 : 왼쪽이 바깥
     else         driveManualLR(CORNER_IN, CORNER_OUT);   // 왼쪽 코너 : 오른쪽이 바깥
-    if (abs(e) == 2) stage = "CORNER";
     integ = 0; dTerm = 0; lastErr = e;              // PID 로 돌아갈 때 쌓인 값 때문에 튀지 않게
     pidErr = e; pidOut = 0;
     act = dir > 0 ? 'w' : 'q';
@@ -225,9 +224,10 @@ void pidLine() {
   lastErr = e;
   pidErr = e;
   pidOut = u;
+  if (abs(e) == 2) stage = "CORNER";
 
   int left = constrain(BASE + (int)u, 0, 255), right = constrain(BASE - (int)u, 0, 255);
-  // ±1 보정 : 안쪽 바퀴를 바깥 힘의 절반으로 살짝 뒤로 (미끄러운 트랙에서 속도 차이만으로는 덜 돎). 직진(0)은 둘 다 앞으로
+  // ±1 보정·±2 코너 : 안쪽 바퀴를 바깥 힘의 절반으로 뒤로 (미끄러운 트랙에서 속도 차이만으로는 덜 돎). 직진(0)은 둘 다 앞으로
   if (e > 0)      right = -left / 2;
   else if (e < 0) left = -right / 2;
   // 출발 킥과 최소 힘(MIN_PWM)을 거쳐서 보냄. 안 거치면 배터리가 약할 때 기본 속도만으로는 감속기를 못 돌려 출발을 못 한다

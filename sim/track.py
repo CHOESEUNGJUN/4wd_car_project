@@ -177,10 +177,8 @@ def run(track, ground, p, a):
                 cmdL = cmdR = 0
                 integ = dterm = 0
                 last_err = 0
-            elif abs(e) >= 2:                         # 코너 : 바깥 CORNER_OUT, 안쪽 CORNER_IN
+            elif abs(e) >= 3:                         # 선 놓침 : 바깥 CORNER_OUT, 안쪽 CORNER_IN 제자리 회전
                 cmdL, cmdR = (a.corner_out, a.corner_in) if e > 0 else (a.corner_in, a.corner_out)
-                if abs(e) == 2:
-                    stage = 'CORNER'
                 integ = dterm = 0
                 last_err = e
             else:                                     # PID
@@ -192,7 +190,9 @@ def run(track, ground, p, a):
                 u = a.kp * e + a.ki * integ + dterm
                 cmdL = max(0, min(255, a.base + int(u)))
                 cmdR = max(0, min(255, a.base - int(u)))
-                if e > 0:                             # ±1 : 안쪽 바퀴를 바깥 절반 힘으로 뒤로
+                if abs(e) == 2:
+                    stage = 'CORNER'
+                if e > 0:                             # ±1, ±2 : 안쪽 바퀴를 바깥 절반 힘으로 뒤로
                     cmdR = -(cmdL // 2)
                 elif e < 0:
                     cmdL = -(cmdR // 2)
