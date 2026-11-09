@@ -9,6 +9,50 @@
 
 ---
 
+## 0. 받아서 쓰기 (처음 보는 사람용)
+
+이 저장소를 받은 사람이 같은 차를 만들어 달리게 하는 순서. 자세한 내용은 각 장에 있다.
+
+**준비물**
+
+| 부품 | 비고 |
+|---|---|
+| 4륜 RC카 키트 (Arduino UNO + 센서 확장 쉴드, L298N 모터 드라이버, TT 기어모터 4개) | 에듀이노 4WD 키트 기준 |
+| 디지털 라인센서 3개 (검은 선 = 1 이 나오는 것) | 차 앞에 왼·가운데·오른 |
+| 초음파 센서 + 서보 | 장애물 정지용 |
+| 블루투스 모듈 **HC-06** (안드로이드) 또는 **HM-10** (아이폰, 웹) | 9600 bps |
+| 배터리 (모터용) | 새 배터리일수록 세게 돈다 → 1-3, 1-4 참고 |
+| 트랙 : 밝은 바닥 + **검은 절연테이프 (폭 약 1.9cm)** | 판이 미끄러우면 코너 값 조정 |
+
+**1) 코드 받기** — GitHub 에서 **Code → Download ZIP** 후 압축 풀기, 또는
+
+```bash
+git clone https://github.com/CHOESEUNGJUN/4wd_car_project.git
+```
+
+**2) 배선** — [3장 배선](#3-배선) 표대로. 라인센서는 **왼 A3 / 가운데 A4 / 오른 A5**, 블루투스는 **TXD → D3, RXD → D4** (엇갈리게).
+
+**3) 업로드**
+1. [Arduino IDE](https://www.arduino.cc/en/software) 설치 (2.x).
+2. `team2_bt_pid/team2_bt_pid.ino` 열기 → 보드 **Arduino Uno**, 포트 선택 → **업로드**.
+3. `Servo.h` 가 없다는 오류가 나면 **라이브러리 매니저**에서 `Servo` 설치.
+
+**4) 센서 확인** — 차를 들어 바퀴를 띄우고 시리얼 모니터 **115200**.
+라인센서를 하나씩 테이프 위에 올려 `라인=100 / 010 / 001` 이 맞는 자리에서 바뀌는지 본다.
+안 바뀌면 센서의 감도 나사를 돌리고, 좌우가 반대면 스케치 위쪽 `L_Line`, `R_Line` 을 바꾼다.
+
+**5) 앱 연결** — [5장 앱](#5-앱)
+- 안드로이드 + HC-06 : Android Studio 로 `apps/android` 를 열어 ▶ (APK 는 저장소에 없음).
+- 아이폰 + HM-10 : Xcode 로 `apps/ios_mac/MiniCar.xcodeproj` 를 열어 ▶.
+- 설치 없이 : 크롬으로 `apps/web/index.html` 열기 (HM-10 BLE, 맥은 HC-06 시리얼도).
+
+**6) 달리기** — 앱에서 수동으로 ▲ 눌러 움직이는지 확인 → 차를 선 위에 놓고 **자동으로** → 0.5초 뒤 출발.
+확인 순서는 [4장](#4-처음-시작하기) 표.
+
+**7) 내 트랙에 맞추기** — 흔들리거나 코너를 못 돌면 [1-4](#1-4-설정값과-맞추는-법) 순서대로 `KP`, `KD`, `CORNER_OUT` 을 바꿔 다시 업로드. 증상별 해결은 [`docs/PID.md`](docs/PID.md).
+
+---
+
 ## 1. 핵심 기술 : PID 라인 추종
 
 ### 1-1. PID 가 뭔가
@@ -103,7 +147,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 맞추는 순서 (한 번에 하나씩) : **Ki = Kd = 0 에서 Kp 를 올려** 살짝 흔들리기 직전 값 → 흔들리면 **Kd ↑** → 코너에서 덜 돌면 `CORNER_OUT` ↑ → 한쪽으로 쏠리면 **Ki** 조금 → 다 되면 `BASE` ↑ 하고 다시.
 
 - **더 자세한 설명, 증상별 해결은 [`docs/PID.md`](docs/PID.md).**
-- 트랙 시뮬레이션(실제 코스, 물리 모델)은 [`docs/SIM.md`](docs/SIM.md), 2026-11-09 작업 보고(잘된 점, 안된 점, 앞으로 할 것)는 [`docs/REPORT_20261109.md`](docs/REPORT_20261109.md).
+- 2026-11-09 작업 보고(잘된 점, 안된 점, 앞으로 할 것)는 [`docs/REPORT_20261109.md`](docs/REPORT_20261109.md).
 
 > **핀 주의**: 라인센서는 왼 A3 / 가운데 A4 / 오른 A5 로, 교안(A5/A4/A3)과 다르다. 처음 올리면 센서를 손으로 하나씩 가려 보고, 시리얼 모니터의 라인 값이 맞는 자리에서 바뀌는지 꼭 확인한다. 어긋나면 스케치 위쪽 `L_Line, C_Line, R_Line` 만 고치면 된다.
 
@@ -127,10 +171,8 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | `diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10** |
 | `apps/android/` | 안드로이드 앱 | 안드로이드 + **HC-06** |
-| `team2_bt_pid_debug/`, `apps/android_debug/` | **디버그용 (제출용 아님)** | 버전 C + 상태 줄 0.1초·모터 값. 앱 "굴노 디버그"(`dist/gulno-debug.apk`)에서 메모(KP50 KD30 등) 적고 자동 전환하면 기록 시작, 수동 전환하면 CSV 저장 (● ■ 버튼으로도). `python sim/track.py team2 --replay <CSV>` 로 시뮬과 같은 시간축 비교 (`docs/SIM.md` 7장) (`t_ms,mode,act,dist_cm,L,C,R,stage,err,out,motorL,motorR`) |
+| `team2_bt_pid_debug/`, `apps/android_debug/` | **디버그용 (제출용 아님)** | 버전 C + 상태 줄 0.1초·모터 값. 앱 "굴노 디버그"(`dist/gulno-debug.apk`)에서 메모(KP50 KD30 등) 적고 자동 전환하면 기록 시작, 수동 전환하면 CSV 저장 (● ■ 버튼으로도). (`t_ms,mode,act,dist_cm,L,C,R,stage,err,out,motorL,motorR`) |
 | `apps/web/index.html` | 웹 조종 페이지 | 크롬에서 바로 (HM-10 BLE / 맥에서 HC-06) |
-
----
 
 ---
 

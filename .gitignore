@@ -19,3 +19,7 @@ dist/
 sim/results/
 .venv/
 __pycache__/
+
+# 시뮬레이션 (내 컴퓨터에만, GitHub 에는 안 올림)
+sim/
+docs/SIM.md
