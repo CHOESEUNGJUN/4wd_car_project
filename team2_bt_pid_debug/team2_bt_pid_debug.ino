@@ -39,7 +39,7 @@ const int BASE = 120;       // 기본 속도 (0~255)
 //   CORNER_IN   -90 : 안쪽은 천천히 뒤로, 바깥은 앞으로 (4바퀴 모두 돌면서 돎. 시뮬레이션에서 가장 잘 돎)
 //   CORNER_IN     0 : 안쪽 바퀴를 세우고 바깥만 돌림 (예전 방식)
 const int CORNER_OUT = 220;     // 바깥 바퀴 (앞으로)
-const int CORNER_IN = -220;     // 실제 트랙(퍼즐 판)이 미끄러워 -90 은 헛돎 -> 좌우 반대로 같은 힘, 제자리 회전. 안쪽 바퀴 (- 는 뒤로). 감속기가 작아 힘이 약하므로 0 이 아니면 최소 MIN_PWM(90),
+const int CORNER_IN = -90;      // 안쪽 바퀴 (- 는 뒤로). 감속기가 작아 힘이 약하므로 0 이 아니면 최소 MIN_PWM(90),
                                 //   방향이 바뀌는 순간 0.08초 최대 힘(KICK). 안 돌면 -130 쪽으로, 요철에서 미끄러지면 -90 쪽으로
 const unsigned long TX_MS = 100;       // [디버그] 폰에 상태 보내는 간격
 const unsigned long PID_MS = 20;      // PID 계산 주기
@@ -49,7 +49,8 @@ const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 
 const float D_DECAY = 0.8;
 
 // --- 선 놓침 / 교차선 ---
-const unsigned long LOST_STOP_MS = 500;    // 선을 놓치면 이만큼 마지막으로 본 쪽으로 제자리 회전하며 찾음 (길면 너무 많이 돎)
+const unsigned long LOST_PID_MS = 500;     // 선을 놓치면 먼저 이만큼 PID 로 마지막 쪽으로 보정 (앞으로 가며 완만히, 안쪽 바퀴 0 까지만)
+const unsigned long LOST_STOP_MS = 500;    // 그래도 없으면 이만큼 마지막으로 본 쪽으로 크게 꺾으며 찾음 (길면 너무 많이 돎)
 const unsigned long BACK_SEARCH_MS = 1000; // 그래도 없으면 반대쪽으로 이만큼 (되돌아오는 0.5초 + 반대쪽 0.5초) 찾고 정지.
                                            // 센서 간격(4.9cm)이 테이프(1.9cm)보다 넓어 코너 뒤 넘치면 선이 반대쪽 틈에 있음
 const unsigned long CROSS_STOP_MS = 500;   // 센서 3개 모두 검정이 이만큼 계속되면 정지 (선 끝)
@@ -182,6 +183,7 @@ void pidLine() {
 
   int L = digitalRead(L_Line), C = digitalRead(C_Line), R = digitalRead(R_Line);
   int e;
+  bool lostPid = false;                      // 선 놓친 직후 : 회전 대신 PID 보정
 
   if (L && C && R) {                         // 모두 검정 : 교차선이면 지나가고, 오래 계속되면 선 끝
     if (crossSince == 0) crossSince = now;
@@ -190,12 +192,13 @@ void pidLine() {
     e = 0;
   } else crossSince = 0;
 
-  if (!L && !C && !R) {                      // 선 놓침 : 마지막으로 본 쪽으로 크게 꺾으며 찾기
+  if (!L && !C && !R) {                      // 선 놓침 : PID 보정 -> 마지막 쪽으로 크게 꺾으며 찾기 -> 반대쪽 -> 정지
     if (lostSince == 0) lostSince = now;
     unsigned long lost = now - lostSince;
-    if (lost >= LOST_STOP_MS + (lastSide != 0 ? BACK_SEARCH_MS : 0)) { stopCar(); stage = "LOST"; resetPid(); return; }
+    if (lost >= LOST_PID_MS + LOST_STOP_MS + (lastSide != 0 ? BACK_SEARCH_MS : 0)) { stopCar(); stage = "LOST"; resetPid(); return; }
     stage = "NOLINE";
-    e = (lost < LOST_STOP_MS ? lastSide : -lastSide) * 3;   // 마지막 쪽 먼저, 못 찾으면 반대쪽
+    lostPid = lost < LOST_PID_MS;
+    e = (lost < LOST_PID_MS + LOST_STOP_MS ? lastSide : -lastSide) * 3;   // 마지막 쪽 먼저, 못 찾으면 반대쪽
   } else if (!(L && C && R)) {
     lostSince = 0;
     stage = "LINE";
@@ -203,14 +206,15 @@ void pidLine() {
     if (e != 0) lastSide = e > 0 ? 1 : -1;
   }
 
-  // 선 놓침(±3) : 바깥 바퀴 CORNER_OUT, 안쪽 바퀴 CORNER_IN 으로 제자리 회전하며 찾는다.
-  // 코너(±2, 끝 센서만 선을 봄)는 아래 PID 로 : 바깥 약 220, 안쪽은 그 절반 힘으로 뒤로.
-  // 선을 다시 보면 아래 PID 로 돌아간다.
-  if (abs(e) >= 3) {
+  // 코너(끝 센서만 선을 봄, ±2) 또는 선 놓침(±3) : 바깥 바퀴 CORNER_OUT, 안쪽 바퀴 CORNER_IN 으로 돈다.
+  // (조향이 없으니 좌우 바퀴 힘 차이로 돈다. CORNER_IN 이 음수면 안쪽 바퀴가 뒤로 돌아 더 날카롭게 돎)
+  // 가운데 센서가 선을 다시 보면(오차 ±1 이하) 아래 PID 로 돌아간다.
+  if (abs(e) >= 2 && !lostPid) {
     int dir = e > 0 ? 1 : -1;                       // + 오른쪽으로 돎
     // 수동 조종과 같은 힘 다듬기(최소 MIN_PWM, 방향 바뀔 때 KICK)를 거쳐서 4바퀴가 실제로 돌게 한다
     if (dir > 0) driveManualLR(CORNER_OUT, CORNER_IN);   // 오른쪽 코너 : 왼쪽이 바깥
     else         driveManualLR(CORNER_IN, CORNER_OUT);   // 왼쪽 코너 : 오른쪽이 바깥
+    if (abs(e) == 2) stage = "CORNER";
     integ = 0; dTerm = 0; lastErr = e;              // PID 로 돌아갈 때 쌓인 값 때문에 튀지 않게
     pidErr = e; pidOut = 0;
     act = dir > 0 ? 'w' : 'q';
@@ -224,16 +228,11 @@ void pidLine() {
   lastErr = e;
   pidErr = e;
   pidOut = u;
-  if (abs(e) == 2) stage = "CORNER";
 
-  int left = constrain(BASE + (int)u, 0, 255), right = constrain(BASE - (int)u, 0, 255);
-  // 안쪽 바퀴를 살짝 뒤로 (미끄러운 트랙에서 속도 차이만으로는 덜 돎) : ±1 보정은 바깥의 1/2, ±2 코너는 1/3 (앞으로 나가며 돎).
-  // 직진(0)은 둘 다 앞으로. 1/3 이 MIN_PWM(90) 보다 작으면 90 으로 올라감
-  int div = abs(e) == 2 ? 3 : 2;
-  if (e > 0)      right = -left / div;
-  else if (e < 0) left = -right / div;
+  int left = BASE + (int)u, right = BASE - (int)u;
+  // PID 구간(오차 ±1 이내)에서는 안쪽 바퀴를 0 까지만 줄이고 뒤로 돌리지 않는다 (확 꺾여 좌우로 흔들리는 것 방지)
   // 출발 킥과 최소 힘(MIN_PWM)을 거쳐서 보냄. 안 거치면 배터리가 약할 때 기본 속도만으로는 감속기를 못 돌려 출발을 못 한다
-  driveManualLR(left, right);
+  driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
   act = u > 20 ? 'r' : u < -20 ? 'l' : 'g';
 }
 

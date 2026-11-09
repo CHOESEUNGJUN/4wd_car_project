@@ -155,6 +155,7 @@ def run(track, ground, p, a):
             L, C, R = (track.black(X + x * math.cos(TH) - y * math.sin(TH), Y + x * math.sin(TH) + y * math.cos(TH))
                        for (x, y) in sensors)
             stop = False
+            lost_pid = False
             if L and C and R:                         # 3개 모두 검정 : 0.5초 계속이면 선 끝
                 lost_since = None
                 cross_since = t if cross_since is None else cross_since
@@ -164,9 +165,10 @@ def run(track, ground, p, a):
                 cross_since = None
                 lost_since = t if lost_since is None else lost_since
                 lost = t - lost_since
-                limit = (a.lost_ms + (a.back_ms if last_side else 0)) / 1000   # 마지막 쪽 먼저, 그다음 반대쪽
+                limit = (a.lost_pid_ms + a.lost_ms + (a.back_ms if last_side else 0)) / 1000   # PID -> 마지막 쪽 -> 반대쪽
                 stage, stop = ('LOST', True) if lost >= limit else ('NOLINE', False)
-                e = (last_side if lost < a.lost_ms / 1000 else -last_side) * 3
+                lost_pid = lost < a.lost_pid_ms / 1000
+                e = (last_side if lost < (a.lost_pid_ms + a.lost_ms) / 1000 else -last_side) * 3
             else:
                 cross_since = lost_since = None
                 stage = 'LINE'
@@ -177,8 +179,10 @@ def run(track, ground, p, a):
                 cmdL = cmdR = 0
                 integ = dterm = 0
                 last_err = 0
-            elif abs(e) >= 3:                         # 선 놓침 : 바깥 CORNER_OUT, 안쪽 CORNER_IN 제자리 회전
+            elif abs(e) >= 2 and not lost_pid:        # 코너·선 놓침 : 바깥 CORNER_OUT, 안쪽 CORNER_IN
                 cmdL, cmdR = (a.corner_out, a.corner_in) if e > 0 else (a.corner_in, a.corner_out)
+                if abs(e) == 2:
+                    stage = 'CORNER'
                 integ = dterm = 0
                 last_err = e
             else:                                     # PID
@@ -190,13 +194,6 @@ def run(track, ground, p, a):
                 u = a.kp * e + a.ki * integ + dterm
                 cmdL = max(0, min(255, a.base + int(u)))
                 cmdR = max(0, min(255, a.base - int(u)))
-                if abs(e) == 2:
-                    stage = 'CORNER'
-                div = 3 if abs(e) == 2 else 2         # 안쪽 바퀴를 뒤로 : ±1 은 바깥의 1/2, ±2 코너는 1/3
-                if e > 0:
-                    cmdR = -(cmdL // div)
-                elif e < 0:
-                    cmdL = -(cmdR // div)
             err = e
             if stage in ('NOLINE', 'LOST') and prev_stage not in ('NOLINE', 'LOST'):
                 lost_events += 1
@@ -370,10 +367,11 @@ if __name__ == '__main__':
     ap.add_argument('--kd', type=float, default=30)
     ap.add_argument('--base', type=int, default=120)
     ap.add_argument('--corner-out', type=int, default=220)
-    ap.add_argument('--corner-in', type=int, default=-220)
+    ap.add_argument('--corner-in', type=int, default=-90)
     ap.add_argument('--sensor-x', type=float, default=12.0, help='차 가운데에서 가운데 라인센서까지 앞쪽 거리 cm (사진 짐작)')
     ap.add_argument('--sensor-gap', type=float, default=4.9, help='라인센서 사이 간격 cm (실측)')
-    ap.add_argument('--lost-ms', type=int, default=500, help='선 놓침 : 마지막 쪽으로 찾는 ms (LOST_STOP_MS)')
+    ap.add_argument('--lost-pid-ms', type=int, default=500, help='선 놓침 : 먼저 PID 로 보정하는 ms (LOST_PID_MS)')
+    ap.add_argument('--lost-ms', type=int, default=500, help='그다음 마지막 쪽으로 크게 꺾으며 찾는 ms (LOST_STOP_MS)')
     ap.add_argument('--back-ms', type=int, default=1000, help='그래도 없으면 반대쪽으로 찾는 ms (BACK_SEARCH_MS, 0 = 바로 정지)')
     ap.add_argument('--mass', type=float, default=0.25, help='차 무게 kg')
     ap.add_argument('--mu', type=float, default=0.5)
