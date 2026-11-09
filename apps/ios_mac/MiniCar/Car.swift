@@ -3,7 +3,7 @@ import CoreBluetooth
 import Foundation
 
 // HM-10(BLE) 연결. 아이폰과 맥에서 같은 코드로 동작한다.
-// 차량 스케치(team2_bt_mode)는 HC-06과 같은 3·4번 핀, 9600으로 그대로 쓴다.
+// 차량 스케치(team2_bt_pid)는 HC-06과 같은 3·4번 핀, 9600으로 그대로 쓴다.
 final class Car: NSObject, ObservableObject {
     // HM-10 기본 UUID. 클론 모듈은 다를 수 있다(LightBlue 같은 앱으로 확인).
     static let service = CBUUID(string: "FFE0")
