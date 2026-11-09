@@ -49,7 +49,7 @@ const unsigned long BACK_SEARCH_MS = 1000; // 그래도 없으면 반대쪽으�
 const unsigned long CROSS_STOP_MS = 500;   // 센서 3개 모두 검정이 이만큼 계속되면 정지 (선 끝)
 
 // --- 장애물 ---
-const int AVOID_MM = 100;              // 이 거리(5cm) 안이면 정지 (자동), 전진 금지 (수동). 버전 A 와 같음
+const int AVOID_MM = 100;             // 이 거리(10cm) 안이면 정지 (자동), 전진 금지 (수동). 5cm 는 멈추기 전에 부딪힐 수 있어 10cm
 const int CLEAR_COUNT = 5;            // 연속 이만큼 안 보여야 다시 출발
 const unsigned long PING_MS = 60;     // 초음파 쏘는 간격
 const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
@@ -58,9 +58,9 @@ const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
 const unsigned long LINK_MS = 450;         // 수동: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
 // --- 수동 조종 힘 (바닥에서 4륜은 바퀴가 미끄러지며 돌아서 힘이 많이 듦. 차에 맞게 조정) ---
 const int MAN_FWD = 100;            // 전진·후진 (새 배터리에서 130 은 빠름. MIN_PWM 90 보다 작으면 출발 못 함)
-const int MAN_CURVE_OUT = 180;      // 곡선 회전 바깥 바퀴 (255 에서 줄임)
+const int MAN_CURVE_OUT = 100;      // 곡선 회전 바깥 바퀴 (255 -> 100, 차에서 맞춤)
 const int MAN_CURVE_IN = 80;       // 곡선 회전 안쪽 바퀴
-const int MAN_SPIN = 170;           // 제자리 회전 (230 에서 줄임)
+const int MAN_SPIN = 130;           // 제자리 회전 (230 -> 130, 차에서 맞춤)
 const int MIN_PWM = 90;             // 0 이 아니면 최소 이만큼 (작으면 바닥에서 모터가 안 돎)
 const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘
 const unsigned long KICK_MS = 120;  // 그 시간 (배터리가 약해도 출발하게 0.08 -> 0.12초)
