@@ -227,9 +227,11 @@ void pidLine() {
   if (abs(e) == 2) stage = "CORNER";
 
   int left = constrain(BASE + (int)u, 0, 255), right = constrain(BASE - (int)u, 0, 255);
-  // ±1 보정·±2 코너 : 안쪽 바퀴를 바깥 힘의 절반으로 뒤로 (미끄러운 트랙에서 속도 차이만으로는 덜 돎). 직진(0)은 둘 다 앞으로
-  if (e > 0)      right = -left / 2;
-  else if (e < 0) left = -right / 2;
+  // 안쪽 바퀴를 살짝 뒤로 (미끄러운 트랙에서 속도 차이만으로는 덜 돎) : ±1 보정은 바깥의 1/2, ±2 코너는 1/3 (앞으로 나가며 돎).
+  // 직진(0)은 둘 다 앞으로. 1/3 이 MIN_PWM(90) 보다 작으면 90 으로 올라감
+  int div = abs(e) == 2 ? 3 : 2;
+  if (e > 0)      right = -left / div;
+  else if (e < 0) left = -right / div;
   // 출발 킥과 최소 힘(MIN_PWM)을 거쳐서 보냄. 안 거치면 배터리가 약할 때 기본 속도만으로는 감속기를 못 돌려 출발을 못 한다
   driveManualLR(left, right);
   act = u > 20 ? 'r' : u < -20 ? 'l' : 'g';

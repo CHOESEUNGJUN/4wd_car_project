@@ -192,10 +192,11 @@ def run(track, ground, p, a):
                 cmdR = max(0, min(255, a.base - int(u)))
                 if abs(e) == 2:
                     stage = 'CORNER'
-                if e > 0:                             # ±1, ±2 : 안쪽 바퀴를 바깥 절반 힘으로 뒤로
-                    cmdR = -(cmdL // 2)
+                div = 3 if abs(e) == 2 else 2         # 안쪽 바퀴를 뒤로 : ±1 은 바깥의 1/2, ±2 코너는 1/3
+                if e > 0:
+                    cmdR = -(cmdL // div)
                 elif e < 0:
-                    cmdL = -(cmdR // 2)
+                    cmdL = -(cmdR // div)
             err = e
             if stage in ('NOLINE', 'LOST') and prev_stage not in ('NOLINE', 'LOST'):
                 lost_events += 1
