@@ -366,7 +366,7 @@ if __name__ == '__main__':
     ap.add_argument('--ki', type=float, default=0.2)
     ap.add_argument('--kd', type=float, default=30)
     ap.add_argument('--base', type=int, default=120)
-    ap.add_argument('--corner-out', type=int, default=220)
+    ap.add_argument('--corner-out', type=int, default=180)
     ap.add_argument('--corner-in', type=int, default=-90)
     ap.add_argument('--sensor-x', type=float, default=12.0, help='차 가운데에서 가운데 라인센서까지 앞쪽 거리 cm (사진 짐작)')
     ap.add_argument('--sensor-gap', type=float, default=4.9, help='라인센서 사이 간격 cm (실측)')
