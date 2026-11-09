@@ -3,7 +3,7 @@
 4륜 RC카(에듀이노 키트, Arduino UNO)가 **PID 제어로 검은 선을 따라 달리는(자동)** 프로젝트. 폰 앱 "굴노"로 조종(수동)하다가 버튼 하나로 자동으로 바꾼다.
 연결이 끊기면 차가 스스로 멈추고, 자동으로 달리는 동안에도 폰 화면에서 차가 지금 무엇을 하는지(직진, 코너, 선 찾기, 장애물 대기 …)를 볼 수 있다.
 
-- 차량 코드 : **`team2_bt_pid/team2_bt_pid.ino` (버전 C) 하나.** 실제 트랙 주행 확인한 버전은 태그 `c-pid-done-20261109`.
+- 차량 코드 : **`team2_bt_pid/team2_bt_pid.ino` (버전 C) 하나.** 완성 버전은 [릴리스 1.0 PID 버전](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (앱 APK 포함).
 - 교안 : `minicar_lecture_deck_all_teams_v5.pdf` 의 2팀 (34~48쪽)
 - 통신 프로토콜 (팀 합의 문서) : [`PROTOCOL.md`](PROTOCOL.md) — 앱이나 스케치의 통신 부분을 고치기 전에 먼저 이 문서를 바꾸고 합의한다.
 
@@ -42,7 +42,7 @@ git clone https://github.com/CHOESEUNGJUN/4wd_car_project.git
 안 바뀌면 센서의 감도 나사를 돌리고, 좌우가 반대면 스케치 위쪽 `L_Line`, `R_Line` 을 바꾼다.
 
 **5) 앱 연결** — [5장 앱](#5-앱)
-- 안드로이드 + HC-06 : Android Studio 로 `apps/android` 를 열어 ▶ (APK 는 저장소에 없음).
+- 안드로이드 + HC-06 : [릴리스 1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) 에서 `gulno.apk` 받아 설치 (또는 Android Studio 로 `apps/android` 를 열어 ▶).
 - 아이폰 + HM-10 : Xcode 로 `apps/ios_mac/MiniCar.xcodeproj` 를 열어 ▶.
 - 설치 없이 : 크롬으로 `apps/web/index.html` 열기 (HM-10 BLE, 맥은 HC-06 시리얼도).
 
@@ -218,7 +218,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 ## 5. 앱
 
 ### 안드로이드 (HC-06)
-- 설치: `dist/gulno.apk` 를 폰으로 옮겨 설치 ("출처를 알 수 없는 앱" 허용). 직접 빌드는 Android Studio 로 `apps/android` 열고 ▶.
+- 설치: [릴리스](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0)의 `gulno.apk` 를 폰으로 받아 설치 ("출처를 알 수 없는 앱" 허용). 직접 빌드는 Android Studio 로 `apps/android` 열고 ▶.
 - 연결: **기기 찾기** → 주변 기기 목록. `HC-` 로 시작하는 기기는 **★** 로 맨 위에, 신호 세기(0 에 가까울수록 가까움)도 표시. 누르면 연결, 처음이면 PIN **1234**.
 - 권한 창이 뜨면 "근처 기기" 허용.
 
