@@ -7,7 +7,10 @@
  *        위치 : -100(화면 왼쪽 끝) ~ 0(가운데) ~ +100(오른쪽 끝)
  *        플래그 : 1 = 가까운 띠에서 선 찾음, 2 = 먼 띠에서 찾음, 4 = 교차선(띠 대부분이 검정)
  *    9600 인 이유 : 아두이노가 블루투스(SoftwareSerial)를 받는 동안 빠른 시리얼 글자를 놓치기 때문
- *  - 와이파이 AP "GULNO-CAM" 에 폰/PC 로 붙어서 http://192.168.4.1 을 열면
+ *  - 와이파이는 프린터처럼 : 처음(또는 저장된 핫스팟을 못 찾으면) 설정용 와이파이 "GULNO-CAM-SETUP-xxxx" 를 켠다.
+ *    폰으로 접속하면 설정 화면이 뜨고, 내 핫스팟 이름·암호를 넣으면 ESP32 안에 저장하고 그 핫스팟에 붙는다.
+ *    핫스팟 암호는 코드에 없고, 설정용 와이파이 암호는 처음 켤 때 무작위로 만들어 시리얼에 찍는다 (docs/CAMERA.md 6장)
+ *  - 핫스팟에 붙은 뒤 같은 핫스팟의 폰/PC 에서 http://gulno-cam.local (안 되면 시리얼의 I,ip 주소) 을 열면
  *    카메라 화면 + 인식 결과를 보고 어두움 기준을 바로 조절할 수 있다 (저장은 안 됨, 맞는 값은 아래 숫자로 고정)
  *  보드 : "AI Thinker ESP32-CAM". SD카드 필요 없음
  */
@@ -15,13 +18,18 @@
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <WebServer.h>
+#include <DNSServer.h>
+#include <Preferences.h>
+#include <ESPmDNS.h>
 #include "img_converters.h"
 
 // ============================================================
 // [설정]
 // ============================================================
-const char* AP_SSID = "GULNO-CAM";
-const char* AP_PASS = "gulno1234";        // 8자 이상
+const char* SETUP_SSID = "GULNO-CAM-SETUP";   // 설정용 와이파이 이름 (뒤에 칩 번호 4자리가 붙음)
+const char* HOSTNAME = "gulno-cam";            // 핫스팟에서 http://gulno-cam.local
+const unsigned long CONNECT_WAIT_MS = 15000;   // 켤 때 저장된 핫스팟을 이만큼 기다리고, 못 붙으면 설정 모드
+// 핫스팟 이름·암호는 여기 적지 않는다 (공개 저장소). 설정 화면에서 넣으면 ESP32 안(Preferences)에 저장된다
 
 const int W = 160, H = 120;               // 흑백 QQVGA
 const int NEAR_Y0 = 85, NEAR_Y1 = 110;    // 가까운 띠 (화면 아래쪽 줄 범위)
@@ -55,6 +63,11 @@ const unsigned long SEND_MS = 50;         // 아두이노로 보내는 간격 (�
 struct Band { bool found; bool cross; int pos; int cx; };
 
 WebServer server(80);
+DNSServer dns;                            // 설정 모드 : 어떤 주소를 쳐도 설정 화면으로 (공항 와이파이처럼)
+Preferences prefs;
+bool setupMode = false;
+String setupName, setupPass, ssidOptions, myIp;
+unsigned long lastInfo = 0;
 uint8_t lastFrame[W * H];                 // 화면 보여 주기용 마지막 프레임
 Band lastNear, lastFar;
 unsigned long frames = 0, lastFpsAt = 0, lastSend = 0;
@@ -137,6 +150,76 @@ void handleSet() {
   server.send(200, "text/plain", "ok");
 }
 
+// ---- 와이파이 설정 (프린터처럼) ----
+String esc(String t) { t.replace("&", "&amp;"); t.replace("<", "&lt;"); t.replace(">", "&gt;"); t.replace("\"", "&quot;"); return t; }
+
+void handleSetupPage() {
+  String h = F("<!doctype html><html lang=\"ko\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+               "<title>굴노 카메라 설정</title><style>body{font-family:system-ui;margin:16px;background:#111;color:#eee}"
+               "input,button{font-size:18px;width:100%;max-width:420px;margin:6px 0;padding:8px}</style></head><body>"
+               "<h3>굴노 카메라 와이파이 설정</h3><p>연결할 핫스팟(2.4GHz)을 넣으세요. 아이폰은 핫스팟의 '호환성 최대화'를 켭니다.</p>"
+               "<form method=\"post\" action=\"/save\"><input name=\"s\" list=\"l\" placeholder=\"핫스팟 이름\" required>"
+               "<datalist id=\"l\">");
+  h += ssidOptions;
+  h += F("</datalist><input name=\"p\" type=\"password\" placeholder=\"핫스팟 암호\"><button>저장하고 연결</button></form>"
+         "<p><a href=\"/cam\" style=\"color:#9cf\">카메라 화면 보기</a></p></body></html>");
+  server.send(200, "text/html", h);
+}
+
+void handleSave() {
+  String s = server.arg("s"), p = server.arg("p");
+  if (s.length() == 0 || s.length() > 32 || p.length() > 63) { server.send(400, "text/plain", "이름 1~32자, 암호 63자 이하"); return; }
+  prefs.putString("ssid", s);
+  prefs.putString("pass", p);
+  server.send(200, "text/html", F("<meta charset=\"utf-8\"><body style=\"font-family:system-ui;background:#111;color:#eee\">"
+                                  "<h3>저장했습니다</h3><p>카메라가 다시 켜지며 핫스팟에 연결합니다. 폰도 그 핫스팟으로 돌아가서 "
+                                  "http://gulno-cam.local 을 여세요.</p></body>"));
+  delay(800);
+  ESP.restart();
+}
+
+// 설정용 와이파이 암호 : 처음 한 번 무작위로 만들어 저장 (프린터 스티커 같은 것. 코드·칩 번호로는 알 수 없음)
+String getSetupPass() {
+  String pw = prefs.getString("setup_pw", "");
+  if (pw.length() == 8) return pw;
+  const char* cs = "abcdefghjkmnpqrstuvwxyz23456789";   // 헷갈리는 글자(l, 1, o, 0, i) 뺌
+  for (int i = 0; i < 8; i++) pw += cs[esp_random() % 31];
+  prefs.putString("setup_pw", pw);
+  return pw;
+}
+
+void startWifi() {
+  prefs.begin("gulno", false);
+  WiFi.mode(WIFI_STA);
+  WiFi.setHostname(HOSTNAME);
+  String ssid = prefs.getString("ssid", "");
+  if (ssid.length()) {                     // 저장된 핫스팟에 붙어 보기
+    WiFi.begin(ssid.c_str(), prefs.getString("pass", "").c_str());
+    unsigned long t0 = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < CONNECT_WAIT_MS) delay(200);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    WiFi.setAutoReconnect(true);           // 잠깐 끊겨도 알아서 다시 붙음
+    myIp = WiFi.localIP().toString();
+    MDNS.begin(HOSTNAME);
+    MDNS.addService("http", "tcp", 80);
+    return;
+  }
+  // 설정 모드 : 주변 핫스팟 목록을 받아 두고 설정용 와이파이를 켬
+  setupMode = true;
+  WiFi.disconnect();
+  int n = WiFi.scanNetworks();
+  for (int i = 0; i < n; i++) ssidOptions += "<option value=\"" + esc(WiFi.SSID(i)) + "\">";
+  char suffix[8];
+  snprintf(suffix, sizeof suffix, "-%04X", (unsigned)(ESP.getEfuseMac() >> 32) & 0xFFFF);
+  setupName = String(SETUP_SSID) + suffix;
+  setupPass = getSetupPass();
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(setupName.c_str(), setupPass.c_str());
+  myIp = WiFi.softAPIP().toString();
+  dns.start(53, "*", WiFi.softAPIP());
+}
+
 bool startCamera() {
   camera_config_t c = {};
   c.ledc_channel = LEDC_CHANNEL_0; c.ledc_timer = LEDC_TIMER_0;
@@ -164,8 +247,14 @@ void setup() {
   if (!startCamera()) {
     while (true) { Serial.println("E,camera"); delay(1000); }   // 카메라 리본 케이블 확인
   }
-  WiFi.softAP(AP_SSID, AP_PASS);
-  server.on("/", [] { server.send_P(200, "text/html", PAGE); });
+  startWifi();
+  server.on("/", [] { if (setupMode) handleSetupPage(); else server.send_P(200, "text/html", PAGE); });
+  server.on("/cam", [] { server.send_P(200, "text/html", PAGE); });
+  server.on("/save", HTTP_POST, [] { if (setupMode) handleSave(); else server.send(403); });
+  server.onNotFound([] {                   // 설정 모드 : 폰이 여는 아무 주소나 설정 화면으로
+    if (setupMode) { server.sendHeader("Location", "http://" + myIp + "/"); server.send(302); }
+    else server.send(404);
+  });
   server.on("/frame", handleFrame);
   server.on("/status", handleStatus);
   server.on("/set", handleSet);
@@ -189,5 +278,11 @@ void loop() {
     Serial.printf("C,%d,%d,%d\n", lastNear.pos, lastFar.pos, flags);
   }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
+  if (lastInfo == 0 || millis() - lastInfo >= 10000) {     // 안내 줄 (I 로 시작 : 아두이노는 C 줄만 읽어서 상관없음)
+    lastInfo = millis();
+    if (setupMode) Serial.printf("I,setup,%s,%s\n", setupName.c_str(), setupPass.c_str());
+    else Serial.printf("I,ip,%s,%s.local\n", myIp.c_str(), HOSTNAME);
+  }
+  if (setupMode) dns.processNextRequest();
   server.handleClient();
 }
