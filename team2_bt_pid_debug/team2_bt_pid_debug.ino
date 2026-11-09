@@ -49,8 +49,8 @@ const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 
 const float D_DECAY = 0.8;
 
 // --- 선 놓침 / 교차선 ---
-const unsigned long LOST_STOP_MS = 1500;   // 선을 놓치면 이만큼 마지막으로 본 쪽으로 크게 꺾으며 찾음
-const unsigned long BACK_SEARCH_MS = 3000; // 그래도 없으면 반대쪽으로 이만큼 더 찾고 정지.
+const unsigned long LOST_STOP_MS = 500;    // 선을 놓치면 이만큼 마지막으로 본 쪽으로 제자리 회전하며 찾음 (길면 너무 많이 돎)
+const unsigned long BACK_SEARCH_MS = 1000; // 그래도 없으면 반대쪽으로 이만큼 (되돌아오는 0.5초 + 반대쪽 0.5초) 찾고 정지.
                                            // 센서 간격(4.9cm)이 테이프(1.9cm)보다 넓어 코너 뒤 넘치면 선이 반대쪽 틈에 있음
 const unsigned long CROSS_STOP_MS = 500;   // 센서 3개 모두 검정이 이만큼 계속되면 정지 (선 끝)
 

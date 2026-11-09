@@ -164,9 +164,9 @@ def run(track, ground, p, a):
                 cross_since = None
                 lost_since = t if lost_since is None else lost_since
                 lost = t - lost_since
-                limit = 1.5 + (a.back_ms / 1000 if last_side else 0)   # 마지막 쪽 1.5초, 그다음 반대쪽
+                limit = (a.lost_ms + (a.back_ms if last_side else 0)) / 1000   # 마지막 쪽 먼저, 그다음 반대쪽
                 stage, stop = ('LOST', True) if lost >= limit else ('NOLINE', False)
-                e = (last_side if lost < 1.5 else -last_side) * 3
+                e = (last_side if lost < a.lost_ms / 1000 else -last_side) * 3
             else:
                 cross_since = lost_since = None
                 stage = 'LINE'
@@ -372,7 +372,8 @@ if __name__ == '__main__':
     ap.add_argument('--corner-in', type=int, default=-220)
     ap.add_argument('--sensor-x', type=float, default=12.0, help='차 가운데에서 가운데 라인센서까지 앞쪽 거리 cm (사진 짐작)')
     ap.add_argument('--sensor-gap', type=float, default=4.9, help='라인센서 사이 간격 cm (실측)')
-    ap.add_argument('--back-ms', type=int, default=3000, help='마지막 쪽으로 1.5초 찾아도 없으면 반대쪽으로 이만큼 ms 더 찾기 (0 = 예전, 바로 정지)')
+    ap.add_argument('--lost-ms', type=int, default=500, help='선 놓침 : 마지막 쪽으로 찾는 ms (LOST_STOP_MS)')
+    ap.add_argument('--back-ms', type=int, default=1000, help='그래도 없으면 반대쪽으로 찾는 ms (BACK_SEARCH_MS, 0 = 바로 정지)')
     ap.add_argument('--mass', type=float, default=0.25, help='차 무게 kg')
     ap.add_argument('--mu', type=float, default=0.5)
     ap.add_argument('--battery', type=float, default=7.0)
