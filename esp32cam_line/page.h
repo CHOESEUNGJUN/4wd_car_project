@@ -42,22 +42,22 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
 <section class="card"><h2>카메라 설정</h2>
-<label>어두움 기준 <b id="v"></b></label><input id="o" type="range" min="5" max="120">
-<label>앞 LED 밝기 <b id="lv"></b></label><input id="led" type="range" min="0" max="255">
 <div class="row"><label><input type="checkbox" id="mir"> 좌우 반전</label><label><input type="checkbox" id="flip"> 위아래 뒤집기</label></div>
 <div class="hint">초록 = 인식한 라인 · 노란 점 = 라인 가운데 경로 · 빨간 선·점 = 차가 향할 곳 · 흰 점선 = 차 가운데<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
 </div></main>
 <script>
 const $=i=>document.getElementById(i);
 const badge=(id,t,c)=>{$(id).textContent=t;$(id).className='badge '+(c||'');};
-let fails=0;
-async function tick(){
-  try{const s=await (await fetch('/status')).json(); fails=0; badge('bCam','카메라 연결','ok'); badge('bFps',s.fps+' fps');
-    $('v').textContent=s.off; if(document.activeElement!==$('o'))$('o').value=s.off;
-    $('lv').textContent=s.led; if(document.activeElement!==$('led'))$('led').value=s.led;
-    $('mir').checked=!!s.mir; $('flip').checked=!!s.flip;
-    showDir(s); showCar(s);}catch(e){ if(++fails>3)badge('bCam','카메라 끊김','bad'); }
+// 웹소켓 하나로 주고받기 : 상태는 ESP32 가 0.2초마다 밀어 주고, 조종 글자는 바로 보냄. 끊기면 1초 뒤 다시
+let ws=null;
+function connect(){
+  ws=new WebSocket('ws://'+location.host+'/ws');
+  ws.onopen=()=>{badge('bCam','카메라 연결','ok'); ws.send('h');};   // 첫 글자를 보내야 ESP32 가 이 화면을 등록함
+  ws.onmessage=e=>{const s=JSON.parse(e.data); badge('bFps',s.fps+' fps');
+    $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; showDir(s); showCar(s);};
+  ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
 }
+connect();
 // 카메라가 본 선 -> 직진 / 우회전 / 좌회전 (가까운 띠 70% + 먼 띠 30%)
 function showDir(s){
   let t,a;
@@ -75,6 +75,7 @@ function showCar(s){
   if(s.btfail){badge('bCar','블루투스 불가','bad');$('bts').textContent='메모리 부족 : 이 카메라 보드는 와이파이·카메라와 블루투스를 같이 켤 수 없습니다';$('btl').innerHTML='';return;}
   const st=s.scan?'찾는 중…':s.bt?'연결됨':s.btw?'연결 중…':s.btn?'끊김':'기기를 찾아 고르세요';
   badge('bCar','차 '+(s.bt?'연결':s.btw?'연결 중':'끊김'),s.bt?'ok':s.btw?'warn':'');
+  $('cs').textContent=s.bt?'':'차 블루투스가 연결되지 않아 조종 버튼이 동작하지 않습니다';
   $('bts').textContent=(s.btn?s.btn+' · ':'')+st+(s.btw&&!s.bt?' (폰 앱이 그 기기에 붙어 있으면 앱에서 끊기)':'');
   if(wasScan&&!s.scan)loadList(); wasScan=s.scan;
   const f=(s.car||'').split(',');
@@ -97,14 +98,11 @@ const stream=()=>{$('f').src='/stream?'+Date.now();};
 $('f').onload=()=>{$('ph').style.display='none';};
 $('f').onerror=()=>{$('ph').style.display='grid';setTimeout(stream,2000);};
 stream();
-$('o').onchange=()=>fetch('/set?off='+$('o').value);
-$('led').onchange=()=>fetch('/set?led='+$('led').value);
 $('mir').onchange=()=>fetch('/set?mir='+($('mir').checked?1:0));
 $('flip').onchange=()=>fetch('/set?flip='+($('flip').checked?1:0));
-setInterval(tick,400);
-// 앱과 같은 규칙 : 누르는 동안 0.2초마다 같은 글자, 떼면 s 두 번, 0.6초마다 h (연결 신호)
-const send=c=>fetch('/cmd?c='+c).then(r=>{$('cs').textContent=r.status==503?'차 블루투스가 연결되지 않았습니다':'';}).catch(()=>{});
-let held=null,rep=null,hb=null;
+// 앱과 같은 규칙 : 누르는 동안 0.2초마다 같은 글자, 떼면 s 두 번. 연결 신호 h 는 ESP32 가 대신 보냄
+const send=c=>{if(ws&&ws.readyState===1)ws.send(c);};
+let held=null,rep=null;
 function press(b){release(false);held=b;b.classList.add('on');send(b.dataset.c);rep=setInterval(()=>send(b.dataset.c),200);}
 function release(stop=true){if(rep){clearInterval(rep);rep=null;} if(held){held.classList.remove('on'); if(stop){send('s');setTimeout(()=>send('s'),60);}} held=null;}
 document.querySelectorAll('.pad button').forEach(b=>{
@@ -116,6 +114,5 @@ addEventListener('keydown',e=>{const c=KEY[e.key];if(!c||e.repeat||e.target.tagN
 addEventListener('keyup',e=>{if(KEY[e.key])release();});
 $('auto').onclick=()=>{if(confirm('자동 모드로 전환하시겠습니까?'))send('a');};
 $('man').onclick=()=>send('m');
-setInterval(()=>send('h'),600);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
 </script></body></html>)HTML";

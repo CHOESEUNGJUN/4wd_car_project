@@ -36,14 +36,13 @@ const unsigned long CONNECT_WAIT_MS = 15000;   // 켤 때 저장된 핫스팟을
 const int W = 160, H = 120;               // 흑백 QQVGA
 const int MAX_JUMP = 18;                  // 한 줄 위로 갈 때 라인 가운데가 이보다 많이 튀면 다른 물체로 봄 (칸)
 const int LOOK_Y = 42;                    // 향할 곳(목표점)을 잡는 줄. 작을수록 멀리 봄 (0 = 화면 맨 위)
-int flashDuty = 30;                      // 앞 플래시 LED 밝기 (0~255). 화면에서 바꿈. 최대로 오래 켜면 뜨겁고 전원이 약하면 재부팅
+const int FLASH_DUTY = 30;                // 앞 플래시 LED 밝기 (0~255). 최대로 오래 켜면 뜨겁고 전원이 약하면 재부팅
 const int JPEG_Q = 40;                    // 화면 영상 압축 (낮을수록 많이 압축 = 작고 흐림). 지연보다 메모리·처리 부담을 줄이는 쪽
 const int STREAM_MS = 100;                // 영상 한 장 간격 (초당 최대 10장)
-int darkOffset = 40;                      // 띠 평균 밝기보다 이만큼 어두우면 "선". 화면에서 바꿀 수 있음
+const int DARK_OFFSET = 40;               // 그 줄 평균 밝기보다 이만큼 어두우면 "라인". 바닥·조명에 맞게 여기서 바꿈
 const int MIN_DARK_COLS = 3;              // 선으로 칠 최소 폭 (칸). 이보다 좁으면 잡음
 const float CROSS_RATIO = 0.6;            // 한 줄의 이 비율 넘게 검정이면 교차선
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
-const unsigned long SEND_MS = 50;         // 아두이노로 보내는 간격 (초당 20번)
 
 // AI-Thinker ESP32-CAM 핀
 #define PWDN_GPIO_NUM 32
@@ -116,7 +115,7 @@ uint8_t* gray;                            // 선 찾기용 흑백 (W x H)
 uint8_t* color;                           // 화면용 컬러 RGB565 (W x H x 2)
 uint8_t* view;                            // 띠·선을 그린 화면 복사본 (RGB565)
 Band lastNear, lastFar;
-unsigned long frames = 0, lastFpsAt = 0, lastSend = 0;
+unsigned long frames = 0, lastFpsAt = 0, lastViewer = 0, lastHb = 0;
 float fps = 0;
 
 // 라인 따라가기 : 화면 맨 아래(차 바로 앞)부터 한 줄씩 위로, 바로 아래 줄의 라인과 이어지는 검은 덩어리만 고른다
@@ -142,7 +141,7 @@ void trackLine(const uint8_t* img) {
     const uint8_t* r = img + y * W;
     long sum = 0;
     for (int x = 0; x < W; x++) sum += r[x];
-    int th = sum / W - darkOffset;        // 그 줄 평균보다 darkOffset 어두우면 검정 (조명 따라감)
+    int th = sum / W - DARK_OFFSET;        // 그 줄 평균보다 DARK_OFFSET 어두우면 검정 (조명 따라감)
     int best = -1, bl = 0, br = 0, bestD = 9999, darkAll = 0;
     for (int x = 0; x < W;) {
       if (r[x] >= th) { x++; continue; }
@@ -283,14 +282,18 @@ void startServer() {
   cfg.stack_size = 6144;
   cfg.lru_purge_enable = true;             // 끊긴 옛 연결은 버리고 새 요청 받기
   cfg.send_wait_timeout = 2;
+  cfg.close_fn = onClose;
   if (httpd_start(&web, &cfg) != ESP_OK) return;
   struct { const char* u; httpd_method_t m; void (*f)(); } routes[] = {
     {"/", HTTP_GET, pageMain}, {"/cam", HTTP_GET, pageCam}, {"/save", HTTP_POST, pageSave},
-    {"/status", HTTP_GET, handleStatus}, {"/set", HTTP_GET, handleSet}, {"/cmd", HTTP_GET, handleCmd},
+    {"/set", HTTP_GET, handleSet},
     {"/bt", HTTP_GET, handleBt}, {"/btlist", HTTP_GET, pageList}};
   for (auto& x : routes) { httpd_uri_t u = {x.u, x.m, route, (void*)x.f}; httpd_register_uri_handler(web, &u); }
   httpd_uri_t st = {"/stream", HTTP_GET, streamHandler, nullptr};
   httpd_register_uri_handler(web, &st);
+  httpd_uri_t ws = {};
+  ws.uri = "/ws"; ws.method = HTTP_GET; ws.handler = wsHandler; ws.is_websocket = true;
+  httpd_register_uri_handler(web, &ws);
   httpd_register_err_handler(web, HTTPD_404_NOT_FOUND, notFound);
 }
 
@@ -319,7 +322,8 @@ void btTask(void*) {
       btList = j + "]";
       btScanning = false;
     }
-    if (btWant && btAddr.length() && !BT.connected()) BT.connect(BTAddress(btAddr));   // 몇 초 걸림
+    static unsigned long lastTry = 0;      // 연결 재시도는 5초마다 (자주 하면 와이파이와 안테나를 다퉈서 화면이 끊김)
+    if (btWant && btAddr.length() && !BT.connected() && millis() - lastTry > 5000) { lastTry = millis(); BT.connect(BTAddress(btAddr)); }
     if (!btWant && BT.connected()) { BT.disconnect(); carLine = ""; }
     vTaskDelay(pdMS_TO_TICKS(300));
   }
@@ -348,27 +352,65 @@ void handleBt() {
   send(204);
 }
 
-void handleStatus() {
-  char buf[300];
-  snprintf(buf, sizeof buf, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"off\":%d,\"led\":%d,\"mir\":%d,\"flip\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
-           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, darkOffset, flashDuty, camMirror ? 1 : 0, camFlip ? 1 : 0, fps,
+// 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
+void buildStatus(char* buf, size_t n) {
+  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, esc(btName.length() ? btName : btAddr).c_str(),
            esc(carLine).c_str());
-  send(200, "application/json", buf);
 }
 
-// 웹 조종 글자를 선(U0T)으로 아두이노에 "K,g" 처럼 전달. 버전 D 가 블루투스 글자와 똑같이 처리
-void handleCmd() {
-  String c = arg("c");
-  if (setupMode || c.length() != 1 || !strchr("gblrsqwamh", c[0])) { send(403); return; }
-  if (!btOn()) { send(503, "text/plain", "car bluetooth not connected"); return; }
-  BT.write(c[0]);                          // 앱과 똑같이 글자 하나 (아두이노는 버전 C 그대로)
-  send(204);
+// ---- 웹소켓 /ws : 연결 하나를 열어 두고 조종 글자는 받고(화면 -> 차), 상태는 밀어 줌(차·카메라 -> 화면) ----
+const int MAX_WS = 2;
+int wsFd[MAX_WS] = {-1, -1};
+
+unsigned long wsAt[MAX_WS];
+
+void wsAdd(int fd) {                      // 화면 하나 등록 (이미 있으면 그대로, 없으면 빈 자리 / 웹소켓이 아닌 자리 / 가장 오래된 자리)
+  for (int i = 0; i < MAX_WS; i++) if (wsFd[i] == fd) return;
+  int k = 0;
+  for (int i = 0; i < MAX_WS; i++) {
+    if (wsFd[i] < 0 || httpd_ws_get_fd_info(web, wsFd[i]) != HTTPD_WS_CLIENT_WEBSOCKET) { k = i; break; }
+    if (wsAt[i] < wsAt[k]) k = i;
+  }
+  wsFd[k] = fd; wsAt[k] = millis();
+}
+
+void onClose(httpd_handle_t, int fd) {    // 연결이 닫히면 그 자리를 비움 (번호가 다른 요청에 다시 쓰여도 헷갈리지 않게)
+  for (int i = 0; i < MAX_WS; i++) if (wsFd[i] == fd) wsFd[i] = -1;
+  close(fd);
+}
+
+esp_err_t wsHandler(httpd_req_t* r) {
+  wsAdd(httpd_req_to_sockfd(r));
+  lastViewer = millis();
+  if (r->method == HTTP_GET) return ESP_OK; // 처음 연결 (이 버전은 여기 안 옴 : 화면이 첫 글자 h 를 보내면 위에서 등록)
+  uint8_t b[8];
+  httpd_ws_frame_t f = {};
+  f.payload = b;
+  if (httpd_ws_recv_frame(r, &f, sizeof b) != ESP_OK) return ESP_FAIL;
+  // 조종 글자 하나 : 앱과 똑같이 그대로 차에 (아두이노는 버전 C 그대로)
+  if (f.type == HTTPD_WS_TYPE_TEXT && f.len == 1 && !setupMode && strchr("gblrsqwam", b[0]) && btOn()) BT.write(b[0]);
+  return ESP_OK;
+}
+
+void pushStatus() {
+  static char buf[320];
+  bool any = false;
+  for (int i = 0; i < MAX_WS; i++) {
+    if (wsFd[i] < 0) continue;
+    httpd_ws_client_info_t info = httpd_ws_get_fd_info(web, wsFd[i]);
+    if (info == HTTPD_WS_CLIENT_INVALID) { wsFd[i] = -1; continue; }   // 닫힘
+    if (info != HTTPD_WS_CLIENT_WEBSOCKET) { if (millis() - wsAt[i] > 2000) wsFd[i] = -1; continue; }   // 연결 중이거나 다른 요청
+    if (!any) { buildStatus(buf, sizeof buf); any = true; }
+    httpd_ws_frame_t f = {};
+    f.type = HTTPD_WS_TYPE_TEXT; f.payload = (uint8_t*)buf; f.len = strlen(buf);
+    httpd_ws_send_frame_async(web, wsFd[i], &f);
+  }
+  if (any) lastViewer = millis();          // 화면이 열려 있음 -> 차에 연결 신호 h 계속
 }
 
 void handleSet() {
-  if (hasArg("off")) darkOffset = constrain(arg("off").toInt(), 5, 120);
-  if (hasArg("led")) flashDuty = constrain(arg("led").toInt(), 0, 255);
   sensor_t* cam = esp_camera_sensor_get();
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
@@ -510,11 +552,11 @@ void loop() {
     }
     esp_camera_fb_return(fb);
   }
-  if (millis() - lastSend >= SEND_MS) {    // 아두이노로 (9600 이라 초당 20번만)
-    lastSend = millis();
-    int flags = (lastNear.found ? 1 : 0) | (lastFar.found ? 2 : 0) | (lastNear.cross ? 4 : 0);
-    Serial.printf("C,%d,%d,%d\n", lastNear.pos, lastFar.pos, flags);
-  }
+  static unsigned long lastPush = 0;
+  if (millis() - lastPush >= 200) { lastPush = millis(); pushStatus(); }
+  // 화면이 열려 있는 동안(웹소켓 연결) 차에 연결 신호 h 를 0.6초마다 대신 보냄.
+  // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
+  if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); BT.write('h'); }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
   if (lastInfo == 0 || millis() - lastInfo >= 10000) {     // 안내 줄 (I 로 시작 : 아두이노는 C 줄만 읽어서 상관없음)
     lastInfo = millis();
@@ -535,7 +577,7 @@ void loop() {
   digitalWrite(STATUS_LED, on ? LOW : HIGH);
   // 앞 플래시 LED : 연결 중(설정 모드, 핫스팟 연결 중, 블루투스 연결 중) = 깜빡, 다 연결되면 = 계속 켜짐 (바닥 비춤)
   bool connecting = setupMode || WiFi.status() != WL_CONNECTED || (btWant && !btOn());
-  ledcWrite(FLASH_LED, connecting && (millis() / 400) % 2 ? 0 : flashDuty);
+  ledcWrite(FLASH_LED, connecting && (millis() / 400) % 2 ? 0 : FLASH_DUTY);
   if (setupMode) {
     dns.processNextRequest();
     if (savedSsid.length() && WiFi.status() == WL_CONNECTED) {   // 핫스팟이 나타나서 붙음 -> 설정 모드 끝
