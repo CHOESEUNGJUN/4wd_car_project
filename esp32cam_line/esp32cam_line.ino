@@ -37,8 +37,9 @@ const int W = 160, H = 120;               // 흑백 QQVGA
 const int MAX_JUMP = 18;                  // 한 줄 위로 갈 때 라인 가운데가 이보다 많이 튀면 다른 물체로 봄 (칸)
 const int LOOK_Y = 42;                    // 향할 곳(목표점)을 잡는 줄. 작을수록 멀리 봄 (0 = 화면 맨 위)
 const int FLASH_DUTY = 30;                // 앞 플래시 LED 밝기 (0~255). 최대로 오래 켜면 뜨겁고 전원이 약하면 재부팅
-const int JPEG_Q = 40;                    // 화면 영상 압축 (낮을수록 많이 압축 = 작고 흐림). 지연보다 메모리·처리 부담을 줄이는 쪽
-const int STREAM_MS = 100;                // 영상 한 장 간격 (초당 최대 10장)
+const int JPEG_Q = 40, JPEG_Q_BT = 25;     // 화면 영상 압축 (낮을수록 많이 압축 = 작고 흐림). _BT = 차와 블루투스로 연결됐을 때
+const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초당 10장 / 블루투스 연결 중 5장)
+// 안테나 하나를 와이파이·블루투스가 나눠 써서, 영상이 무거우면 조종 글자(블루투스)가 늦어진다 -> 차와 연결되면 영상을 가볍게
 const int DARK_OFFSET = 40;               // 그 줄 평균 밝기보다 이만큼 어두우면 "라인". 바닥·조명에 맞게 여기서 바꿈
 const int MIN_DARK_COLS = 3;              // 선으로 칠 최소 폭 (칸). 이보다 좁으면 잡음
 const float CROSS_RATIO = 0.6;            // 한 줄의 이 비율 넘게 검정이면 교차선
@@ -201,7 +202,7 @@ bool makeJpeg(uint8_t** jpg, size_t* len) {
     }
     for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) dot(tgtX + i, tgtY + j, RED);
   }
-  return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, JPEG_Q, jpg, len);
+  return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, btOn() ? JPEG_Q_BT : JPEG_Q, jpg, len);
 }
 
 // 연속 영상 (MJPEG). 따로 도는 서버(포트 81)라 라인 인식·조종을 막지 않는다
@@ -225,7 +226,7 @@ void streamLoop(httpd_req_t* req) {
     if (r == ESP_OK) r = httpd_resp_send_chunk(req, (const char*)jpg, len);
     free(jpg);
     if (r != ESP_OK) return;               // 브라우저가 닫음
-    vTaskDelay(pdMS_TO_TICKS(STREAM_MS));
+    vTaskDelay(pdMS_TO_TICKS(btOn() ? STREAM_MS_BT : STREAM_MS));
   }
 }
 
