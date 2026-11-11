@@ -14,6 +14,7 @@
 | 카메라 코드 | [`esp32cam_line/`](esp32cam_line) (`esp32cam_line.ino`, 웹 화면 `page.h`, 빌드 설정 `platformio.ini`) |
 | 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 구조, 배선(5V 외부 전원), PlatformIO 업로드, 와이파이(프린터처럼) 설정, 웹 화면 |
 | 작업 보고 | [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) : 잘된 점, 안된 점, 앞으로 할 것 |
+| 다음에 할 일 | `main` 의 [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) (체크리스트) |
 | 업로드 | **PlatformIO 로만** : `cd esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨) |
 | 지금 상태 (2026-11-11) | 블루투스 + 와이파이 + 카메라 동시 동작, 라인 인식 표시, 웹 조종 확인. 카메라로 직접 주행은 아직 |
 
