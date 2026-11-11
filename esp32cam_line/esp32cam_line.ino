@@ -221,6 +221,7 @@ String getSetupPass() {
 void startWifi() {
   prefs.begin("gulno", false);
   WiFi.mode(WIFI_STA);
+  WiFi.enableIPv6();                       // 아이폰 핫스팟은 맥에 IPv6 만 주기도 해서, IPv6 로도 접속되게
   WiFi.setHostname(HOSTNAME);
   String ssid = prefs.getString("ssid", "");
   savedSsid = ssid;
