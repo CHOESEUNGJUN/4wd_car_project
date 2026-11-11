@@ -6,6 +6,7 @@
 - 차량 코드 : **`team2_bt_pid/team2_bt_pid.ino` (버전 C) 하나.** 완성 버전은 [릴리스 1.0 PID 버전](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (앱 APK 포함).
 - 교안 : `minicar_lecture_deck_all_teams_v5.pdf` 의 2팀 (34~48쪽)
 - 통신 프로토콜 (팀 합의 문서) : [`PROTOCOL.md`](PROTOCOL.md) — 앱이나 스케치의 통신 부분을 고치기 전에 먼저 이 문서를 바꾸고 합의한다.
+- 추가 프로젝트 **ESP32-CAM 카메라** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (8장).
 
 ---
 
@@ -166,8 +167,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
 | `team2_bt_pid/` | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
-| `team2_bt_cam/` | **버전 D** 차량 스케치 (준비만, 시험 전) | 버전 C + ESP32-CAM 카메라로 선 인식. 설명은 `docs/CAMERA.md` |
-| `esp32cam_line/` | ESP32-CAM 펌웨어 (준비만) | 카메라로 선 위치를 찾아 아두이노 D0 으로 보냄, 와이파이로 화면 |
+| 카메라 (추가 프로젝트) | ESP32-CAM 라인 인식 + 와이파이 화면 + 블루투스 조종 | **브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam)** 에만 있음 (아래 8장) |
 | `diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10** |
 | `apps/android/` | 안드로이드 앱 | 안드로이드 + **HC-06** |
@@ -337,3 +337,22 @@ ag,23,010,LINE
 | 초음파 센서(서보)가 덜덜 떤다 | 블루투스(SoftwareSerial)가 글자를 주고받을 때마다 서보 펄스가 흐트러짐 → 정면을 본 뒤 서보 신호를 끄도록 고침. 그래도 떨면 배터리 확인 |
 | 라인센서 값이 세 개 다 비슷하게 낮음 | 센서가 바닥에 너무 붙었거나 가려짐 → 높이·가변저항 감도 조정 |
 | 안드로이드 앱에서 기기가 안 보임 | 권한 거부 / 블루투스 꺼짐 → 앱 설정에서 "근처 기기" 허용 |
+
+---
+
+## 8. 추가 프로젝트 : ESP32-CAM 카메라 (브랜치 `extra/esp32cam`)
+
+제출용 차량 코드(버전 C)와 별개로, **ESP32-CAM 으로 바닥 라인을 보고 와이파이 화면으로 보여 주며 블루투스로 차를 조종**하는 프로젝트. `main` 에는 없고 브랜치에서만 이어 간다.
+
+```
+ 5V 외부 전원 ──▶ ESP32-CAM ── 와이파이 (내 핫스팟) ──▶ 폰·노트북 브라우저 http://gulno-cam.local
+                      │         영상 + 인식한 라인(초록) · 경로 · 향할 곳, 차 상태, 조종 버튼, 블루투스 연결
+                      └──── 블루투스 ──▶ HC-06 ──▶ 아두이노 (버전 C 그대로)
+```
+
+| | |
+|---|---|
+| 받기 | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (이미 받았으면 `git switch extra/esp32cam`) |
+| 설명 | 브랜치의 `docs/CAMERA.md` (배선, 업로드, 와이파이 설정, 웹 화면), 작업 보고 `docs/REPORT_20261111.md` |
+| 업로드 | **PlatformIO 로만** (`cd esp32cam_line && ~/.pio-venv/bin/pio run -t upload`). Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨 |
+| 상태 (2026-11-11) | 블루투스 + 와이파이 + 카메라 동시 동작, 라인 인식 표시, 웹 조종 확인. 카메라로 직접 주행은 아직 |
