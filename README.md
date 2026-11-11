@@ -7,6 +7,7 @@
 - 교안 : `minicar_lecture_deck_all_teams_v5.pdf` 의 2팀 (34~48쪽)
 - 통신 프로토콜 (팀 합의 문서) : [`PROTOCOL.md`](PROTOCOL.md) — 앱이나 스케치의 통신 부분을 고치기 전에 먼저 이 문서를 바꾸고 합의한다.
 - 추가 프로젝트 **ESP32-CAM 카메라** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (8장).
+- **다음에 할 일 : [`docs/NEXT.md`](docs/NEXT.md)** (카메라로 주행, 교안 심화 B 영상 지연 측정, 배터리·장애물 확인 등)
 
 ---
 
