@@ -34,15 +34,15 @@ const unsigned long CONNECT_WAIT_MS = 15000;   // 켤 때 저장된 핫스팟을
 // 핫스팟 이름·암호는 여기 적지 않는다 (공개 저장소). 설정 화면에서 넣으면 ESP32 안(Preferences)에 저장된다
 
 const int W = 160, H = 120;               // 흑백 QQVGA
-const int NEAR_Y0 = 85, NEAR_Y1 = 110;    // 가까운 띠 (화면 아래쪽 줄 범위)
-const int FAR_Y0 = 35, FAR_Y1 = 55;       // 먼 띠 (화면 위쪽 줄 범위)
+const int MAX_JUMP = 18;                  // 한 줄 위로 갈 때 라인 가운데가 이보다 많이 튀면 다른 물체로 봄 (칸)
+const int LOOK_Y = 42;                    // 향할 곳(목표점)을 잡는 줄. 작을수록 멀리 봄 (0 = 화면 맨 위)
 int flashDuty = 30;                      // 앞 플래시 LED 밝기 (0~255). 화면에서 바꿈. 최대로 오래 켜면 뜨겁고 전원이 약하면 재부팅
 const int JPEG_Q = 40;                    // 화면 영상 압축 (낮을수록 많이 압축 = 작고 흐림). 지연보다 메모리·처리 부담을 줄이는 쪽
 const int STREAM_MS = 100;                // 영상 한 장 간격 (초당 최대 10장)
 int darkOffset = 40;                      // 띠 평균 밝기보다 이만큼 어두우면 "선". 화면에서 바꿀 수 있음
 const int MIN_DARK_COLS = 3;              // 선으로 칠 최소 폭 (칸). 이보다 좁으면 잡음
-const float CROSS_RATIO = 0.6;            // 띠 폭의 이 비율 넘게 검정이면 교차선
-const bool FLIP_V = false, MIRROR_H = false;   // 카메라를 거꾸로 달았으면 true
+const float CROSS_RATIO = 0.6;            // 한 줄의 이 비율 넘게 검정이면 교차선
+bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
 const unsigned long SEND_MS = 50;         // 아두이노로 보내는 간격 (초당 20번)
 
 // AI-Thinker ESP32-CAM 핀
@@ -102,7 +102,7 @@ bool btOn() { return btReady && BT.connected(); }
 String carLine;
 volatile bool btWant = false;             // 연결 유지 (끄면 폰 앱이 HC-06 을 쓸 수 있음)
 volatile bool btScanReq = false, btScanning = false, btFail = false;
-const uint32_t BT_NEED = 120000;          // 블루투스를 켜는 데 필요한 남은 내부 메모리 (대략)
+const uint32_t BT_NEED = 40000;           // 블루투스를 켤 때 남아 있어야 할 내부 메모리 (PlatformIO 빌드는 블루투스가 외부 메모리를 먼저 써서 적게 필요)
 String btAddr, btName;                    // 연결할 기기 (목록에서 고르면 ESP32 에 저장)
 String btList = "[]";                     // 찾은 기기 목록 JSON [{"n":이름,"a":주소,"r":신호}]
 DNSServer dns;                            // 설정 모드 : 어떤 주소를 쳐도 설정 화면으로 (공항 와이파이처럼)
@@ -119,162 +119,89 @@ Band lastNear, lastFar;
 unsigned long frames = 0, lastFpsAt = 0, lastSend = 0;
 float fps = 0;
 
-// 띠(y0~y1 줄) 안에서 검은 선의 가운데를 찾는다
-Band findLine(const uint8_t* img, int y0, int y1) {
-  Band b = {false, false, 0, -1};
-  long sum = 0;
-  for (int y = y0; y < y1; y++)
-    for (int x = 0; x < W; x++) sum += img[y * W + x];
-  int th = sum / ((long)(y1 - y0) * W) - darkOffset;   // 조명이 바뀌어도 따라가는 임계값
+// 라인 따라가기 : 화면 맨 아래(차 바로 앞)부터 한 줄씩 위로, 바로 아래 줄의 라인과 이어지는 검은 덩어리만 고른다
+//   (바닥 얼룩·그림자처럼 떨어져 있는 검정은 무시). 줄마다 라인의 왼쪽 끝·오른쪽 끝·가운데를 저장해서 화면에 칠한다
+int16_t trL[H], trR[H], trC[H];           // 줄마다 인식한 라인 (-1 = 없음)
+int trTop = H;                            // 라인이 이어진 가장 위 줄
+int tgtX = -1, tgtY = -1;                 // 향할 곳
 
-  // 열마다 어두운 칸이 띠 높이의 절반 넘으면 그 열은 "검정"
-  int need = (y1 - y0) / 2, darkCols = 0;
-  long wsum = 0;
-  for (int x = 0; x < W; x++) {
-    int dark = 0;
-    for (int y = y0; y < y1; y++) if (img[y * W + x] < th) dark++;
-    if (dark > need) { darkCols++; wsum += x; }
-  }
-  if (darkCols < MIN_DARK_COLS) return b;
-  b.found = true;
-  b.cross = darkCols > W * CROSS_RATIO;
-  b.cx = wsum / darkCols;
-  b.pos = (b.cx - W / 2) * 100 / (W / 2);
+Band summary(int y0, int y1) {            // y0~y1 줄의 라인 가운데 평균 -> 위치 -100~100
+  Band b = {false, false, 0, -1};
+  long sum = 0; int n = 0;
+  for (int y = max(y0, 0); y < min(y1, H); y++) if (trC[y] >= 0) { sum += trC[y]; n++; }
+  if (n < 3) return b;
+  b.found = true; b.cx = sum / n; b.pos = (b.cx - W / 2) * 100 / (W / 2);
   return b;
 }
 
+void trackLine(const uint8_t* img) {
+  for (int y = 0; y < H; y++) trC[y] = -1;
+  int prev = -1, miss = 0; bool cross = false;
+  trTop = H;
+  for (int y = H - 1; y >= 0; y--) {
+    const uint8_t* r = img + y * W;
+    long sum = 0;
+    for (int x = 0; x < W; x++) sum += r[x];
+    int th = sum / W - darkOffset;        // 그 줄 평균보다 darkOffset 어두우면 검정 (조명 따라감)
+    int best = -1, bl = 0, br = 0, bestD = 9999, darkAll = 0;
+    for (int x = 0; x < W;) {
+      if (r[x] >= th) { x++; continue; }
+      int st = x;
+      while (x < W && r[x] < th) x++;
+      int w = x - st; darkAll += w;
+      if (w < MIN_DARK_COLS) continue;
+      int c = st + w / 2;
+      int d = prev < 0 ? abs(c - W / 2) : abs(c - prev);   // 처음엔 가운데에 가까운 것, 다음부턴 아래 줄과 가까운 것
+      if (prev >= 0 && d > MAX_JUMP) continue;
+      if (d < bestD) { bestD = d; best = c; bl = st; br = x - 1; }
+    }
+    if (best < 0) {                       // 이 줄엔 없음 : 3줄까지는 건너뛰고, 더 끊기면 라인 끝
+      if (prev >= 0 && ++miss > 3) break;
+      continue;
+    }
+    miss = 0; prev = best; trTop = y;
+    trL[y] = bl; trR[y] = br; trC[y] = best;
+    if (y > H * 2 / 3 && darkAll > W * CROSS_RATIO) cross = true;
+  }
+  // 가까운 곳 = 아래 1/3, 먼 곳 = 이어진 라인의 위쪽 끝 부분
+  lastNear = summary(H * 2 / 3, H);
+  lastNear.cross = cross;
+  lastFar = trTop < H / 2 ? summary(trTop, trTop + 12) : Band{false, false, 0, -1};
+  // 향할 곳 : LOOK_Y 줄 (라인이 거기까지 안 오면 이어진 맨 위)
+  tgtY = -1; tgtX = -1;
+  for (int y = max(LOOK_Y, trTop); y < H; y++) if (trC[y] >= 0) { tgtY = y; tgtX = trC[y]; break; }
+}
+
 // ---- 웹 화면 ----
-const char PAGE[] PROGMEM = R"HTML(<!doctype html><html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>굴노 카메라</title>
-<style>
-:root{--bg:#0e1116;--card:#171b22;--line:#262c36;--fg:#e8ecf2;--mut:#8b95a5;--acc:#4f9dff;--ok:#3ecf8e;--warn:#f5b84a;--bad:#ff6b6b}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif}
-header{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 16px;background:rgba(14,17,22,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0 auto 0 0}.badge{font-size:13px;padding:4px 10px;border-radius:99px;background:var(--line);color:var(--mut);white-space:nowrap}
-.badge.ok{background:rgba(62,207,142,.15);color:var(--ok)}.badge.warn{background:rgba(245,184,74,.15);color:var(--warn)}.badge.bad{background:rgba(255,107,107,.15);color:var(--bad)}
-main{display:grid;gap:14px;padding:14px 16px 28px;max-width:1200px;margin:0 auto;grid-template-columns:1fr}
-@media(min-width:900px){main{grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);align-items:start}.side{display:grid;gap:14px}}
-.side{display:grid;gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
-.card h2{font-size:14px;color:var(--mut);font-weight:600;margin:0 0 10px;letter-spacing:.02em}
-.video{position:relative;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden}
-.video img{width:100%;height:100%;object-fit:contain;display:block}
-.video .ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut)}
-.dir{position:absolute;left:10px;top:10px;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;border-radius:12px;background:rgba(0,0,0,.6);font-weight:600}
-.dir b{font-size:34px;line-height:1}#s{color:var(--mut);font-size:13px;margin-top:8px}
-.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto}
-button{font:inherit;color:var(--fg);background:#232a35;border:1px solid #303846;border-radius:12px;padding:10px 14px;cursor:pointer;touch-action:manipulation}
-button:active,button.on{background:var(--acc);border-color:var(--acc)}
-.pad button{aspect-ratio:1;font-size:28px;touch-action:none;user-select:none;-webkit-user-select:none}.pad .stop{background:#3a2328;border-color:#5a2f37}
-.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.row button{flex:1}
-#auto{background:#1f3a2e;border-color:#2b5a45}
-table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px solid var(--line)}td:first-child{color:var(--mut);width:42%}
-#raw{font:12px ui-monospace,Menlo,monospace;color:var(--mut);word-break:break-all;margin-top:8px}
-#btl{display:grid;gap:6px;margin-top:10px}#btl button{text-align:left;display:flex;justify-content:space-between;gap:8px}#btl small{color:var(--mut)}
-label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:var(--acc)}.hint{color:var(--mut);font-size:12px;margin-top:8px}
-</style></head><body>
-<header><h1>굴노 카메라</h1><span id="bCam" class="badge">카메라</span><span id="bCar" class="badge">차 블루투스</span><span id="bFps" class="badge">- fps</span></header>
-<main>
-<section class="card"><div class="video"><div class="ph" id="ph">영상 연결 중…</div><img id="f" alt="">
-<div class="dir"><b id="dir">…</b><span id="dirT">-</span></div></div><div id="s"></div></section>
-<div class="side">
-<section class="card"><h2>조종 (와이파이 → 블루투스)</h2>
-<div class="pad"><button data-c="q">↺</button><button data-c="g">▲</button><button data-c="w">↻</button>
-<button data-c="l">◀</button><button data-c="s" class="stop">■</button><button data-c="r">▶</button>
-<span></span><button data-c="b">▼</button><span></span></div>
-<div class="row"><button id="auto">자동으로</button><button id="man">수동으로</button></div><div id="cs" class="hint"></div></section>
-<section class="card"><h2>차 상태</h2><table id="car"><tr><td>블루투스</td><td>연결 안 됨</td></tr></table><div id="raw"></div></section>
-<section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
-<div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
-<section class="card"><h2>카메라 설정</h2>
-<label>어두움 기준 <b id="v"></b></label><input id="o" type="range" min="5" max="120">
-<label>앞 LED 밝기 <b id="lv"></b></label><input id="led" type="range" min="0" max="255">
-<div class="hint">흰 가로줄 = 띠 범위 · 흑백 세로줄 = 찾은 선 · 점선 = 화면 가운데<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
-</div></main>
-<script>
-const $=i=>document.getElementById(i);
-const badge=(id,t,c)=>{$(id).textContent=t;$(id).className='badge '+(c||'');};
-let fails=0;
-async function tick(){
-  try{const s=await (await fetch('/status')).json(); fails=0; badge('bCam','카메라 연결','ok'); badge('bFps',s.fps+' fps');
-    $('v').textContent=s.off; if(document.activeElement!==$('o'))$('o').value=s.off;
-    $('lv').textContent=s.led; if(document.activeElement!==$('led'))$('led').value=s.led;
-    showDir(s); showCar(s);}catch(e){ if(++fails>3)badge('bCam','카메라 끊김','bad'); }
-}
-// 카메라가 본 선 -> 직진 / 우회전 / 좌회전 (가까운 띠 70% + 먼 띠 30%)
-function showDir(s){
-  let t,a;
-  if(!s.nf&&!s.ff){a='✕';t='선 없음';}
-  else if(s.cross){a='╋';t='교차선';}
-  else{const p=s.nf&&s.ff?s.np*0.7+s.fp*0.3:(s.nf?s.np:s.fp);
-    if(p>25){a='➡';t='우회전';}else if(p<-25){a='⬅';t='좌회전';}else{a='⬆';t='직진';}}
-  $('dir').textContent=a; $('dirT').textContent=t;
-  $('s').textContent=`가까운 띠 ${s.nf?s.np:'없음'} · 먼 띠 ${s.ff?s.fp:'없음'}`;
-}
-// 아두이노 상태 줄 "ar,23,011,LINE,1,60" 풀어서 보여 주기
-const ACT={g:'직진',b:'후진',l:'좌회전',r:'우회전',q:'제자리 좌',w:'제자리 우',s:'정지',o:'장애물 정지'};
-let wasScan=0;
-function showCar(s){
-  if(s.btfail){badge('bCar','블루투스 불가','bad');$('bts').textContent='메모리 부족 : 이 카메라 보드는 와이파이·카메라와 블루투스를 같이 켤 수 없습니다';$('btl').innerHTML='';return;}
-  const st=s.scan?'찾는 중…':s.bt?'연결됨':s.btw?'연결 중…':s.btn?'끊김':'기기를 찾아 고르세요';
-  badge('bCar','차 '+(s.bt?'연결':s.btw?'연결 중':'끊김'),s.bt?'ok':s.btw?'warn':'');
-  $('bts').textContent=(s.btn?s.btn+' · ':'')+st+(s.btw&&!s.bt?' (폰 앱이 그 기기에 붙어 있으면 앱에서 끊기)':'');
-  if(wasScan&&!s.scan)loadList(); wasScan=s.scan;
-  const f=(s.car||'').split(',');
-  if(!s.bt||f.length<4){$('car').innerHTML='<tr><td>블루투스</td><td>'+(s.bt?'상태 기다리는 중':'연결 안 됨')+'</td></tr>';$('raw').textContent='';return;}
-  const sen=f[2].split('').map(c=>c=='1'?'●':'○').join(' ');
-  const rows=[['모드',f[0][0]=='a'?'자동':'수동'],['동작',ACT[f[0][1]]||f[0][1]],['앞 거리',f[1]=='999'?'-':f[1]+' cm'],['라인센서',sen],['단계',f[3]]];
-  if(f.length>=6)rows.push(['오차 / 보정',f[4]+' / '+f[5]]);
-  $('car').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join(''); $('raw').textContent=s.car;
-}
-async function loadList(){
-  const l=await (await fetch('/btlist')).json();
-  $('btl').innerHTML=l.length?l.sort((a,b)=>b.r-a.r).map(d=>`<button data-a="${d.a}" data-n="${d.n}"><span>${d.n||'(이름 없음)'}</span><small>${d.a} · ${d.r}dBm</small></button>`).join(''):'<div class="hint">찾은 기기 없음 (차 전원, 폰 앱 연결 확인)</div>';
-  $('btl').querySelectorAll('button').forEach(b=>b.onclick=()=>{fetch('/bt?a='+encodeURIComponent(b.dataset.a)+'&n='+encodeURIComponent(b.dataset.n));$('btl').innerHTML='';});
-}
-$('btScan').onclick=()=>{fetch('/bt?scan=1');$('btl').innerHTML='<div class="hint">찾는 중… (약 5초)</div>';};
-$('btOn').onclick=()=>fetch('/bt?on=1');
-$('btOff').onclick=()=>fetch('/bt?on=0');
-// 영상 : 같은 주소의 /stream 연속 영상. 끊기면 2초 뒤 다시
-const stream=()=>{$('f').src='/stream?'+Date.now();};
-$('f').onload=()=>{$('ph').style.display='none';};
-$('f').onerror=()=>{$('ph').style.display='grid';setTimeout(stream,2000);};
-stream();
-$('o').onchange=()=>fetch('/set?off='+$('o').value);
-$('led').onchange=()=>fetch('/set?led='+$('led').value);
-setInterval(tick,400);
-// 앱과 같은 규칙 : 누르는 동안 0.2초마다 같은 글자, 떼면 s 두 번, 0.6초마다 h (연결 신호)
-const send=c=>fetch('/cmd?c='+c).then(r=>{$('cs').textContent=r.status==503?'차 블루투스가 연결되지 않았습니다':'';}).catch(()=>{});
-let held=null,rep=null,hb=null;
-function press(b){release(false);held=b;b.classList.add('on');send(b.dataset.c);rep=setInterval(()=>send(b.dataset.c),200);}
-function release(stop=true){if(rep){clearInterval(rep);rep=null;} if(held){held.classList.remove('on'); if(stop){send('s');setTimeout(()=>send('s'),60);}} held=null;}
-document.querySelectorAll('.pad button').forEach(b=>{
-  b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);press(b);};
-  b.onpointerup=b.onpointercancel=b.onlostpointercapture=()=>release();
-});
-const KEY={ArrowUp:'g',ArrowDown:'b',ArrowLeft:'l',ArrowRight:'r',q:'q',e:'w',' ':'s'};   // 노트북 키보드
-addEventListener('keydown',e=>{const c=KEY[e.key];if(!c||e.repeat||e.target.tagName=='INPUT')return;e.preventDefault();press(document.querySelector(`.pad [data-c="${c}"]`));});
-addEventListener('keyup',e=>{if(KEY[e.key])release();});
-$('auto').onclick=()=>{if(confirm('자동 모드로 전환하시겠습니까?'))send('a');};
-$('man').onclick=()=>send('m');
-setInterval(()=>send('h'),600);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
-</script></body></html>)HTML";
+#include "page.h"                         // 웹 화면 (HTML·자바스크립트는 따로 둬야 PlatformIO 가 함수로 잘못 읽지 않음)
 
 // 지금 프레임 + 띠·선 표시를 JPEG 로 (화면 한 장, 스트림 공용)
-inline void px(int x, int y, uint8_t v) { view[(y * W + x) * 2] = view[(y * W + x) * 2 + 1] = v; }   // 흰색 255 / 검정 0
+// RGB565 색 (앞 바이트가 높은 쪽)
+const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF;
+inline void dot(int x, int y, uint16_t c) {
+  if (x < 0 || x >= W || y < 0 || y >= H) return;
+  view[(y * W + x) * 2] = c >> 8; view[(y * W + x) * 2 + 1] = c & 0xFF;
+}
 
+// 화면 : 인식한 라인 = 초록 칠, 라인 가운데 경로 = 노란 점, 차 -> 향할 곳 = 빨간 선과 점, 차 가운데 = 흰 점선 (아래쪽)
 bool makeJpeg(uint8_t** jpg, size_t* len) {
   memcpy(view, color, W * H * 2);
-  for (int x = 0; x < W; x++) {           // 띠 경계
-    px(x, NEAR_Y0, 255); px(x, NEAR_Y1 - 1, 255);
-    px(x, FAR_Y0, 255); px(x, FAR_Y1 - 1, 255);
+  for (int y = 0; y < H; y++) if (trC[y] >= 0) {
+    for (int x = trL[y]; x <= trR[y]; x++) dot(x, y, GREEN);
+    if (y % 2 == 0) dot(trC[y], y, YELLOW);
   }
-  for (int y = 0; y < H; y += 3) px(W / 2, y, (y & 1) ? 0 : 255);   // 화면 가운데
-  const Band* bs[2] = {&lastNear, &lastFar};
-  const int ys[2][2] = {{NEAR_Y0, NEAR_Y1}, {FAR_Y0, FAR_Y1}};
-  for (int i = 0; i < 2; i++) if (bs[i]->found)                // 찾은 선 가운데
-    for (int y = ys[i][0]; y < ys[i][1]; y++)
-      for (int dx = -1; dx <= 1; dx++) { int x = bs[i]->cx + dx; if (x >= 0 && x < W) px(x, y, (y & 1) ? 0 : 255); }
+  for (int y = H - 16; y < H; y += 2) dot(W / 2, y, WHITE);
+  if (tgtX >= 0) {                        // 차(화면 아래 가운데) -> 향할 곳
+    int x0 = W / 2, y0 = H - 1, dx = abs(tgtX - x0), dy = -abs(tgtY - y0), sx = x0 < tgtX ? 1 : -1, sy = y0 < tgtY ? 1 : -1, e = dx + dy;
+    while (true) {
+      dot(x0, y0, RED); dot(x0 + 1, y0, RED);
+      if (x0 == tgtX && y0 == tgtY) break;
+      int e2 = 2 * e;
+      if (e2 >= dy) { e += dy; x0 += sx; }
+      if (e2 <= dx) { e += dx; y0 += sy; }
+    }
+    for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) dot(tgtX + i, tgtY + j, RED);
+  }
   return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, JPEG_Q, jpg, len);
 }
 
@@ -373,7 +300,7 @@ void btTask(void*) {
   //   나중에 켜면 블루투스가 시작하다 멈추고, 먼저 켜면 와이파이가 메모리 부족으로 멈춘다.
   //   그래서 남은 메모리가 BT_NEED 보다 적으면 켜지 않고 화면에 알린다 (멈추지 않게)
   while (!btWant && !btScanReq) vTaskDelay(pdMS_TO_TICKS(200));
-  while (ESP.getFreeHeap() < BT_NEED) { btFail = true; btWant = false; btScanReq = false; vTaskDelay(pdMS_TO_TICKS(1000)); }
+  while (heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < BT_NEED) { btFail = true; btWant = false; btScanReq = false; vTaskDelay(pdMS_TO_TICKS(1000)); }
   BT.begin("GULNO-CAM", true, true);       // 마스터(내가 먼저 붙음), BLE 는 안 써서 그 메모리는 돌려받음
   BT.setPin(BT_PIN, strlen(BT_PIN));
   btReady = true;
@@ -423,8 +350,8 @@ void handleBt() {
 
 void handleStatus() {
   char buf[300];
-  snprintf(buf, sizeof buf, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"off\":%d,\"led\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
-           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, darkOffset, flashDuty, fps,
+  snprintf(buf, sizeof buf, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"off\":%d,\"led\":%d,\"mir\":%d,\"flip\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, darkOffset, flashDuty, camMirror ? 1 : 0, camFlip ? 1 : 0, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, esc(btName.length() ? btName : btAddr).c_str(),
            esc(carLine).c_str());
   send(200, "application/json", buf);
@@ -442,6 +369,9 @@ void handleCmd() {
 void handleSet() {
   if (hasArg("off")) darkOffset = constrain(arg("off").toInt(), 5, 120);
   if (hasArg("led")) flashDuty = constrain(arg("led").toInt(), 0, 255);
+  sensor_t* cam = esp_camera_sensor_get();
+  if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
+  if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
   send(200, "text/plain", "ok");
 }
 
@@ -487,7 +417,6 @@ String getSetupPass() {
 }
 
 void startWifi() {
-  prefs.begin("gulno", false);
   btAddr = prefs.getString("bt_addr", ""); btName = prefs.getString("bt_name", "");
   WiFi.mode(WIFI_STA);
   WiFi.enableIPv6();                       // 아이폰 핫스팟은 맥에 IPv6 만 주기도 해서, IPv6 로도 접속되게
@@ -543,8 +472,8 @@ bool startCamera() {
   c.grab_mode = CAMERA_GRAB_LATEST;        // 항상 가장 최근 프레임
   if (esp_camera_init(&c) != ESP_OK) return false;
   sensor_t* s = esp_camera_sensor_get();
-  s->set_vflip(s, FLIP_V);
-  s->set_hmirror(s, MIRROR_H);
+  s->set_vflip(s, camFlip);
+  s->set_hmirror(s, camMirror);
   return true;
 }
 
@@ -556,6 +485,8 @@ void setup() {
   color = (uint8_t*)ps_calloc(W * H * 2, 1);
   view = (uint8_t*)ps_malloc(W * H * 2);
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
+  prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
+  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false);
   if (!startCamera()) {
     while (true) { Serial.println("E,camera"); delay(1000); }   // 카메라 리본 케이블 확인
   }
@@ -573,8 +504,7 @@ void loop() {
         uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
         gray[i] = (((p >> 11) & 31) * 79 + ((p >> 5) & 63) * 76 + (p & 31) * 29) >> 4;
       }
-      lastNear = findLine(gray, NEAR_Y0, NEAR_Y1);
-      lastFar = findLine(gray, FAR_Y0, FAR_Y1);
+      trackLine(gray);
       memcpy(color, b, W * H * 2);
       frames++;
     }
@@ -596,7 +526,8 @@ void loop() {
       }
     }
     else Serial.printf("I,ip,%s,%s.local\n", myIp.c_str(), HOSTNAME);
-    Serial.printf("I,heap,%u,%u\n", (unsigned)ESP.getFreeHeap(), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    Serial.printf("I,heap,%u,%u,psram,%u,%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
   }
   readCar();
   // 상태 LED : 설정 모드 = 깜빡 (0.5초), 핫스팟 연결 = 켜짐, 연결됐다 끊김 = 빠르게 깜빡

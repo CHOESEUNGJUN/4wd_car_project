@@ -23,3 +23,12 @@ __pycache__/
 # 시뮬레이션 (내 컴퓨터에만, GitHub 에는 안 올림)
 sim/
 docs/SIM.md
+
+# PlatformIO 빌드 폴더
+.pio/
+
+# ESP32 라이브러리 다시 빌드할 때 자동으로 생기는 것
+esp32cam_line/.dummy/
+esp32cam_line/managed_components/
+esp32cam_line/sdkconfig.*
+esp32cam_line/dependencies.lock
