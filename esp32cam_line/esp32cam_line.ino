@@ -66,7 +66,7 @@ WebServer server(80);
 DNSServer dns;                            // 설정 모드 : 어떤 주소를 쳐도 설정 화면으로 (공항 와이파이처럼)
 Preferences prefs;
 bool setupMode = false;
-String setupName, setupPass, ssidOptions, myIp;
+String setupName, setupPass, ssidOptions, myIp, savedSsid, failWhy;
 unsigned long lastInfo = 0;
 uint8_t lastFrame[W * H];                 // 화면 보여 주기용 마지막 프레임
 Band lastNear, lastFar;
@@ -106,6 +106,12 @@ input{width:100%;max-width:480px}.k{color:#9cf}</style></head><body>
 <img id="f" src="/frame"><div id="s">...</div>
 <p>어두움 기준 (띠 평균보다 몇 어두우면 선) <b id="v"></b><br><input id="o" type="range" min="5" max="120"></p>
 <p class="k">흰 가로줄 = 띠 범위, 흑백 세로줄 = 찾은 선 가운데, 회색 점선 = 화면 가운데</p>
+<h3>조종 (와이파이)</h3>
+<div class="pad"><button data-c="q">↺</button><button data-c="g">▲</button><button data-c="w">↻</button>
+<button data-c="l">◀</button><button data-c="s">■</button><button data-c="r">▶</button>
+<span></span><button data-c="b">▼</button><span></span></div>
+<p><button id="auto">자동으로</button> <button id="man">수동으로</button> <span id="cs"></span></p>
+<style>.pad{display:grid;grid-template-columns:repeat(3,80px);gap:8px}.pad button,#auto,#man{font-size:26px;padding:14px;touch-action:none;user-select:none}</style>
 <script>
 const $=i=>document.getElementById(i);
 async function tick(){
@@ -116,6 +122,19 @@ async function tick(){
 }
 $('o').onchange=()=>fetch('/set?off='+$('o').value);
 setInterval(tick,250);
+// 앱과 같은 규칙 : 누르는 동안 0.2초마다 같은 글자, 떼면 s 두 번, 0.6초마다 h (연결 신호)
+const send=c=>fetch('/cmd?c='+c).then(r=>{$('cs').textContent=r.ok?'':'조종 안 됨 (설정 모드)';}).catch(()=>{$('cs').textContent='연결 끊김';});
+let held=null,rep=null;
+function press(c){release(false);held=c;send(c);rep=setInterval(()=>send(c),200);}
+function release(stop=true){if(rep){clearInterval(rep);rep=null;} if(held&&stop){send('s');setTimeout(()=>send('s'),60);} held=null;}
+document.querySelectorAll('.pad button').forEach(b=>{
+  b.onpointerdown=e=>{e.preventDefault();press(b.dataset.c);};
+  b.onpointerup=b.onpointerleave=b.onpointercancel=()=>release();
+});
+$('auto').onclick=()=>{if(confirm('자동 모드로 전환하시겠습니까?'))send('a');};
+$('man').onclick=()=>send('m');
+setInterval(()=>send('h'),600);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
 </script></body></html>)HTML";
 
 void handleFrame() {
@@ -145,6 +164,14 @@ void handleStatus() {
   server.send(200, "application/json", buf);
 }
 
+// 웹 조종 글자를 선(U0T)으로 아두이노에 "K,g" 처럼 전달. 버전 D 가 블루투스 글자와 똑같이 처리
+void handleCmd() {
+  String c = server.arg("c");
+  if (setupMode || c.length() != 1 || !strchr("gblrsqwamh", c[0])) { server.send(403); return; }
+  Serial.printf("K,%c\n", c[0]);
+  server.send(204);
+}
+
 void handleSet() {
   if (server.hasArg("off")) darkOffset = constrain(server.arg("off").toInt(), 5, 120);
   server.send(200, "text/plain", "ok");
@@ -161,7 +188,10 @@ void handleSetupPage() {
                "<form method=\"post\" action=\"/save\"><input name=\"s\" list=\"l\" placeholder=\"핫스팟 이름\" required>"
                "<datalist id=\"l\">");
   h += ssidOptions;
-  h += F("</datalist><input name=\"p\" type=\"password\" placeholder=\"핫스팟 암호\"><button>저장하고 연결</button></form>"
+  h += F("</datalist>");
+  if (savedSsid.length()) h += "<p style=\"color:#fc6\">저장된 핫스팟 <b>" + esc(savedSsid) + "</b> : " + failWhy +
+                               "<br>핫스팟이 보이면 알아서 다시 붙습니다 (아이폰은 개인용 핫스팟 화면을 열어 두기).</p>";
+  h += F("<input name=\"p\" type=\"password\" placeholder=\"핫스팟 암호\"><button>저장하고 연결</button></form>"
          "<p><a href=\"/cam\" style=\"color:#9cf\">카메라 화면 보기</a></p></body></html>");
   server.send(200, "text/html", h);
 }
@@ -193,6 +223,7 @@ void startWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(HOSTNAME);
   String ssid = prefs.getString("ssid", "");
+  savedSsid = ssid;
   if (ssid.length()) {                     // 저장된 핫스팟에 붙어 보기
     WiFi.begin(ssid.c_str(), prefs.getString("pass", "").c_str());
     unsigned long t0 = millis();
@@ -206,6 +237,11 @@ void startWifi() {
     return;
   }
   // 설정 모드 : 주변 핫스팟 목록을 받아 두고 설정용 와이파이를 켬
+  int st = WiFi.status();
+  failWhy = ssid.length() == 0 ? "저장된 핫스팟 없음"
+          : st == WL_NO_SSID_AVAIL ? "핫스팟을 못 찾음 (꺼짐 / 5GHz / 숨김)"
+          : st == WL_CONNECT_FAILED ? "암호가 틀림"
+          : "연결 안 됨 (" + String(st) + ")";
   setupMode = true;
   WiFi.disconnect();
   int n = WiFi.scanNetworks();
@@ -214,8 +250,9 @@ void startWifi() {
   snprintf(suffix, sizeof suffix, "-%04X", (unsigned)(ESP.getEfuseMac() >> 32) & 0xFFFF);
   setupName = String(SETUP_SSID) + suffix;
   setupPass = getSetupPass();
-  WiFi.mode(WIFI_AP);
+  WiFi.mode(ssid.length() ? WIFI_AP_STA : WIFI_AP);   // 저장된 핫스팟이 있으면 설정 모드에서도 계속 다시 찾음
   WiFi.softAP(setupName.c_str(), setupPass.c_str());
+  if (ssid.length()) WiFi.begin(ssid.c_str(), prefs.getString("pass", "").c_str());
   myIp = WiFi.softAPIP().toString();
   dns.start(53, "*", WiFi.softAPIP());
 }
@@ -249,6 +286,7 @@ void setup() {
   }
   startWifi();
   server.on("/", [] { if (setupMode) handleSetupPage(); else server.send_P(200, "text/html", PAGE); });
+  server.on("/cmd", handleCmd);
   server.on("/cam", [] { server.send_P(200, "text/html", PAGE); });
   server.on("/save", HTTP_POST, [] { if (setupMode) handleSave(); else server.send(403); });
   server.onNotFound([] {                   // 설정 모드 : 폰이 여는 아무 주소나 설정 화면으로
@@ -280,9 +318,22 @@ void loop() {
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
   if (lastInfo == 0 || millis() - lastInfo >= 10000) {     // 안내 줄 (I 로 시작 : 아두이노는 C 줄만 읽어서 상관없음)
     lastInfo = millis();
-    if (setupMode) Serial.printf("I,setup,%s,%s\n", setupName.c_str(), setupPass.c_str());
+    if (setupMode) {
+      Serial.printf("I,setup,%s,%s\n", setupName.c_str(), setupPass.c_str());
+      if (savedSsid.length()) {
+        Serial.printf("I,fail,%s,%s\n", savedSsid.c_str(), failWhy.c_str());
+        WiFi.begin(savedSsid.c_str(), prefs.getString("pass", "").c_str());   // 10초마다 다시 시도
+      }
+    }
     else Serial.printf("I,ip,%s,%s.local\n", myIp.c_str(), HOSTNAME);
   }
-  if (setupMode) dns.processNextRequest();
+  if (setupMode) {
+    dns.processNextRequest();
+    if (savedSsid.length() && WiFi.status() == WL_CONNECTED) {   // 핫스팟이 나타나서 붙음 -> 설정 모드 끝
+      Serial.printf("I,joined,%s\n", savedSsid.c_str());
+      delay(300);
+      ESP.restart();                       // 다시 켜면서 핫스팟 모드로 (켤 때 바로 붙음)
+    }
+  }
   server.handleClient();
 }

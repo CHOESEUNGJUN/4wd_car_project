@@ -192,7 +192,8 @@ void readCamera() {
     if (c == '\n') {
       buf[n] = 0; n = 0;
       int a, b, f;
-      if (buf[0] == 'C' && sscanf(buf + 2, "%d,%d,%d", &a, &b, &f) == 3) { camNear = a; camFar = b; camFlags = f; camAt = millis(); }
+      if (buf[0] == 'K' && buf[1] == ',') onCommand(buf[2]);   // 와이파이 웹 조종 (ESP32 가 전달)
+      else if (buf[0] == 'C' && sscanf(buf + 2, "%d,%d,%d", &a, &b, &f) == 3) { camNear = a; camFar = b; camFlags = f; camAt = millis(); }
     } else if (c != '\r' && n < sizeof(buf) - 1) buf[n++] = c;
   }
 }
@@ -307,23 +308,24 @@ void updateObstacle() {
 // 블루투스
 // ============================================================
 // 들어온 글자 처리 + 0.2초마다 상태 줄 송신 + 0.2초마다 시리얼 로그
-void serviceBT() {
-  while (BT.available()) {
-    char c = BT.read();
-    // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
-    if (c == 0 || !strchr("gblrsqwamh", c)) continue;
-    lastLink = millis();
-    // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
-    if (c == 'h') continue;
-    Serial.print(F("수신: ")); Serial.println(c);
-    lastRx = millis();
-    if (c == 'a') setMode(AUTO);
-    else if (c == 'm') setMode(MANUAL);
-    else {
-      if (mode == AUTO) setMode(MANUAL);  // 자동 중 조종 명령 = 사람이 개입
-      cmd = c;
-    }
+// 조종 글자 하나 처리. 블루투스(앱)와 카메라 선(와이파이 웹 조종, "K,g")이 같이 쓴다
+void onCommand(char c) {
+  // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
+  if (c == 0 || !strchr("gblrsqwamh", c)) return;
+  lastLink = millis();
+  // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
+  if (c == 'h') return;
+  lastRx = millis();
+  if (c == 'a') setMode(AUTO);
+  else if (c == 'm') setMode(MANUAL);
+  else {
+    if (mode == AUTO) setMode(MANUAL);  // 자동 중 조종 명령 = 사람이 개입
+    cmd = c;
   }
+}
+
+void serviceBT() {
+  while (BT.available()) onCommand(BT.read());
   unsigned long now = millis();
   // 자동 중 폰 신호('h' 등)가 AUTO_LINK_MS 넘게 없으면 끊긴 것 → 정지하고 수동으로
   if (mode == AUTO && millis() - lastLink > AUTO_LINK_MS) {
