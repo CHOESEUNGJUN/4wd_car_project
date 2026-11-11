@@ -101,7 +101,8 @@ volatile bool btReady = false;            // BT.begin 끝남 (그 전에 BT 를 
 bool btOn() { return btReady && BT.connected(); }
 String carLine;
 volatile bool btWant = false;             // 연결 유지 (끄면 폰 앱이 HC-06 을 쓸 수 있음)
-volatile bool btScanReq = false, btScanning = false;
+volatile bool btScanReq = false, btScanning = false, btFail = false;
+const uint32_t BT_NEED = 120000;          // 블루투스를 켜는 데 필요한 남은 내부 메모리 (대략)
 String btAddr, btName;                    // 연결할 기기 (목록에서 고르면 ESP32 에 저장)
 String btList = "[]";                     // 찾은 기기 목록 JSON [{"n":이름,"a":주소,"r":신호}]
 DNSServer dns;                            // 설정 모드 : 어떤 주소를 쳐도 설정 화면으로 (공항 와이파이처럼)
@@ -213,6 +214,7 @@ function showDir(s){
 const ACT={g:'직진',b:'후진',l:'좌회전',r:'우회전',q:'제자리 좌',w:'제자리 우',s:'정지',o:'장애물 정지'};
 let wasScan=0;
 function showCar(s){
+  if(s.btfail){badge('bCar','블루투스 불가','bad');$('bts').textContent='메모리 부족 : 이 카메라 보드는 와이파이·카메라와 블루투스를 같이 켤 수 없습니다';$('btl').innerHTML='';return;}
   const st=s.scan?'찾는 중…':s.bt?'연결됨':s.btw?'연결 중…':s.btn?'끊김':'기기를 찾아 고르세요';
   badge('bCar','차 '+(s.bt?'연결':s.btw?'연결 중':'끊김'),s.bt?'ok':s.btw?'warn':'');
   $('bts').textContent=(s.btn?s.btn+' · ':'')+st+(s.btw&&!s.bt?' (폰 앱이 그 기기에 붙어 있으면 앱에서 끊기)':'');
@@ -367,8 +369,11 @@ void startServer() {
 
 // 블루투스 : 따로 도는 작업에서 HC-06 에 붙고, 끊기면 다시 붙음 (찾는 데 몇 초 걸려서 loop 를 막지 않게)
 void btTask(void*) {
-  // 블루투스는 메모리를 많이 써서 (와이파이 + 카메라와 같이 켜면 모자람) "찾기"나 "연결"을 처음 누를 때만 켠다
+  // 블루투스 클래식 + 와이파이 + 카메라를 한꺼번에 켤 내부 메모리가 ESP32-CAM 에 없다 (2026-11-11 시험) :
+  //   나중에 켜면 블루투스가 시작하다 멈추고, 먼저 켜면 와이파이가 메모리 부족으로 멈춘다.
+  //   그래서 남은 메모리가 BT_NEED 보다 적으면 켜지 않고 화면에 알린다 (멈추지 않게)
   while (!btWant && !btScanReq) vTaskDelay(pdMS_TO_TICKS(200));
+  while (ESP.getFreeHeap() < BT_NEED) { btFail = true; btWant = false; btScanReq = false; vTaskDelay(pdMS_TO_TICKS(1000)); }
   BT.begin("GULNO-CAM", true, true);       // 마스터(내가 먼저 붙음), BLE 는 안 써서 그 메모리는 돌려받음
   BT.setPin(BT_PIN, strlen(BT_PIN));
   btReady = true;
@@ -418,9 +423,9 @@ void handleBt() {
 
 void handleStatus() {
   char buf[300];
-  snprintf(buf, sizeof buf, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"off\":%d,\"led\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+  snprintf(buf, sizeof buf, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"off\":%d,\"led\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
            lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, darkOffset, flashDuty, fps,
-           btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, esc(btName.length() ? btName : btAddr).c_str(),
+           btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, esc(btName.length() ? btName : btAddr).c_str(),
            esc(carLine).c_str());
   send(200, "application/json", buf);
 }
@@ -533,7 +538,7 @@ bool startCamera() {
   c.xclk_freq_hz = 20000000;
   c.pixel_format = PIXFORMAT_RGB565;       // 컬러로 찍고, 선 찾기는 밝기만 뽑아서
   c.frame_size = FRAMESIZE_QQVGA;          // 160 x 120
-  c.fb_count = 2;
+  c.fb_count = 1;                          // 1장 : 판단하고 바로 버림 (메모리 아낌)
   c.fb_location = CAMERA_FB_IN_PSRAM;
   c.grab_mode = CAMERA_GRAB_LATEST;        // 항상 가장 최근 프레임
   if (esp_camera_init(&c) != ESP_OK) return false;
