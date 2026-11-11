@@ -22,3 +22,4 @@
 
 - [ ] GitHub 지원팀 답장 확인 (예전 커밋 캐시 삭제 요청)
 - [ ] 교안 PDF 를 공개 저장소에 둬도 되는지 확인
+- [ ] 카메라(ESP32) 작업이 끝나면 `LICENSE` 붙이기 (MIT 추천 : GitHub 에서 Add file → `LICENSE` → Choose a license template). 이때 교안 PDF 는 저장소에서 빼기
