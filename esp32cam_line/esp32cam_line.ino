@@ -256,7 +256,12 @@ bool makeJpeg(uint8_t** jpg, size_t* len) {
 // 연속 영상 (MJPEG). 따로 도는 서버(포트 81)라 라인 인식·조종을 막지 않는다
 // 화면마다 따로 작업을 띄워서 보냄 -> 노트북·폰 2개까지 동시에 영상 (하나가 붙잡고 있어도 다른 화면이 기다리지 않음)
 const int MAX_VIEWERS = 2;                // 화면 하나당 내부 메모리 약 4KB
-std::atomic<int> viewers{0};              // 웹 서버가 더하고 영상 작업이 뺌 (동시에 일어나도 안 틀어지게)
+std::atomic<int> viewers{0};
+// 카메라 주행 : 모폴로지 화면일 때만. ESP32 가 판단을 카메라 주행 글자(대문자, 자동 주행 속도)로 바꿔 0.15초마다 차에 보냄.
+// 아두이노는 수동 조종처럼 받음 (0.45초 명령 없으면 정지, 장애물 10cm 전진 막기 그대로)
+volatile bool camDrive = false;
+const int CAM_SOFT = 20, CAM_HARD = 50;  // 판단 위치(-100~100) : ±20 안 = 직진 G, ±50 안 = 살짝 L/R, 그 밖 = 크게 Q/W
+const unsigned long CAM_LOST_MS = 300;    // 라인이 이만큼 안 보이면 정지 S (보내지 않으면 아두이노가 0.45초 뒤 스스로도 멈춤)              // 웹 서버가 더하고 영상 작업이 뺌 (동시에 일어나도 안 틀어지게)
 SemaphoreHandle_t jpgLock;                // makeJpeg 의 view 버퍼를 여러 화면이 같이 쓰지 않게
 
 void streamLoop(httpd_req_t* req) {
@@ -414,8 +419,8 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"morph\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
-           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, morphView ? 1 : 0, fps,
+  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"morph\":%d,\"cam\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, morphView ? 1 : 0, camDrive ? 1 : 0, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine);
 }
 
@@ -448,8 +453,12 @@ esp_err_t wsHandler(httpd_req_t* r) {
   httpd_ws_frame_t f = {};
   f.payload = b;
   if (httpd_ws_recv_frame(r, &f, sizeof b) != ESP_OK) return ESP_FAIL;
-  // 조종 글자 하나 : 앱과 똑같이 그대로 차에 (아두이노는 버전 C 그대로)
-  if (f.type == HTTPD_WS_TYPE_TEXT && f.len == 1 && !setupMode && strchr("gblrsqwam", b[0]) && btOn()) btSend(b[0]);
+  if (f.type != HTTPD_WS_TYPE_TEXT || f.len != 1 || setupMode) return ESP_OK;
+  char c = b[0];
+  if (c == 'C') { camDrive = morphView && btOn(); if (camDrive) btSend('m'); return ESP_OK; }   // 카메라 주행 시작 (수동 모드로 맞추고)
+  if (c == 'X') { if (camDrive) { camDrive = false; btSend('s'); } return ESP_OK; }               // 카메라 주행 끝
+  // 조종 글자 하나 : 앱과 똑같이 그대로 차에. 사람이 조종하면 카메라 주행은 꺼짐 (사람 우선)
+  if (strchr("gblrsqwam", c) && btOn()) { camDrive = false; btSend(c); }
   return ESP_OK;
 }
 
@@ -659,6 +668,19 @@ void loop() {
   // 화면이 열려 있는 동안(웹소켓 연결) 차에 연결 신호 h 를 0.6초마다 대신 보냄.
   // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); btSend('h'); }
+  // 카메라 주행 : 화면이 닫혔거나 블루투스·모폴로지가 꺼지면 바로 멈춤 (사람이 안 보고 있으면 안 움직임)
+  static unsigned long lastCam = 0, lineAt = 0;
+  if (camDrive && (!btOn() || !morphView || millis() - lastViewer > 2500)) { camDrive = false; if (btOn()) btSend('s'); }
+  if (camDrive && millis() - lastCam >= 150) {
+    lastCam = millis();
+    char c = 'S';
+    if (lastNear.found || lastFar.found) {
+      lineAt = millis();
+      int p = lastNear.found && lastFar.found ? (lastNear.pos * 7 + lastFar.pos * 3) / 10 : (lastNear.found ? lastNear.pos : lastFar.pos);
+      c = abs(p) <= CAM_SOFT ? 'G' : abs(p) <= CAM_HARD ? (p > 0 ? 'R' : 'L') : (p > 0 ? 'W' : 'Q');
+    } else if (millis() - lineAt < CAM_LOST_MS) c = 0;   // 잠깐 놓침 : 이번엔 안 보냄 (직전 동작 유지)
+    if (c == 'S') btSend('s'); else if (c) btSend(c);
+  }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
   // 메모리 안전장치 : 남은 내부 메모리가 HEAP_MIN 보다 적은 상태가 5초 이어지면, 멈추기 전에 스스로 재시작
   // (핫스팟·블루투스는 저장돼 있어서 다시 붙음). 누수가 있으면 시리얼 I,heap 값이 계속 줄어든다

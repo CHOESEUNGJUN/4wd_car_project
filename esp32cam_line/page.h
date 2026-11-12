@@ -22,7 +22,7 @@ button{font:inherit;color:var(--fg);background:#232a35;border:1px solid #303846;
 button:active,button.on{background:var(--acc);border-color:var(--acc)}
 .pad button{aspect-ratio:1;font-size:28px;touch-action:none;user-select:none;-webkit-user-select:none}.pad .stop{background:#3a2328;border-color:#5a2f37}
 .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.row button{flex:1}
-#auto{background:#1f3a2e;border-color:#2b5a45}
+#auto,#camGo{background:#1f3a2e;border-color:#2b5a45}#camGo:disabled{opacity:.4}#camGo.on{background:var(--acc)}
 table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px solid var(--line)}td:first-child{color:var(--mut);width:42%}
 #raw{font:12px ui-monospace,Menlo,monospace;color:var(--mut);word-break:break-all;margin-top:8px}
 #btl{display:grid;gap:6px;margin-top:10px}#btl button{text-align:left;display:flex;justify-content:space-between;gap:8px}#btl small{color:var(--mut)}
@@ -37,7 +37,7 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 <div class="pad"><button data-c="q">↺</button><button data-c="g">▲</button><button data-c="w">↻</button>
 <button data-c="l">◀</button><button data-c="s" class="stop">■</button><button data-c="r">▶</button>
 <span></span><button data-c="b">▼</button><span></span></div>
-<div class="row"><button id="auto">자동으로</button><button id="man">수동으로</button></div><div id="cs" class="hint"></div></section>
+<div class="row"><button id="auto">라인센서 주행</button><button id="camGo">카메라 주행</button><button id="man">정지 · 수동</button></div><div id="cs" class="hint"></div></section>
 <section class="card"><h2>차 상태</h2><table id="car"><tr><td>블루투스</td><td>연결 안 됨</td></tr></table><div id="raw"></div></section>
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
@@ -57,6 +57,8 @@ function connect(){
   ws.onmessage=e=>{
     if(typeof e.data!=='string'){drawMask(new Uint8Array(e.data));return;}   // 모폴로지 화면 (RLE)
     const s=JSON.parse(e.data); badge('bFps',s.fps+' fps'); setView(!!s.morph);
+    $('camGo').disabled=!s.morph||!s.bt; $('camGo').classList.toggle('on',!!s.cam);
+    $('camGo').title=!s.morph?'카메라 설정에서 모폴로지로 바꾼 뒤 쓸 수 있습니다':!s.bt?'차 블루투스 연결이 필요합니다':'';
     $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; $('morph').checked=!!s.morph; showDir(s); showCar(s);};
   ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
 }
@@ -137,7 +139,9 @@ document.querySelectorAll('.pad button').forEach(b=>{
 const KEY={ArrowUp:'g',ArrowDown:'b',ArrowLeft:'l',ArrowRight:'r',q:'q',e:'w',' ':'s'};   // 노트북 키보드
 addEventListener('keydown',e=>{const c=KEY[e.key];if(!c||e.repeat||e.target.tagName=='INPUT')return;e.preventDefault();press(document.querySelector(`.pad [data-c="${c}"]`));});
 addEventListener('keyup',e=>{if(KEY[e.key])release();});
-$('auto').onclick=()=>{if(confirm('자동 모드로 전환하시겠습니까?'))send('a');};
-$('man').onclick=()=>send('m');
+// 라인센서 주행 = 아두이노 자동 모드(a). 카메라 주행 = ESP32 가 카메라 판단으로 조종 (모폴로지 화면일 때만). 정지 = 둘 다 끄고 수동
+$('auto').onclick=()=>{if(confirm('라인센서 자동 주행을 시작할까요?')){send('X');send('a');}};
+$('camGo').onclick=()=>{if(confirm('카메라 주행을 시작할까요? (ESP32 가 카메라로 보고 조종합니다)'))send('C');};
+$('man').onclick=()=>{send('X');send('m');};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
 </script></body></html>)HTML";
