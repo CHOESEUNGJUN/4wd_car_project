@@ -44,10 +44,15 @@ const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초�
 const int DARK_OFFSET = 40;               // 그 줄 평균 밝기보다 이만큼 어두우면 "라인". 바닥·조명에 맞게 여기서 바꿈
 const int MIN_DARK_COLS = 3;              // 선으로 칠 최소 폭 (칸). 이보다 좁으면 잡음
 const float CROSS_RATIO = 0.6;            // 한 줄의 이 비율 넘게 검정이면 교차선
-// 화면 모드 : false = 컬러 (테스트 : 실제 사진 위에 인식 결과), true = 모폴로지 (라인 확인 후 : 흰 바탕에 정리된 검정 라인만, 가볍고 빠름)
-// 모폴로지는 카메라가 처음부터 흑백으로 찍어서 변환이 없다. 바꾸면 저장하고 ESP32 를 다시 켠다
-// (실행 중에 카메라를 껐다 켜면 메모리 조각화·누수 위험이 있어서 재시작으로)
-bool morphView = false;
+// 화면 모드 : false = 컬러 (테스트 : 실제 사진 위에 인식 결과, MJPEG 영상), true = 모폴로지 (라인 확인 후 : 정리된 마스크를
+// JPEG 대신 RLE 숫자로 웹소켓에 보내 브라우저가 그림, 가볍고 빠름). 카메라는 늘 컬러로 찍음 (신호등 색을 봐야 해서)
+volatile bool morphView = false;
+// 신호등 인식 : 사진 위쪽에서 빨강·초록 덩어리를 찾음 (교안 3·4팀처럼 색 범위로). 폰 화면 /light 를 신호등으로 씀
+volatile bool sigMode = false;            // 웹 화면 "신호등 인식" 버튼으로 켬 (저장)
+volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강, 2 = 초록 (3장 연속 같아야 바뀜)
+const int SIG_Y1 = 54;                    // 이 줄 위쪽(화면 위 약 45%)만 봄 : 라인보다 먼 곳
+const int SIG_MIN = 40;                   // 2칸마다 본 픽셀 중 이만큼 넘게 그 색이면 신호 (위쪽 2160개 중)
+bool sigHeldAuto = false;                 // 라인센서 주행을 빨강 때문에 세워 둠 -> 초록이면 다시 a
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
 
 // AI-Thinker ESP32-CAM 핀
@@ -223,19 +228,16 @@ void trackLine() {                        // mask 에서 라인 따라가기
 // 지금 프레임 + 띠·선 표시를 JPEG 로 (화면 한 장, 스트림 공용)
 // RGB565 색 (앞 바이트가 높은 쪽)
 const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF;
-inline void dot(int x, int y, uint16_t c) {   // 모폴로지 화면(흰 바탕·검정 라인)에서는 경로 = 회색, 향할 곳·차 가운데 = 검정
+inline void dot(int x, int y, uint16_t c) {
   if (x < 0 || x >= W || y < 0 || y >= H) return;
-  if (morphView) { view[y * W + x] = c == YELLOW ? 128 : 0; return; }
   view[(y * W + x) * 2] = c >> 8; view[(y * W + x) * 2 + 1] = c & 0xFF;
 }
 
 // 화면 : 인식한 라인 = 초록 칠, 라인 가운데 경로 = 노란 점, 차 -> 향할 곳 = 빨간 선과 점, 차 가운데 = 흰 점선 (아래쪽)
-bool makeJpeg(uint8_t** jpg, size_t* len) {
-  bool g = morphView;
-  if (g) for (int i = 0; i < W * H; i++) view[i] = mask[i] ? 0 : 255;   // 흰 바탕에 정리된 검정 라인
-  else memcpy(view, color, W * H * 2);
+bool makeJpeg(uint8_t** jpg, size_t* len) {   // 컬러 화면 전용 (모폴로지 화면은 영상 대신 RLE)
+  memcpy(view, color, W * H * 2);
   for (int y = 0; y < H; y++) if (trC[y] >= 0) {
-    if (!g) for (int x = trL[y]; x <= trR[y]; x++) dot(x, y, GREEN);   // 컬러 : 인식한 라인을 초록으로
+    for (int x = trL[y]; x <= trR[y]; x++) dot(x, y, GREEN);          // 인식한 라인을 초록으로
     if (y % 2 == 0) dot(trC[y], y, YELLOW);
   }
   for (int y = H - 16; y < H; y += 2) dot(W / 2, y, WHITE);
@@ -250,7 +252,7 @@ bool makeJpeg(uint8_t** jpg, size_t* len) {
     }
     for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) dot(tgtX + i, tgtY + j, RED);
   }
-  return fmt2jpg(view, g ? W * H : W * H * 2, W, H, g ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565, btOn() ? JPEG_Q_BT : JPEG_Q, jpg, len);
+  return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, btOn() ? JPEG_Q_BT : JPEG_Q, jpg, len);
 }
 
 // 연속 영상 (MJPEG). 따로 도는 서버(포트 81)라 라인 인식·조종을 막지 않는다
@@ -316,6 +318,7 @@ esp_err_t route(httpd_req_t* r) {
 
 void pageMain() { if (setupMode) handleSetupPage(); else send(200, "text/html", PAGE); }
 void pageCam() { send(200, "text/html", PAGE); }
+void pageLight() { send(200, "text/html", PAGE_LIGHT); }   // 폰을 신호등으로 (화면 전체 빨강 / 초록)
 void pageSave() { if (setupMode) handleSave(); else send(403); }
 void pageList() {
   xSemaphoreTake(btLock, portMAX_DELAY); String l = btList; xSemaphoreGive(btLock);
@@ -342,7 +345,7 @@ void startServer() {
   cfg.close_fn = onClose;
   if (httpd_start(&web, &cfg) != ESP_OK) return;
   struct { const char* u; httpd_method_t m; void (*f)(); } routes[] = {
-    {"/", HTTP_GET, pageMain}, {"/cam", HTTP_GET, pageCam}, {"/save", HTTP_POST, pageSave},
+    {"/", HTTP_GET, pageMain}, {"/cam", HTTP_GET, pageCam}, {"/light", HTTP_GET, pageLight}, {"/save", HTTP_POST, pageSave},
     {"/set", HTTP_GET, handleSet},
     {"/bt", HTTP_GET, handleBt}, {"/btlist", HTTP_GET, pageList}};
   for (auto& x : routes) { httpd_uri_t u = {x.u, x.m, route, (void*)x.f}; httpd_register_uri_handler(web, &u); }
@@ -419,8 +422,8 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"morph\":%d,\"cam\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
-           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, morphView ? 1 : 0, camDrive ? 1 : 0, fps,
+  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"morph\":%d,\"cam\":%d,\"sigm\":%d,\"sig\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, morphView ? 1 : 0, camDrive ? 1 : 0, sigMode ? 1 : 0, sigState, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine);
 }
 
@@ -458,7 +461,7 @@ esp_err_t wsHandler(httpd_req_t* r) {
   if (c == 'C') { camDrive = morphView && btOn(); if (camDrive) btSend('m'); return ESP_OK; }   // 카메라 주행 시작 (수동 모드로 맞추고)
   if (c == 'X') { if (camDrive) { camDrive = false; btSend('s'); } return ESP_OK; }               // 카메라 주행 끝
   // 조종 글자 하나 : 앱과 똑같이 그대로 차에. 사람이 조종하면 카메라 주행은 꺼짐 (사람 우선)
-  if (strchr("gblrsqwam", c) && btOn()) { camDrive = false; btSend(c); }
+  if (strchr("gblrsqwam", c) && btOn()) { camDrive = false; sigHeldAuto = false; btSend(c); }
   return ESP_OK;
 }
 
@@ -510,12 +513,8 @@ void handleSet() {
   sensor_t* cam = esp_camera_sensor_get();
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
-  if (hasArg("morph") && (arg("morph") == "1") != morphView) {   // 화면 모드 바꿈 : 저장하고 다시 켬
-    prefs.putBool("morph", !morphView);
-    send(200, "text/plain", "restart");
-    delay(300);
-    ESP.restart();
-  }
+  if (hasArg("morph")) { morphView = arg("morph") == "1"; prefs.putBool("morph", morphView); }   // 화면 모드 (바로 바뀜)
+  if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0; sigHeldAuto = false; }
   send(200, "text/plain", "ok");
 }
 
@@ -609,7 +608,7 @@ bool startCamera() {
   c.pin_sccb_sda = SIOD_GPIO_NUM; c.pin_sccb_scl = SIOC_GPIO_NUM;
   c.pin_pwdn = PWDN_GPIO_NUM; c.pin_reset = RESET_GPIO_NUM;
   c.xclk_freq_hz = 20000000;
-  c.pixel_format = morphView ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;   // 컬러면 밝기만 뽑아서, 모폴로지면 처음부터 흑백
+  c.pixel_format = PIXFORMAT_RGB565;       // 늘 컬러 : 라인은 밝기만 뽑아서, 신호등은 색으로
   c.frame_size = FRAMESIZE_QQVGA;          // 160 x 120
   c.fb_count = 1;                          // 1장 : 판단하고 바로 버림 (메모리 아낌)
   c.fb_location = CAMERA_FB_IN_PSRAM;
@@ -632,7 +631,7 @@ void setup() {
   view = (uint8_t*)ps_malloc(W * H * 2);
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
-  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); morphView = prefs.getBool("morph", false);
+  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); morphView = prefs.getBool("morph", false); sigMode = prefs.getBool("sig", false);
   if (!startCamera()) {
     while (true) { Serial.println("E,camera"); delay(1000); }   // 카메라 리본 케이블 확인
   }
@@ -641,14 +640,27 @@ void setup() {
   xTaskCreatePinnedToCore(btTask, "bt", 4096, nullptr, 1, nullptr, 0);
 }
 
+// 신호등 : 위쪽에서 2칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음 (폰 화면 빨강·초록 기준, 실제로 재서 맞추기)
+void detectSignal(const uint8_t* b) {
+  static uint8_t cand = 0, same = 0;
+  int red = 0, grn = 0;
+  for (int y = 0; y < SIG_Y1; y += 2)
+    for (int x = 0; x < W; x += 2) {
+      int i = y * W + x;
+      uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
+      int r = (p >> 11) << 3, g = ((p >> 5) & 63) << 2, bl = (p & 31) << 3;
+      if (r >= 160 && g <= 80 && bl <= 80) red++;
+      else if (g >= 150 && r <= 110 && bl <= 150) grn++;
+    }
+  uint8_t now = red > SIG_MIN && red >= grn ? 1 : grn > SIG_MIN ? 2 : 0;
+  if (now == cand) { if (same < 3) same++; } else { cand = now; same = 1; }
+  if (same >= 3) sigState = cand;
+}
+
 void loop() {
   camera_fb_t* fb = esp_camera_fb_get();
   if (fb) {
-    if (morphView && fb->len >= (size_t)(W * H)) {   // 모폴로지 모드 : 카메라가 처음부터 흑백 (변환 없음)
-      buildMask(fb->buf);                  // 모폴로지 : 받은 흑백 사진에서 바로 (복사 없음)
-      trackLine();
-      frames++;
-    } else if (!morphView && fb->len >= (size_t)(W * H * 2)) {
+    if (fb->len >= (size_t)(W * H * 2)) {
       const uint8_t* b = fb->buf;
       for (int i = 0; i < W * H; i++) {    // RGB565 -> 밝기 (빨강 30% 초록 59% 파랑 11%)
         uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
@@ -656,7 +668,8 @@ void loop() {
       }
       buildMask(gray);
       trackLine();
-      memcpy(color, b, W * H * 2);
+      if (sigMode) detectSignal(b);
+      if (!morphView) memcpy(color, b, W * H * 2);   // 컬러 화면일 때만 (모폴로지 화면은 영상을 안 보냄)
       frames++;
     }
     esp_camera_fb_return(fb);
@@ -669,13 +682,19 @@ void loop() {
   // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); btSend('h'); }
   // 카메라 주행 : 화면이 닫혔거나 블루투스·모폴로지가 꺼지면 바로 멈춤 (사람이 안 보고 있으면 안 움직임)
+  // 신호등 + 라인센서 주행 : 빨간불이면 s 로 세우고, 초록불이면 a 로 다시 자동 주행 (교안 4팀의 g/s 와 같은 생각)
+  if (sigMode && btOn() && !camDrive) {
+    if (sigState == 1 && carLine[0] == 'a') { btSend('s'); sigHeldAuto = true; }
+    else if (sigState == 2 && sigHeldAuto) { btSend('a'); sigHeldAuto = false; }
+  }
   static unsigned long lastCam = 0, lineAt = 0;
   static char lastCamCmd = 'S';
   if (camDrive && (!btOn() || !morphView || millis() - lastViewer > 2500)) { camDrive = false; if (btOn()) btSend('s'); }
   if (camDrive && millis() - lastCam >= 150) {
     lastCam = millis();
     char c = 'S';
-    if (lastNear.found || lastFar.found) {
+    if (sigMode && sigState == 1) c = 'S';                 // 빨간불 : 정지 (초록이면 다시 감)
+    else if (lastNear.found || lastFar.found) {
       lineAt = millis();
       int p = lastNear.found && lastFar.found ? (lastNear.pos * 7 + lastFar.pos * 3) / 10 : (lastNear.found ? lastNear.pos : lastFar.pos);
       c = abs(p) <= CAM_SOFT ? 'G' : abs(p) <= CAM_HARD ? (p > 0 ? 'R' : 'L') : (p > 0 ? 'W' : 'Q');
