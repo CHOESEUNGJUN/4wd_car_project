@@ -1,7 +1,7 @@
 # 굴노 카메라 (ESP32-CAM) : 추가 프로젝트 브랜치 `extra/esp32cam`
 
-> 이 브랜치는 제출용 차량 코드(`main`, 버전 C PID)에 **ESP32-CAM 카메라**를 더한 추가 프로젝트입니다. 교안 2팀 **심화 B "1인칭 시점(카메라 화면) 조종"** (47쪽)을 넘어서, 카메라로 라인을 인식해 보여 주고 웹에서 블루투스로 차를 조종합니다.
-> 제출용 코드와 설명은 [`main` 브랜치](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/main)를 보세요.
+> 이 브랜치는 버전 C(PID, `main`)에 **ESP32-CAM 카메라**를 더한 **버전 D** 입니다 (버전 C·D 둘 다 제출용). 교안 2팀 **심화 B "1인칭 시점(카메라 화면) 조종"** (47쪽)을 넘어서, 카메라로 라인을 인식해 보여 주고 웹에서 블루투스로 차를 조종합니다.
+> 버전 C 만의 설명은 [`main` 브랜치](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/main)를 보세요.
 
 ```
  5V 외부 전원 ──▶ ESP32-CAM ── 와이파이 (내 핫스팟) ──▶ 폰·노트북 브라우저 http://gulno-cam.local
@@ -191,7 +191,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
-| `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (카메라 실험용) | 버전 C + 카메라 주행 글자 `G L R Q W` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
+| `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (제출용, 카메라 주행) | 버전 C + 카메라 주행 글자 `G L R Q W` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
 | `esp32/esp32cam_line/` (PlatformIO → ESP32-CAM) | ESP32-CAM 펌웨어 | 카메라로 라인 인식, 와이파이 웹 화면, 블루투스로 차 조종·카메라 주행 |
 | `arduino/diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10** |
