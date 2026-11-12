@@ -1,6 +1,6 @@
 # PID 기초와 우리 차(버전 C)의 PID
 
-버전 C (`team2_bt_pid/team2_bt_pid.ino`) 가 선을 따라가는 방법을 처음부터 설명한다.
+버전 C (`arduino/team2_bt_pid/team2_bt_pid.ino`) 가 선을 따라가는 방법을 처음부터 설명한다.
 
 ---
 
@@ -108,7 +108,7 @@ D항 = D항 × 0.8 + Kd × (오차 − 직전 오차)       (D_DECAY = 0.8)
 
 ## 3. 코드에서 고칠 곳
 
-`team2_bt_pid/team2_bt_pid.ino` 맨 위 `[설정]`
+`arduino/team2_bt_pid/team2_bt_pid.ino` 맨 위 `[설정]`
 
 | 이름 | 지금 | 뜻 |
 |---|---|---|
