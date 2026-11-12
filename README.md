@@ -190,8 +190,8 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
 | `team2_bt_pid/` | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
-| `team2_bt_cam/` | **버전 D** 차량 스케치 (준비만, 시험 전) | 버전 C + ESP32-CAM 카메라로 선 인식. 설명은 `docs/CAMERA.md` |
-| `esp32cam_line/` | ESP32-CAM 펌웨어 (준비만) | 카메라로 선 위치를 찾아 아두이노 D0 으로 보냄, 와이파이로 화면 |
+| `team2_bt_cam/` | **버전 D** 차량 스케치 (카메라 실험용) | 버전 C + 카메라 주행 글자 `G L R Q W` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
+| `esp32cam_line/` | ESP32-CAM 펌웨어 (PlatformIO) | 카메라로 라인 인식, 와이파이 웹 화면, 블루투스로 차 조종·카메라 주행 |
 | `diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10** |
 | `apps/android/` | 안드로이드 앱 | 안드로이드 + **HC-06** |

@@ -670,6 +670,7 @@ void loop() {
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); btSend('h'); }
   // 카메라 주행 : 화면이 닫혔거나 블루투스·모폴로지가 꺼지면 바로 멈춤 (사람이 안 보고 있으면 안 움직임)
   static unsigned long lastCam = 0, lineAt = 0;
+  static char lastCamCmd = 'S';
   if (camDrive && (!btOn() || !morphView || millis() - lastViewer > 2500)) { camDrive = false; if (btOn()) btSend('s'); }
   if (camDrive && millis() - lastCam >= 150) {
     lastCam = millis();
@@ -678,8 +679,10 @@ void loop() {
       lineAt = millis();
       int p = lastNear.found && lastFar.found ? (lastNear.pos * 7 + lastFar.pos * 3) / 10 : (lastNear.found ? lastNear.pos : lastFar.pos);
       c = abs(p) <= CAM_SOFT ? 'G' : abs(p) <= CAM_HARD ? (p > 0 ? 'R' : 'L') : (p > 0 ? 'W' : 'Q');
-    } else if (millis() - lineAt < CAM_LOST_MS) c = 0;   // 잠깐 놓침 : 이번엔 안 보냄 (직전 동작 유지)
-    if (c == 'S') btSend('s'); else if (c) btSend(c);
+    } else if (millis() - lineAt < CAM_LOST_MS) c = lastCamCmd;   // 잠깐 놓침 : 직전 명령을 다시 보냄
+    // (안 보내면 아두이노 버전 D 가 LINK_MS(0.45초) 뒤 수동 무명령으로 멈춰서 잠깐씩 섬)
+    lastCamCmd = c;
+    btSend(c == 'S' ? 's' : c);
   }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
   // 메모리 안전장치 : 남은 내부 메모리가 HEAP_MIN 보다 적은 상태가 5초 이어지면, 멈추기 전에 스스로 재시작

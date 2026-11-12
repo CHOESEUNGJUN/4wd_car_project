@@ -1,12 +1,9 @@
-/* 2팀 블루투스 수동/자동 + 카메라(ESP32-CAM) PID 라인트레이서 (버전 D)
- *  - 버전 C 와 같고, 선 위치를 ESP32-CAM 에서 받는다 (esp32cam_line, docs/CAMERA.md)
- *      ESP32-CAM U0T -> 아두이노 D0(RX), 9600. 한 줄 "C,<가까운>,<먼>,<플래그>" (위치 -100~100)
- *      카메라 결과가 끊기거나 선을 못 보면 라인센서 3개(버전 C 방식)로 자동 전환
- *  - 아두이노에 업로드할 때는 D0 선(ESP32 U0T)을 빼야 함. 시리얼 모니터는 9600 (보기만 가능)
- *  아래는 버전 C 설명
+/* 2팀 블루투스 수동/자동 + PID 라인트레이서 + 카메라 주행 (버전 D = 버전 C + ESP32-CAM 카메라 주행)
+ *  - 제출용은 버전 C (team2_bt_pid, main). 이 버전 D 는 카메라 실험용 (브랜치 extra/esp32cam)
+ *  - 버전 C 와 다른 곳 : 카메라 주행 글자 G L R Q W 를 받음 (serviceBT, driveManual, 장애물 막기). 나머지는 버전 C 와 같음
  *  - 자동 모드 주행 : 라인센서 3개(0/1)로 오차를 만들고 PID 로 좌우 속도를 정함. 밝은 바탕 + 검은 선
  *  - Kp, Ki, Kd, 기본 속도는 아래 [설정] 숫자를 고쳐서 업로드 (앱 PID 슬라이더는 쓰지 않음)
- *  - 블루투스/모드 전환/안전장치/상태 줄 : 버전 C 와 같음 (앱 그대로 사용)
+ *  - 블루투스/모드 전환/안전장치/상태 줄 : PROTOCOL.md (앱 굴노)
  *
  *  오차 (검은 선 = 1)        L C R
  *     0 : 가운데             0 1 0
@@ -19,6 +16,14 @@
  *  오차 ±2, ±3 (코너, 선 놓침) : 바깥 바퀴 CORNER_OUT, 안쪽 바퀴 CORNER_IN 으로 회전 (기본: 원을 그리듯)
  *    가운데 센서가 선을 다시 보면 PID 로 돌아감
  *  자세한 설명 : docs/PID.md
+ *
+ *  주행은 두 가지 (폰 앱 또는 ESP32-CAM 웹 화면의 버튼으로 고름)
+ *    라인센서 주행 : 'a' -> 자동 모드. 위의 라인센서 3개 + PID 로 이 아두이노가 스스로 달림 (0.02초마다 판단)
+ *    카메라 주행   : ESP32-CAM 이 카메라로 라인을 보고 대문자 G L R Q W 를 0.15초마다 보냄 (브랜치 extra/esp32cam).
+ *                    이 아두이노는 수동 모드에서 조종 글자처럼 받지만 속도는 자동 주행과 같음 :
+ *                    G = BASE/BASE, L·R = BASE∓KP (PID ±1 정도), Q·W = CORNER_OUT/CORNER_IN (코너와 같음).
+ *                    수동과 같은 안전장치 : LINK_MS 동안 명령이 없으면 정지, 앞 장애물이면 G L R 막음
+ *  메모리 : String·malloc 을 쓰지 않음 (UNO 는 2KB 라 조각나면 멈춤). 글자는 F() 로 플래시에서 바로
  */
 
 #include <SoftwareSerial.h>
@@ -29,7 +34,7 @@
 // ============================================================
 
 // --- PID ---
-const float KP = 50;        // 오차 1 당 보정. 좌우로 흔들리면 내림
+const float KP = 51;        // 오차 1 당 보정. 좌우로 흔들리면 내림
 const float KI = 0.2;         // 누적 오차(오차 x 초) 1 당 보정. 긴 커브에서 점점 더 꺾게 함. 0 부터 조금씩
 const float KD = 30;        // 오차가 한 칸 바뀔 때 반대로 잡아 주는 양. 흔들림이 남으면 올림
 const int BASE = 120;       // 기본 속도 (0~255)
@@ -37,7 +42,7 @@ const int BASE = 120;       // 기본 속도 (0~255)
 //   CORNER_IN  -170 : 제자리 회전 (확실히 돌지만 접지력이 많이 필요. 요철에서 미끄러짐)
 //   CORNER_IN   -90 : 안쪽은 천천히 뒤로, 바깥은 앞으로 (4바퀴 모두 돌면서 돎. 시뮬레이션에서 가장 잘 돎)
 //   CORNER_IN     0 : 안쪽 바퀴를 세우고 바깥만 돌림 (예전 방식)
-const int CORNER_OUT = 220;     // 바깥 바퀴 (앞으로)
+const int CORNER_OUT = 180;     // 바깥 바퀴 (앞으로). 새 배터리(전압 높음)에서 220 은 너무 크게 돎. 배터리 약해져 덜 돌면 200~220
 const int CORNER_IN = -90;      // 안쪽 바퀴 (- 는 뒤로). 감속기가 작아 힘이 약하므로 0 이 아니면 최소 MIN_PWM(90),
                                 //   방향이 바뀌는 순간 0.08초 최대 힘(KICK). 안 돌면 -130 쪽으로, 요철에서 미끄러지면 -90 쪽으로
 const unsigned long PID_MS = 20;      // PID 계산 주기
@@ -46,31 +51,26 @@ const float I_LIMIT = 50;             // 누적 오차 한계 (너무 쌓이지 
 // 그래서 D 는 바뀐 순간 생긴 값을 20ms 마다 이 비율로 줄이며 약 0.1초 동안 이어지게 한다.
 const float D_DECAY = 0.8;
 
-// --- 카메라 (ESP32-CAM) : 위치 -100~100 을 -1~1 로 바꿔서 PID ---
-const float KP_CAM = 80;          // 위치 1(화면 끝) 당 보정
-const float KI_CAM = 0;
-const float KD_CAM = 40;
-const int CAM_FAR_MIX = 30;       // 먼 띠를 몇 % 섞을지 (커브를 미리 돎). 0 이면 가까운 띠만
-const int CAM_CORNER = 70;        // 위치가 이보다 바깥이면 코너 회전 (CORNER_OUT / CORNER_IN)
-const unsigned long CAM_TIMEOUT_MS = 200;   // 카메라 결과가 이보다 오래되면 라인센서로
-
 // --- 선 놓침 / 교차선 ---
-const unsigned long LOST_STOP_MS = 1500;   // 선을 이만큼 못 보면 정지 (그동안은 마지막 쪽으로 크게 꺾으며 찾음)
+const unsigned long LOST_PID_MS = 500;     // 선을 놓치면 먼저 이만큼 PID 로 마지막 쪽으로 보정 (앞으로 가며 완만히, 안쪽 바퀴 0 까지만)
+const unsigned long LOST_STOP_MS = 500;    // 그래도 없으면 이만큼 마지막으로 본 쪽으로 크게 꺾으며 찾음 (길면 너무 많이 돎)
+const unsigned long BACK_SEARCH_MS = 1000; // 그래도 없으면 반대쪽으로 이만큼 (되돌아오는 0.5초 + 반대쪽 0.5초) 찾고 정지.
+                                           // 센서 간격(4.9cm)이 테이프(1.9cm)보다 넓어 코너 뒤 넘치면 선이 반대쪽 틈에 있음
 const unsigned long CROSS_STOP_MS = 500;   // 센서 3개 모두 검정이 이만큼 계속되면 정지 (선 끝)
 
 // --- 장애물 ---
-const int AVOID_MM = 50;              // 이 거리(5cm) 안이면 정지 (자동), 전진 금지 (수동)
+const int AVOID_MM = 100;             // 이 거리(10cm) 안이면 정지 (자동), 전진 금지 (수동). 5cm 는 멈추기 전에 부딪힐 수 있어 10cm
 const int CLEAR_COUNT = 5;            // 연속 이만큼 안 보여야 다시 출발
 const unsigned long PING_MS = 60;     // 초음파 쏘는 간격
 const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
 
 // --- 블루투스 / 모드 ---
-const unsigned long LINK_MS = 450;         // 수동: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
+const unsigned long LINK_MS = 450;         // 수동·카메라 주행: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다, 카메라 주행은 0.15초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
 // --- 수동 조종 힘 (바닥에서 4륜은 바퀴가 미끄러지며 돌아서 힘이 많이 듦. 차에 맞게 조정) ---
-const int MAN_FWD = 130;            // 전진·후진
-const int MAN_CURVE_OUT = 255;      // 곡선 회전 바깥 바퀴
+const int MAN_FWD = 100;            // 전진·후진 (새 배터리에서 130 은 빠름. MIN_PWM 90 보다 작으면 출발 못 함)
+const int MAN_CURVE_OUT = 100;      // 곡선 회전 바깥 바퀴 (255 -> 100, 차에서 맞춤)
 const int MAN_CURVE_IN = 80;       // 곡선 회전 안쪽 바퀴
-const int MAN_SPIN = 230;           // 제자리 회전
+const int MAN_SPIN = 130;           // 제자리 회전 (230 -> 130, 차에서 맞춤)
 const int MIN_PWM = 90;             // 0 이 아니면 최소 이만큼 (작으면 바닥에서 모터가 안 돎)
 const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘
 const unsigned long KICK_MS = 120;  // 그 시간 (배터리가 약해도 출발하게 0.08 -> 0.12초)
@@ -114,9 +114,6 @@ int pidErr = 0;           // 지금 오차 (-3~3)
 float pidOut = 0;         // 지금 보정값
 int motorL = 0, motorR = 0;   // 실제로 모터에 준 속도 (-255~255, 음수는 뒤로). 시리얼 로그용
 int lastErr = 0, lastSide = 0;
-int camNear = 0, camFar = 0, camFlags = 0;   // ESP32-CAM 에서 받은 마지막 값
-unsigned long camAt = 0;
-float camLastErr = 0;
 float integ = 0, dTerm = 0;
 unsigned long lastPid = 0, lostSince = 0, crossSince = 0;
 
@@ -135,17 +132,16 @@ void setup() {
   pinMode(LeftMotor_3_pin, OUTPUT);
   pinMode(LeftMotor_4_pin, OUTPUT);
   pinMode(LeftMotor_E_pin, OUTPUT);
-  Serial.begin(9600);    // D0 으로 ESP32-CAM 결과를 받음 (9600). 시리얼 모니터도 9600
+  Serial.begin(115200);  // 시리얼 모니터도 115200
   BT.begin(9600);        // 블루투스 모듈은 9600
   stopCar();
-  Serial.print(F("=== 버전 C (PID) 시작 === Kp ")); Serial.print(KP);
+  Serial.print(F("=== 버전 D (PID + 카메라 주행) 시작 === Kp ")); Serial.print(KP);
   Serial.print(F(" Ki ")); Serial.print(KI);
   Serial.print(F(" Kd ")); Serial.print(KD);
   Serial.print(F(" 기본 속도 ")); Serial.println(BASE);
 }
 
 void loop() {
-  readCamera();
   serviceBT();
   if (millis() - lastPing >= PING_MS) updateObstacle();
 
@@ -153,7 +149,9 @@ void loop() {
   if (millis() < holdUntil) { stopCar(); stage = "HOLD"; return; }
 
   if (mode == AUTO) {
-    if (obstacleStopped) { stopCar(); act = 'o'; stage = "OBST"; resetPid(); return; }
+    // 장애물 : 정지하고 기다림. 치워지면(CLEAR_COUNT 번 연속 안 보이면) 그 자리에서 다시 라인 추종.
+    // 기다린 시간이 선 놓침·교차 시간에 들어가지 않게 타이머를 비움 (안 비우면 출발하자마자 LOST)
+    if (obstacleStopped) { stopCar(); act = 'o'; stage = "OBST"; resetPid(); lostSince = 0; crossSince = 0; return; }
     pidLine();
     return;
   }
@@ -162,7 +160,7 @@ void loop() {
   stage = "MAN";
   pidErr = 0; pidOut = 0;
   if (millis() - lastRx > LINK_MS) cmd = 's';
-  bool blocked = obstacleStopped && (cmd == 'g' || cmd == 'l' || cmd == 'r');
+  bool blocked = obstacleStopped && strchr("glrGLR", cmd);   // 앞에 장애물 : 앞으로 가는 명령만 막음 (카메라 주행 글자 포함)
   driveManual(blocked ? 's' : cmd);
   if (blocked) act = 'o';
 }
@@ -180,53 +178,7 @@ int lineError(int L, int C, int R) {
   return 0;   // 1,0,1 / 1,1,1 은 가운데로 봄
 }
 
-void resetPid() { integ = 0; dTerm = 0; lastErr = 0; camLastErr = 0; lastPid = 0; }
-
-// ---- 카메라 ----
-// D0 으로 들어오는 "C,<가까운>,<먼>,<플래그>" 한 줄씩 읽기
-void readCamera() {
-  static char buf[24];
-  static byte n = 0;
-  while (Serial.available()) {
-    char c = Serial.read();
-    if (c == '\n') {
-      buf[n] = 0; n = 0;
-      int a, b, f;
-      if (buf[0] == 'K' && buf[1] == ',') onCommand(buf[2]);   // 와이파이 웹 조종 (ESP32 가 전달)
-      else if (buf[0] == 'C' && sscanf(buf + 2, "%d,%d,%d", &a, &b, &f) == 3) { camNear = a; camFar = b; camFlags = f; camAt = millis(); }
-    } else if (c != '\r' && n < sizeof(buf) - 1) buf[n++] = c;
-  }
-}
-
-// 카메라 결과가 최근 것이고, 가까운 띠나 먼 띠에서 선을 봤을 때만 카메라로 달린다
-bool camFresh() { return camAt != 0 && millis() - camAt < CAM_TIMEOUT_MS && (camFlags & 3); }
-
-void camPid(float dt) {
-  int pos;
-  if (camFlags & 4) pos = 0;                                         // 교차선 : 직진
-  else if ((camFlags & 1) && (camFlags & 2)) pos = (camNear * (100 - CAM_FAR_MIX) + camFar * CAM_FAR_MIX) / 100;
-  else if (camFlags & 1) pos = camNear;
-  else pos = camFar;                                                 // 가까운 띠는 놓치고 먼 띠만 : 그쪽으로
-  stage = "CAM";
-  lostSince = 0; crossSince = 0;
-  if (pos != 0) lastSide = pos > 0 ? 1 : -1;
-  pidErr = pos;
-  if (abs(pos) >= CAM_CORNER) {                                      // 코너 : 버전 C 와 같은 방식
-    if (pos > 0) driveManualLR(CORNER_OUT, CORNER_IN); else driveManualLR(CORNER_IN, CORNER_OUT);
-    integ = 0; dTerm = 0; camLastErr = pos / 100.0; pidOut = 0;
-    act = pos > 0 ? 'w' : 'q';
-    return;
-  }
-  float e = pos / 100.0;
-  if ((e > 0 && integ < 0) || (e < 0 && integ > 0)) integ = 0;
-  integ = constrain(integ + e * dt, -I_LIMIT, I_LIMIT);
-  dTerm = dTerm * D_DECAY + KD_CAM * (e - camLastErr);
-  camLastErr = e;
-  float u = KP_CAM * e + KI_CAM * integ + dTerm;
-  pidOut = u;
-  driveManualLR(constrain(BASE + (int)u, 0, 255), constrain(BASE - (int)u, 0, 255));
-  act = u > 20 ? 'r' : u < -20 ? 'l' : 'g';
-}
+void resetPid() { integ = 0; dTerm = 0; lastErr = 0; lastPid = 0; }
 
 void pidLine() {
   unsigned long now = millis();
@@ -234,10 +186,9 @@ void pidLine() {
   float dt = (lastPid == 0 || now - lastPid > 200) ? PID_MS / 1000.0 : (now - lastPid) / 1000.0;
   lastPid = now;
 
-  if (camFresh()) { camPid(dt); return; }    // 카메라가 선을 보고 있으면 카메라로
-
   int L = digitalRead(L_Line), C = digitalRead(C_Line), R = digitalRead(R_Line);
   int e;
+  bool lostPid = false;                      // 선 놓친 직후 : 회전 대신 PID 보정
 
   if (L && C && R) {                         // 모두 검정 : 교차선이면 지나가고, 오래 계속되면 선 끝
     if (crossSince == 0) crossSince = now;
@@ -246,11 +197,13 @@ void pidLine() {
     e = 0;
   } else crossSince = 0;
 
-  if (!L && !C && !R) {                      // 선 놓침 : 마지막으로 본 쪽으로 크게 꺾으며 찾기
+  if (!L && !C && !R) {                      // 선 놓침 : PID 보정 -> 마지막 쪽으로 크게 꺾으며 찾기 -> 반대쪽 -> 정지
     if (lostSince == 0) lostSince = now;
-    if (now - lostSince >= LOST_STOP_MS) { stopCar(); stage = "LOST"; resetPid(); return; }
+    unsigned long lost = now - lostSince;
+    if (lost >= LOST_PID_MS + LOST_STOP_MS + (lastSide != 0 ? BACK_SEARCH_MS : 0)) { stopCar(); stage = "LOST"; resetPid(); return; }
     stage = "NOLINE";
-    e = lastSide * 3;
+    lostPid = lost < LOST_PID_MS;
+    e = (lost < LOST_PID_MS + LOST_STOP_MS ? lastSide : -lastSide) * 3;   // 마지막 쪽 먼저, 못 찾으면 반대쪽
   } else if (!(L && C && R)) {
     lostSince = 0;
     stage = "LINE";
@@ -261,7 +214,7 @@ void pidLine() {
   // 코너(끝 센서만 선을 봄, ±2) 또는 선 놓침(±3) : 바깥 바퀴 CORNER_OUT, 안쪽 바퀴 CORNER_IN 으로 돈다.
   // (조향이 없으니 좌우 바퀴 힘 차이로 돈다. CORNER_IN 이 음수면 안쪽 바퀴가 뒤로 돌아 더 날카롭게 돎)
   // 가운데 센서가 선을 다시 보면(오차 ±1 이하) 아래 PID 로 돌아간다.
-  if (abs(e) >= 2) {
+  if (abs(e) >= 2 && !lostPid) {
     int dir = e > 0 ? 1 : -1;                       // + 오른쪽으로 돎
     // 수동 조종과 같은 힘 다듬기(최소 MIN_PWM, 방향 바뀔 때 KICK)를 거쳐서 4바퀴가 실제로 돌게 한다
     if (dir > 0) driveManualLR(CORNER_OUT, CORNER_IN);   // 오른쪽 코너 : 왼쪽이 바깥
@@ -308,24 +261,23 @@ void updateObstacle() {
 // 블루투스
 // ============================================================
 // 들어온 글자 처리 + 0.2초마다 상태 줄 송신 + 0.2초마다 시리얼 로그
-// 조종 글자 하나 처리. 블루투스(앱)와 카메라 선(와이파이 웹 조종, "K,g")이 같이 쓴다
-void onCommand(char c) {
-  // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
-  if (c == 0 || !strchr("gblrsqwamh", c)) return;
-  lastLink = millis();
-  // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
-  if (c == 'h') return;
-  lastRx = millis();
-  if (c == 'a') setMode(AUTO);
-  else if (c == 'm') setMode(MANUAL);
-  else {
-    if (mode == AUTO) setMode(MANUAL);  // 자동 중 조종 명령 = 사람이 개입
-    cmd = c;
-  }
-}
-
 void serviceBT() {
-  while (BT.available()) onCommand(BT.read());
+  while (BT.available()) {
+    char c = BT.read();
+    // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
+    if (c == 0 || !strchr("gblrsqwamhGLRQW", c)) continue;   // 대문자 G L R Q W = 카메라 주행 (ESP32-CAM 이 보냄)
+    lastLink = millis();
+    // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
+    if (c == 'h') continue;
+    Serial.print(F("수신: ")); Serial.println(c);
+    lastRx = millis();
+    if (c == 'a') setMode(AUTO);
+    else if (c == 'm') setMode(MANUAL);
+    else {
+      if (mode == AUTO) setMode(MANUAL);  // 자동 중 조종 명령 = 사람이 개입
+      cmd = c;
+    }
+  }
   unsigned long now = millis();
   // 자동 중 폰 신호('h' 등)가 AUTO_LINK_MS 넘게 없으면 끊긴 것 → 정지하고 수동으로
   if (mode == AUTO && millis() - lastLink > AUTO_LINK_MS) {
@@ -342,7 +294,7 @@ void serviceBT() {
     BT.print(','); BT.print(pidErr);
     BT.print(','); BT.println((int)pidOut);
   }
-  if (now - lastLog >= 1000) {     // 9600 이라 로그가 길면 주행이 멈칫해서 1초마다
+  if (now - lastLog >= 200) {
     lastLog = now;
     bool linked = lastLink != 0 && now - lastLink < LINK_SHOW_MS;
     Serial.print(linked ? F("링크=O ") : F("링크=X "));
@@ -381,9 +333,15 @@ void driveManual(char c) {
     case 'r': driveManualLR( MAN_CURVE_OUT, MAN_CURVE_IN); break;    // 우회전(곡선)
     case 'q': driveManualLR(-MAN_SPIN,  MAN_SPIN); break;            // 제자리 좌회전
     case 'w': driveManualLR( MAN_SPIN, -MAN_SPIN); break;            // 제자리 우회전
+    // 카메라 주행 (ESP32-CAM 이 카메라로 보고 0.15초마다 보냄) : 수동 조종처럼 받지만 속도는 자동 주행과 같게
+    case 'G': driveManualLR(BASE, BASE); break;                                        // 직진
+    case 'L': driveManualLR(BASE - (int)KP, BASE + (int)KP); break;                    // 살짝 왼쪽 (PID ±1 보정 정도)
+    case 'R': driveManualLR(BASE + (int)KP, BASE - (int)KP); break;                    // 살짝 오른쪽
+    case 'Q': driveManualLR(CORNER_IN, CORNER_OUT); break;                             // 크게 왼쪽 (코너와 같음)
+    case 'W': driveManualLR(CORNER_OUT, CORNER_IN); break;                             // 크게 오른쪽
     default:  brakeCar(); act = 's'; return;              // 's' 포함 : 브레이크로 바로 섬
   }
-  act = c;
+  act = tolower(c);                                       // 앱에는 소문자로 (g l r q w 와 같은 동작 이름)
 }
 
 // 수동 조종용 모터 힘 다듬기
