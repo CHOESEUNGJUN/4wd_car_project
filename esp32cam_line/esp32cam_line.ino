@@ -23,6 +23,7 @@
 #include "img_converters.h"
 #include "esp_http_server.h"
 #include "BluetoothSerial.h"
+#include <atomic>
 
 // ============================================================
 // [설정]
@@ -109,7 +110,12 @@ volatile bool btWant = false;             // 연결 유지 (끄면 폰 앱이 HC
 volatile bool btScanReq = false, btScanning = false, btFail = false;
 const uint32_t HEAP_MIN = 12000;          // 내부 메모리가 이보다 적게 5초 이어지면 재시작 (아래 loop)
 const uint32_t BT_NEED = 40000;           // 블루투스를 켤 때 남아 있어야 할 내부 메모리 (PlatformIO 빌드는 블루투스가 외부 메모리를 먼저 써서 적게 필요)
+// 블루투스 상태는 여러 작업(웹 서버, 블루투스 작업, loop)이 같이 씀 -> 반드시 btLock 을 잡고 읽고 씀
+// (안 잡으면 한쪽이 String 을 바꾸는 사이 다른 쪽이 읽다가 메모리가 깨져서 멈출 수 있음)
+SemaphoreHandle_t btLock = xSemaphoreCreateMutex();   // btAddr, btName, btLabel, btList
+SemaphoreHandle_t txLock = xSemaphoreCreateMutex();   // BT.write (조종 글자는 웹 서버, 연결 신호 h 는 loop 가 보냄)
 String btAddr, btName;                    // 연결할 기기 (목록에서 고르면 ESP32 에 저장)
+void btSend(char c) { xSemaphoreTake(txLock, portMAX_DELAY); BT.write(c); xSemaphoreGive(txLock); }
 char btLabel[40] = "";                    // 화면에 보일 기기 이름 (바꿀 때 한 번만 만들어 둠)
 void setBtLabel() {
   const String& s = btName.length() ? btName : btAddr;
@@ -250,7 +256,7 @@ bool makeJpeg(uint8_t** jpg, size_t* len) {
 // 연속 영상 (MJPEG). 따로 도는 서버(포트 81)라 라인 인식·조종을 막지 않는다
 // 화면마다 따로 작업을 띄워서 보냄 -> 노트북·폰 2개까지 동시에 영상 (하나가 붙잡고 있어도 다른 화면이 기다리지 않음)
 const int MAX_VIEWERS = 2;                // 화면 하나당 내부 메모리 약 4KB
-volatile int viewers = 0;
+std::atomic<int> viewers{0};              // 웹 서버가 더하고 영상 작업이 뺌 (동시에 일어나도 안 틀어지게)
 SemaphoreHandle_t jpgLock;                // makeJpeg 의 view 버퍼를 여러 화면이 같이 쓰지 않게
 
 void streamLoop(httpd_req_t* req) {
@@ -306,7 +312,10 @@ esp_err_t route(httpd_req_t* r) {
 void pageMain() { if (setupMode) handleSetupPage(); else send(200, "text/html", PAGE); }
 void pageCam() { send(200, "text/html", PAGE); }
 void pageSave() { if (setupMode) handleSave(); else send(403); }
-void pageList() { send(200, "application/json", btList); }
+void pageList() {
+  xSemaphoreTake(btLock, portMAX_DELAY); String l = btList; xSemaphoreGive(btLock);
+  send(200, "application/json", l);
+}
 
 // 설정 모드 : 폰이 여는 아무 주소나 설정 화면으로 (공항 와이파이처럼)
 esp_err_t notFound(httpd_req_t* r, httpd_err_code_t) {
@@ -362,11 +371,16 @@ void btTask(void*) {
         j += "{\"n\":\"" + esc(d->haveName() ? String(d->getName().c_str()) : String("")) + "\",\"a\":\"" +
              d->getAddress().toString() + "\",\"r\":" + String(d->getRSSI()) + "}";
       }
-      btList = j + "]";
+      j += "]";
+      xSemaphoreTake(btLock, portMAX_DELAY); btList = j; xSemaphoreGive(btLock);
       btScanning = false;
     }
     static unsigned long lastTry = 0;      // 연결 재시도는 5초마다 (자주 하면 와이파이와 안테나를 다퉈서 화면이 끊김)
-    if (btWant && btAddr.length() && !BT.connected() && millis() - lastTry > 5000) { lastTry = millis(); BT.connect(BTAddress(btAddr)); }
+    if (btWant && !BT.connected() && millis() - lastTry > 5000) {
+      lastTry = millis();
+      xSemaphoreTake(btLock, portMAX_DELAY); String a = btAddr; xSemaphoreGive(btLock);   // 복사해서 잠금 밖에서 연결 (몇 초 걸림)
+      if (a.length()) BT.connect(BTAddress(a));
+    }
     if (!btWant && BT.connected()) { BT.disconnect(); carClear = true; }
     vTaskDelay(pdMS_TO_TICKS(300));
   }
@@ -388,12 +402,13 @@ void readCar() {                           // 아두이노 상태 줄 받기 (�
 void handleBt() {
   if (hasArg("scan")) btScanReq = true;
   if (hasArg("a")) {
-    btAddr = arg("a"); btName = arg("n"); setBtLabel();
-    prefs.putString("bt_addr", btAddr); prefs.putString("bt_name", btName);
+    String a = arg("a"), n = arg("n");
+    xSemaphoreTake(btLock, portMAX_DELAY); btAddr = a; btName = n; setBtLabel(); xSemaphoreGive(btLock);
+    prefs.putString("bt_addr", a); prefs.putString("bt_name", n);
     if (btOn()) BT.disconnect();
     btWant = true;
   }
-  if (hasArg("on")) btWant = arg("on") == "1" && btAddr.length();
+  if (hasArg("on")) { xSemaphoreTake(btLock, portMAX_DELAY); bool has = btAddr.length(); xSemaphoreGive(btLock); btWant = arg("on") == "1" && has; }
   send(204);
 }
 
@@ -434,7 +449,7 @@ esp_err_t wsHandler(httpd_req_t* r) {
   f.payload = b;
   if (httpd_ws_recv_frame(r, &f, sizeof b) != ESP_OK) return ESP_FAIL;
   // 조종 글자 하나 : 앱과 똑같이 그대로 차에 (아두이노는 버전 C 그대로)
-  if (f.type == HTTPD_WS_TYPE_TEXT && f.len == 1 && !setupMode && strchr("gblrsqwam", b[0]) && btOn()) BT.write(b[0]);
+  if (f.type == HTTPD_WS_TYPE_TEXT && f.len == 1 && !setupMode && strchr("gblrsqwam", b[0]) && btOn()) btSend(b[0]);
   return ESP_OK;
 }
 
@@ -643,7 +658,7 @@ void loop() {
   if (morphView && millis() - lastMask >= 100) { lastMask = millis(); pushMask(); }
   // 화면이 열려 있는 동안(웹소켓 연결) 차에 연결 신호 h 를 0.6초마다 대신 보냄.
   // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
-  if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); BT.write('h'); }
+  if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); btSend('h'); }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
   // 메모리 안전장치 : 남은 내부 메모리가 HEAP_MIN 보다 적은 상태가 5초 이어지면, 멈추기 전에 스스로 재시작
   // (핫스팟·블루투스는 저장돼 있어서 다시 붙음). 누수가 있으면 시리얼 I,heap 값이 계속 줄어든다

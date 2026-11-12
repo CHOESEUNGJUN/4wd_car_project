@@ -93,7 +93,7 @@ async function loadList(){
   $('btl').innerHTML=l.length?l.sort((a,b)=>b.r-a.r).map(d=>`<button data-a="${d.a}" data-n="${d.n}"><span>${d.n||'(이름 없음)'}</span><small>${d.a} · ${d.r}dBm</small></button>`).join(''):'<div class="hint">찾은 기기 없음 (차 전원, 폰 앱 연결 확인)</div>';
   $('btl').querySelectorAll('button').forEach(b=>b.onclick=()=>{fetch('/bt?a='+encodeURIComponent(b.dataset.a)+'&n='+encodeURIComponent(b.dataset.n));$('btl').innerHTML='';});
 }
-$('btScan').onclick=()=>{fetch('/bt?scan=1');$('btl').innerHTML='<div class="hint">찾는 중… (약 5초)</div>';};
+$('btScan').onclick=()=>{if(!confirm('기기를 찾는 동안 차와의 블루투스 연결이 잠깐 끊깁니다 (주행 중이면 차가 멈춤). 찾을까요?'))return; fetch('/bt?scan=1');$('btl').innerHTML='<div class="hint">찾는 중… (약 5초)</div>';};
 $('btOn').onclick=()=>fetch('/bt?on=1');
 $('btOff').onclick=()=>fetch('/bt?on=0');
 // 화면 : 컬러 = /stream 연속 영상(MJPEG), 모폴로지 = 웹소켓으로 온 마스크(RLE)를 캔버스에 그림 (영상 안 받음)
