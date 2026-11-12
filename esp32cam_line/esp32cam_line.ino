@@ -43,8 +43,10 @@ const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초�
 const int DARK_OFFSET = 40;               // 그 줄 평균 밝기보다 이만큼 어두우면 "라인". 바닥·조명에 맞게 여기서 바꿈
 const int MIN_DARK_COLS = 3;              // 선으로 칠 최소 폭 (칸). 이보다 좁으면 잡음
 const float CROSS_RATIO = 0.6;            // 한 줄의 이 비율 넘게 검정이면 교차선
-bool camGray = false;                     // 흑백으로 찍기 (컬러의 절반 크기라 더 빠름). 라인 확인이 끝나면 켬. 웹 화면에서 바꾸면 저장됨
-volatile bool camReinit = false;          // 컬러/흑백을 바꿨으니 카메라를 다시 켜야 함 (loop 에서)
+// 화면 모드 : false = 컬러 (테스트 : 실제 사진 위에 인식 결과), true = 모폴로지 (라인 확인 후 : 흰 바탕에 정리된 검정 라인만, 가볍고 빠름)
+// 모폴로지는 카메라가 처음부터 흑백으로 찍어서 변환이 없다. 바꾸면 저장하고 ESP32 를 다시 켠다
+// (실행 중에 카메라를 껐다 켜면 메모리 조각화·누수 위험이 있어서 재시작으로)
+bool morphView = false;
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
 
 // AI-Thinker ESP32-CAM 핀
@@ -101,11 +103,19 @@ void send(int code, const char* type = "text/plain", const String& body = "") {
 BluetoothSerial BT;
 volatile bool btReady = false;            // BT.begin 끝남 (그 전에 BT 를 건드리면 멈춤)
 bool btOn() { return btReady && BT.connected(); }
-String carLine;
+char carLine[64] = "";                    // 아두이노 상태 줄 (loop 에서만 씀. 큰따옴표·역슬래시는 빼고 저장)
+volatile bool carClear = false;           // 블루투스 끊김 -> 상태 줄 비우기 (btTask 가 표시, loop 가 비움)
 volatile bool btWant = false;             // 연결 유지 (끄면 폰 앱이 HC-06 을 쓸 수 있음)
 volatile bool btScanReq = false, btScanning = false, btFail = false;
 const uint32_t BT_NEED = 40000;           // 블루투스를 켤 때 남아 있어야 할 내부 메모리 (PlatformIO 빌드는 블루투스가 외부 메모리를 먼저 써서 적게 필요)
 String btAddr, btName;                    // 연결할 기기 (목록에서 고르면 ESP32 에 저장)
+char btLabel[40] = "";                    // 화면에 보일 기기 이름 (바꿀 때 한 번만 만들어 둠)
+void setBtLabel() {
+  const String& s = btName.length() ? btName : btAddr;
+  size_t n = 0;
+  for (size_t i = 0; i < s.length() && n < sizeof btLabel - 1; i++) if (s[i] != '"' && s[i] != '\\' && s[i] != '<') btLabel[n++] = s[i];
+  btLabel[n] = 0;
+}
 String btList = "[]";                     // 찾은 기기 목록 JSON [{"n":이름,"a":주소,"r":신호}]
 DNSServer dns;                            // 설정 모드 : 어떤 주소를 쳐도 설정 화면으로 (공항 와이파이처럼)
 Preferences prefs;
@@ -114,7 +124,9 @@ String setupName, setupPass, ssidOptions, myIp, savedSsid, failWhy;
 unsigned long lastInfo = 0;
 String esc(String t);                     // 아래 와이파이 설정 부분에 있음
 // 사진은 판단하고 버림. 화면용 버퍼는 전부 외부 메모리(PSRAM) : 내부 메모리는 와이파이·블루투스가 써야 해서
-uint8_t* gray;                            // 선 찾기용 흑백 (W x H)
+uint8_t* gray;                            // 밝기 (W x H)
+uint8_t* mask;                            // 라인 마스크 1 = 라인(검정 테이프), 0 = 바닥. 모폴로지로 정리한 것 (W x H)
+uint8_t* tmp;                             // 모폴로지 중간 단계
 uint8_t* color;                           // 화면용 컬러 RGB565 (W x H x 2)
 uint8_t* view;                            // 띠·선을 그린 화면 복사본 (RGB565)
 Band lastNear, lastFar;
@@ -136,20 +148,44 @@ Band summary(int y0, int y1) {            // y0~y1 줄의 라인 가운데 평�
   return b;
 }
 
-void trackLine(const uint8_t* img) {
+// 이진화 + 모폴로지 열림 : 줄마다 평균보다 DARK_OFFSET 어두우면 라인 후보(1) -> 침식(3x3 모두 1 이어야 1 : 작은 점·가는 잡음 지움)
+// -> 팽창(3x3 중 하나라도 1 이면 1 : 라인 굵기 되돌림). 정리된 mask 를 라인 추적과 모폴로지 화면에 같이 쓴다
+void buildMask(const uint8_t* img) {
+  for (int y = 0; y < H; y++) {
+    const uint8_t* r = img + y * W;
+    long sum = 0;
+    for (int x = 0; x < W; x++) sum += r[x];
+    int th = sum / W - DARK_OFFSET;       // 바닥이 완전히 흰색이 아니어도, 그 줄 평균보다 어두우면 라인 (조명 따라감)
+    for (int x = 0; x < W; x++) mask[y * W + x] = r[x] < th;
+  }
+  for (int pass = 0; pass < 2; pass++) {  // 0 = 침식 mask -> tmp, 1 = 팽창 tmp -> mask
+    const uint8_t* in = pass ? tmp : mask;
+    uint8_t* out = pass ? mask : tmp;
+    for (int y = 0; y < H; y++)
+      for (int x = 0; x < W; x++) {
+        int all = 1, any = 0;
+        for (int dy = -1; dy <= 1; dy++)
+          for (int dx = -1; dx <= 1; dx++) {
+            int yy = y + dy, xx = x + dx;
+            uint8_t v = (yy < 0 || yy >= H || xx < 0 || xx >= W) ? 0 : in[yy * W + xx];
+            all &= v; any |= v;
+          }
+        out[y * W + x] = pass ? any : all;
+      }
+  }
+}
+
+void trackLine() {                        // mask 에서 라인 따라가기
   for (int y = 0; y < H; y++) trC[y] = -1;
   int prev = -1, miss = 0; bool cross = false;
   trTop = H;
   for (int y = H - 1; y >= 0; y--) {
-    const uint8_t* r = img + y * W;
-    long sum = 0;
-    for (int x = 0; x < W; x++) sum += r[x];
-    int th = sum / W - DARK_OFFSET;        // 그 줄 평균보다 DARK_OFFSET 어두우면 검정 (조명 따라감)
+    const uint8_t* r = mask + y * W;
     int best = -1, bl = 0, br = 0, bestD = 9999, darkAll = 0;
     for (int x = 0; x < W;) {
-      if (r[x] >= th) { x++; continue; }
+      if (!r[x]) { x++; continue; }
       int st = x;
-      while (x < W && r[x] < th) x++;
+      while (x < W && r[x]) x++;
       int w = x - st; darkAll += w;
       if (w < MIN_DARK_COLS) continue;
       int c = st + w / 2;
@@ -180,18 +216,19 @@ void trackLine(const uint8_t* img) {
 // 지금 프레임 + 띠·선 표시를 JPEG 로 (화면 한 장, 스트림 공용)
 // RGB565 색 (앞 바이트가 높은 쪽)
 const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF;
-inline void dot(int x, int y, uint16_t c) {   // 흑백일 때는 색 대신 밝기 (초록 = 흰색, 노랑·빨강 = 흰/검 무늬)
+inline void dot(int x, int y, uint16_t c) {   // 모폴로지 화면(흰 바탕·검정 라인)에서는 경로 = 회색, 향할 곳·차 가운데 = 검정
   if (x < 0 || x >= W || y < 0 || y >= H) return;
-  if (camGray) { view[y * W + x] = c == GREEN || c == WHITE ? 255 : ((x + y) & 1) ? 0 : 255; return; }
+  if (morphView) { view[y * W + x] = c == YELLOW ? 128 : 0; return; }
   view[(y * W + x) * 2] = c >> 8; view[(y * W + x) * 2 + 1] = c & 0xFF;
 }
 
 // 화면 : 인식한 라인 = 초록 칠, 라인 가운데 경로 = 노란 점, 차 -> 향할 곳 = 빨간 선과 점, 차 가운데 = 흰 점선 (아래쪽)
 bool makeJpeg(uint8_t** jpg, size_t* len) {
-  bool g = camGray;
-  memcpy(view, g ? gray : color, g ? W * H : W * H * 2);
+  bool g = morphView;
+  if (g) for (int i = 0; i < W * H; i++) view[i] = mask[i] ? 0 : 255;   // 흰 바탕에 정리된 검정 라인
+  else memcpy(view, color, W * H * 2);
   for (int y = 0; y < H; y++) if (trC[y] >= 0) {
-    for (int x = trL[y]; x <= trR[y]; x++) dot(x, y, GREEN);
+    if (!g) for (int x = trL[y]; x <= trR[y]; x++) dot(x, y, GREEN);   // 컬러 : 인식한 라인을 초록으로
     if (y % 2 == 0) dot(trC[y], y, YELLOW);
   }
   for (int y = H - 16; y < H; y += 2) dot(W / 2, y, WHITE);
@@ -329,18 +366,20 @@ void btTask(void*) {
     }
     static unsigned long lastTry = 0;      // 연결 재시도는 5초마다 (자주 하면 와이파이와 안테나를 다퉈서 화면이 끊김)
     if (btWant && btAddr.length() && !BT.connected() && millis() - lastTry > 5000) { lastTry = millis(); BT.connect(BTAddress(btAddr)); }
-    if (!btWant && BT.connected()) { BT.disconnect(); carLine = ""; }
+    if (!btWant && BT.connected()) { BT.disconnect(); carClear = true; }
     vTaskDelay(pdMS_TO_TICKS(300));
   }
 }
 
-void readCar() {                           // 아두이노 상태 줄 받기
-  static String buf;
+void readCar() {                           // 아두이노 상태 줄 받기 (고정 버퍼 : 0.2초마다 String 을 만들었다 버리지 않게)
+  static char buf[64];
+  static uint8_t n = 0;
+  if (carClear) { carLine[0] = 0; carClear = false; }
   if (!btReady) return;
   while (BT.available()) {
     char c = BT.read();
-    if (c == '\n') { buf.trim(); if (buf.length()) carLine = buf; buf = ""; }
-    else if (buf.length() < 60) buf += c;
+    if (c == '\n') { buf[n] = 0; if (n) memcpy(carLine, buf, n + 1); n = 0; }
+    else if (c != '\r' && c != '"' && c != '\\' && n < sizeof buf - 1) buf[n++] = c;
   }
 }
 
@@ -348,7 +387,7 @@ void readCar() {                           // 아두이노 상태 줄 받기
 void handleBt() {
   if (hasArg("scan")) btScanReq = true;
   if (hasArg("a")) {
-    btAddr = arg("a"); btName = arg("n");
+    btAddr = arg("a"); btName = arg("n"); setBtLabel();
     prefs.putString("bt_addr", btAddr); prefs.putString("bt_name", btName);
     if (btOn()) BT.disconnect();
     btWant = true;
@@ -359,10 +398,9 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"gray\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
-           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, camGray ? 1 : 0, fps,
-           btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, esc(btName.length() ? btName : btAddr).c_str(),
-           esc(carLine).c_str());
+  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"morph\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, morphView ? 1 : 0, fps,
+           btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine);
 }
 
 // ---- 웹소켓 /ws : 연결 하나를 열어 두고 조종 글자는 받고(화면 -> 차), 상태는 밀어 줌(차·카메라 -> 화면) ----
@@ -419,7 +457,12 @@ void handleSet() {
   sensor_t* cam = esp_camera_sensor_get();
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
-  if (hasArg("gray") && !camReinit && (arg("gray") == "1") != camGray) { prefs.putBool("gray", !camGray); camReinit = true; }
+  if (hasArg("morph") && (arg("morph") == "1") != morphView) {   // 화면 모드 바꿈 : 저장하고 다시 켬
+    prefs.putBool("morph", !morphView);
+    send(200, "text/plain", "restart");
+    delay(300);
+    ESP.restart();
+  }
   send(200, "text/plain", "ok");
 }
 
@@ -465,7 +508,7 @@ String getSetupPass() {
 }
 
 void startWifi() {
-  btAddr = prefs.getString("bt_addr", ""); btName = prefs.getString("bt_name", "");
+  btAddr = prefs.getString("bt_addr", ""); btName = prefs.getString("bt_name", ""); setBtLabel();
   WiFi.mode(WIFI_STA);
   WiFi.enableIPv6();                       // 아이폰 핫스팟은 맥에 IPv6 만 주기도 해서, IPv6 로도 접속되게
   WiFi.setHostname(HOSTNAME);
@@ -513,7 +556,7 @@ bool startCamera() {
   c.pin_sccb_sda = SIOD_GPIO_NUM; c.pin_sccb_scl = SIOC_GPIO_NUM;
   c.pin_pwdn = PWDN_GPIO_NUM; c.pin_reset = RESET_GPIO_NUM;
   c.xclk_freq_hz = 20000000;
-  c.pixel_format = camGray ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;   // 컬러면 선 찾기는 밝기만 뽑아서, 흑백이면 그대로
+  c.pixel_format = morphView ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;   // 컬러면 밝기만 뽑아서, 모폴로지면 처음부터 흑백
   c.frame_size = FRAMESIZE_QQVGA;          // 160 x 120
   c.fb_count = 1;                          // 1장 : 판단하고 바로 버림 (메모리 아낌)
   c.fb_location = CAMERA_FB_IN_PSRAM;
@@ -530,11 +573,13 @@ void setup() {
   pinMode(FLASH_LED, OUTPUT); digitalWrite(FLASH_LED, LOW);
   pinMode(STATUS_LED, OUTPUT); digitalWrite(STATUS_LED, HIGH);
   gray = (uint8_t*)ps_calloc(W * H, 1);
+  mask = (uint8_t*)ps_calloc(W * H, 1);
+  tmp = (uint8_t*)ps_calloc(W * H, 1);
   color = (uint8_t*)ps_calloc(W * H * 2, 1);
   view = (uint8_t*)ps_malloc(W * H * 2);
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
-  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); camGray = prefs.getBool("gray", false);
+  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); morphView = prefs.getBool("morph", false);
   if (!startCamera()) {
     while (true) { Serial.println("E,camera"); delay(1000); }   // 카메라 리본 케이블 확인
   }
@@ -544,27 +589,20 @@ void setup() {
 }
 
 void loop() {
-  if (camReinit) {                        // 컬러 <-> 흑백 : 카메라를 그 형식으로 다시 켬 (약 1초, 그동안 영상은 기다림)
-    xSemaphoreTake(jpgLock, portMAX_DELAY);
-    camGray = !camGray;
-    esp_camera_deinit();
-    startCamera();
-    camReinit = false;
-    xSemaphoreGive(jpgLock);
-  }
   camera_fb_t* fb = esp_camera_fb_get();
   if (fb) {
-    if (camGray && fb->len >= (size_t)(W * H)) {   // 흑백 : 받은 그대로 선 찾기 (변환 없음)
-      memcpy(gray, fb->buf, W * H);
-      trackLine(gray);
+    if (morphView && fb->len >= (size_t)(W * H)) {   // 모폴로지 모드 : 카메라가 처음부터 흑백 (변환 없음)
+      buildMask(fb->buf);                  // 모폴로지 : 받은 흑백 사진에서 바로 (복사 없음)
+      trackLine();
       frames++;
-    } else if (!camGray && fb->len >= (size_t)(W * H * 2)) {
+    } else if (!morphView && fb->len >= (size_t)(W * H * 2)) {
       const uint8_t* b = fb->buf;
       for (int i = 0; i < W * H; i++) {    // RGB565 -> 밝기 (빨강 30% 초록 59% 파랑 11%)
         uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
         gray[i] = (((p >> 11) & 31) * 79 + ((p >> 5) & 63) * 76 + (p & 31) * 29) >> 4;
       }
-      trackLine(gray);
+      buildMask(gray);
+      trackLine();
       memcpy(color, b, W * H * 2);
       frames++;
     }

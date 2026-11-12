@@ -42,8 +42,8 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
 <section class="card"><h2>카메라 설정</h2>
-<div class="row"><label><input type="checkbox" id="mir"> 좌우 반전</label><label><input type="checkbox" id="flip"> 위아래 뒤집기</label><label><input type="checkbox" id="gray"> 흑백 (빠름)</label></div>
-<div class="hint">초록(흑백일 때 흰색) = 인식한 라인 · 노란 점 = 라인 가운데 경로 · 빨간 선·점(흑백일 때 무늬) = 차가 향할 곳 · 흰 점선 = 차 가운데<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
+<div class="row"><label><input type="checkbox" id="mir"> 좌우 반전</label><label><input type="checkbox" id="flip"> 위아래 뒤집기</label><label><input type="checkbox" id="morph"> 모폴로지 (빠름)</label></div>
+<div class="hint">컬러 : 초록 = 인식한 라인 · 노란 점 = 경로 · 빨간 선·점 = 향할 곳 · 흰 점선 = 차 가운데<br>모폴로지 : 흰 바탕에 정리된 검정 라인 · 회색 점 = 경로 · 검정 선·점 = 향할 곳<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
 </div></main>
 <script>
 const $=i=>document.getElementById(i);
@@ -54,7 +54,7 @@ function connect(){
   ws=new WebSocket('ws://'+location.host+'/ws');
   ws.onopen=()=>{badge('bCam','카메라 연결','ok'); ws.send('h');};   // 첫 글자를 보내야 ESP32 가 이 화면을 등록함
   ws.onmessage=e=>{const s=JSON.parse(e.data); badge('bFps',s.fps+' fps');
-    $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; $('gray').checked=!!s.gray; showDir(s); showCar(s);};
+    $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; $('morph').checked=!!s.morph; showDir(s); showCar(s);};
   ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
 }
 connect();
@@ -100,7 +100,7 @@ $('f').onerror=()=>{$('ph').style.display='grid';setTimeout(stream,2000);};
 stream();
 $('mir').onchange=()=>fetch('/set?mir='+($('mir').checked?1:0));
 $('flip').onchange=()=>fetch('/set?flip='+($('flip').checked?1:0));
-$('gray').onchange=()=>fetch('/set?gray='+($('gray').checked?1:0));   // 흑백 : 라인 확인이 끝나면 켜서 더 빠르게
+$('morph').onchange=()=>{if(confirm('화면 모드를 바꾸면 카메라가 다시 켜집니다 (몇 초). 바꿀까요?'))fetch('/set?morph='+($('morph').checked?1:0));else $('morph').checked=!$('morph').checked;};   // 라인 확인이 끝나면 켜서 더 빠르게
 // 앱과 같은 규칙 : 누르는 동안 0.2초마다 같은 글자, 떼면 s 두 번. 연결 신호 h 는 ESP32 가 대신 보냄
 const send=c=>{if(ws&&ws.readyState===1)ws.send(c);};
 let held=null,rep=null;
