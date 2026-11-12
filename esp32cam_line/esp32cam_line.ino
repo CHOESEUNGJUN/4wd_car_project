@@ -43,6 +43,8 @@ const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초�
 const int DARK_OFFSET = 40;               // 그 줄 평균 밝기보다 이만큼 어두우면 "라인". 바닥·조명에 맞게 여기서 바꿈
 const int MIN_DARK_COLS = 3;              // 선으로 칠 최소 폭 (칸). 이보다 좁으면 잡음
 const float CROSS_RATIO = 0.6;            // 한 줄의 이 비율 넘게 검정이면 교차선
+bool camGray = false;                     // 흑백으로 찍기 (컬러의 절반 크기라 더 빠름). 라인 확인이 끝나면 켬. 웹 화면에서 바꾸면 저장됨
+volatile bool camReinit = false;          // 컬러/흑백을 바꿨으니 카메라를 다시 켜야 함 (loop 에서)
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
 
 // AI-Thinker ESP32-CAM 핀
@@ -178,14 +180,16 @@ void trackLine(const uint8_t* img) {
 // 지금 프레임 + 띠·선 표시를 JPEG 로 (화면 한 장, 스트림 공용)
 // RGB565 색 (앞 바이트가 높은 쪽)
 const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF;
-inline void dot(int x, int y, uint16_t c) {
+inline void dot(int x, int y, uint16_t c) {   // 흑백일 때는 색 대신 밝기 (초록 = 흰색, 노랑·빨강 = 흰/검 무늬)
   if (x < 0 || x >= W || y < 0 || y >= H) return;
+  if (camGray) { view[y * W + x] = c == GREEN || c == WHITE ? 255 : ((x + y) & 1) ? 0 : 255; return; }
   view[(y * W + x) * 2] = c >> 8; view[(y * W + x) * 2 + 1] = c & 0xFF;
 }
 
 // 화면 : 인식한 라인 = 초록 칠, 라인 가운데 경로 = 노란 점, 차 -> 향할 곳 = 빨간 선과 점, 차 가운데 = 흰 점선 (아래쪽)
 bool makeJpeg(uint8_t** jpg, size_t* len) {
-  memcpy(view, color, W * H * 2);
+  bool g = camGray;
+  memcpy(view, g ? gray : color, g ? W * H : W * H * 2);
   for (int y = 0; y < H; y++) if (trC[y] >= 0) {
     for (int x = trL[y]; x <= trR[y]; x++) dot(x, y, GREEN);
     if (y % 2 == 0) dot(trC[y], y, YELLOW);
@@ -202,7 +206,7 @@ bool makeJpeg(uint8_t** jpg, size_t* len) {
     }
     for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) dot(tgtX + i, tgtY + j, RED);
   }
-  return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, btOn() ? JPEG_Q_BT : JPEG_Q, jpg, len);
+  return fmt2jpg(view, g ? W * H : W * H * 2, W, H, g ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565, btOn() ? JPEG_Q_BT : JPEG_Q, jpg, len);
 }
 
 // 연속 영상 (MJPEG). 따로 도는 서버(포트 81)라 라인 인식·조종을 막지 않는다
@@ -355,8 +359,8 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
-           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, fps,
+  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"gray\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+           lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, camGray ? 1 : 0, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, esc(btName.length() ? btName : btAddr).c_str(),
            esc(carLine).c_str());
 }
@@ -415,6 +419,7 @@ void handleSet() {
   sensor_t* cam = esp_camera_sensor_get();
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
+  if (hasArg("gray") && !camReinit && (arg("gray") == "1") != camGray) { prefs.putBool("gray", !camGray); camReinit = true; }
   send(200, "text/plain", "ok");
 }
 
@@ -508,7 +513,7 @@ bool startCamera() {
   c.pin_sccb_sda = SIOD_GPIO_NUM; c.pin_sccb_scl = SIOC_GPIO_NUM;
   c.pin_pwdn = PWDN_GPIO_NUM; c.pin_reset = RESET_GPIO_NUM;
   c.xclk_freq_hz = 20000000;
-  c.pixel_format = PIXFORMAT_RGB565;       // 컬러로 찍고, 선 찾기는 밝기만 뽑아서
+  c.pixel_format = camGray ? PIXFORMAT_GRAYSCALE : PIXFORMAT_RGB565;   // 컬러면 선 찾기는 밝기만 뽑아서, 흑백이면 그대로
   c.frame_size = FRAMESIZE_QQVGA;          // 160 x 120
   c.fb_count = 1;                          // 1장 : 판단하고 바로 버림 (메모리 아낌)
   c.fb_location = CAMERA_FB_IN_PSRAM;
@@ -529,7 +534,7 @@ void setup() {
   view = (uint8_t*)ps_malloc(W * H * 2);
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
-  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false);
+  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); camGray = prefs.getBool("gray", false);
   if (!startCamera()) {
     while (true) { Serial.println("E,camera"); delay(1000); }   // 카메라 리본 케이블 확인
   }
@@ -539,9 +544,21 @@ void setup() {
 }
 
 void loop() {
+  if (camReinit) {                        // 컬러 <-> 흑백 : 카메라를 그 형식으로 다시 켬 (약 1초, 그동안 영상은 기다림)
+    xSemaphoreTake(jpgLock, portMAX_DELAY);
+    camGray = !camGray;
+    esp_camera_deinit();
+    startCamera();
+    camReinit = false;
+    xSemaphoreGive(jpgLock);
+  }
   camera_fb_t* fb = esp_camera_fb_get();
   if (fb) {
-    if (fb->len >= (size_t)(W * H * 2)) {
+    if (camGray && fb->len >= (size_t)(W * H)) {   // 흑백 : 받은 그대로 선 찾기 (변환 없음)
+      memcpy(gray, fb->buf, W * H);
+      trackLine(gray);
+      frames++;
+    } else if (!camGray && fb->len >= (size_t)(W * H * 2)) {
       const uint8_t* b = fb->buf;
       for (int i = 0; i < W * H; i++) {    // RGB565 -> 밝기 (빨강 30% 초록 59% 파랑 11%)
         uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
