@@ -512,7 +512,8 @@ void handleSet() {
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
   if (hasArg("morph")) { morphView = arg("morph") == "1"; prefs.putBool("morph", morphView); }   // 화면 모드 (바로 바뀜)
-  if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0; }
+  if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0;
+    if (!sigMode && btOn()) for (int i = 0; i < 3; i++) btSend('n'); }   // 인식을 끄면 차의 빨강 정지를 풀어 줌 (빨강은 시간으로 안 풀려서)
   send(200, "text/plain", "ok");
 }
 
@@ -687,7 +688,7 @@ void loop() {
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); btSend('h'); }
   // 신호등 : 지금 신호를 차(버전 D)에 0.2초마다 계속 보냄 (2초면 10번. 교안 4팀처럼 한 번이 아니라 계속 보내서 몇 개 놓쳐도 유지).
   // x 빨강 = 정지, v 노랑 = 서행, n 초록·신호 없음 = 보통. 차는 모드를 안 바꾸고 라인센서(또는 카메라 주행)로 계속 보면서 따름.
-  // 인식을 끄면 안 보냄 -> 차는 1초 뒤 보통으로
+  // 인식을 끄면 n 을 3번 보내고 그만 보냄 (빨강은 차에서 시간으로 안 풀림, 노랑은 1초 뒤 풀림)
   static unsigned long lastSig = 0;
   if (sigMode && btOn() && millis() - lastSig >= 200) { lastSig = millis(); btSend(sigState == 1 ? 'x' : sigState == 3 ? 'v' : 'n'); }
   static unsigned long lastCam = 0, lineAt = 0;

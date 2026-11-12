@@ -27,7 +27,8 @@
  *    'x' 빨강 = 정지 (자동 모드 그대로 서 있다가 신호가 바뀌면 그 자리에서 다시 라인 추종. 카메라 주행 글자도 멈춤)
  *    'v' 노랑 = 서행 (기본 속도 BASE 대신 SLOW_BASE. PID 와 카메라 G L R. 코너 CORNER_OUT/IN 은 힘이 필요해서 그대로)
  *    'n' 초록 / 신호 없음 = 보통
- *    같은 글자가 계속 오는 동안 유지. SIG_HOLD_MS(1초) 넘게 안 오면 'n' 으로 봄 (글자 몇 개를 놓쳐도 그대로, ESP 가 꺼지면 보통으로)
+ *    같은 글자가 계속 오는 동안 유지 (몇 개 놓쳐도 그대로). 노랑은 SIG_HOLD_MS(1초) 넘게 안 오면 보통으로 봄.
+ *    빨강은 시간이 지나도 풀리지 않음 : 다른 신호 글자(v, n)가 오거나 사람이 a / m 을 보낼 때까지 서 있음 (ESP 가 꺼져도 안 달림)
  *  메모리 : String·malloc 을 쓰지 않음 (UNO 는 2KB 라 조각나면 멈춤). 글자는 F() 로 플래시에서 바로
  */
 
@@ -193,7 +194,8 @@ int lineError(int L, int C, int R) {
 }
 
 // 신호등 : 지금 신호 (x 빨강 / v 노랑 / n 보통). SIG_HOLD_MS 넘게 안 왔으면 보통
-char signalNow() { return millis() - sigAt < SIG_HOLD_MS ? sigCmd : 'n'; }
+// 빨강(x)은 시간으로 안 풀림 (다른 글자나 a / m 이 올 때까지)
+char signalNow() { return sigCmd == 'x' || millis() - sigAt < SIG_HOLD_MS ? sigCmd : 'n'; }
 int baseSpeed() { return signalNow() == 'v' ? SLOW_BASE : BASE; }   // 노랑이면 서행
 
 void resetPid() { integ = 0; dTerm = 0; lastErr = 0; lastPid = 0; }
@@ -339,6 +341,7 @@ void setMode(Mode m) {
   stopCar();
   // 자동으로 갈 때만 안전 지연 동안 무조건 정지. 수동으로 갈 때는 즉시 (멈추고 바로 조종 가능)
   holdUntil = (m == AUTO) ? millis() + SWITCH_HOLD_MS : 0;
+  sigCmd = 'n';   // 사람이 모드를 고르면 신호 초기화 (빨강이 아직 보이면 ESP 가 0.2초 안에 다시 x)
   resetPid();
   lostSince = 0;
   crossSince = 0;
