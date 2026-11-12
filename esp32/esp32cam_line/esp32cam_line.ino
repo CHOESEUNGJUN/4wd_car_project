@@ -52,8 +52,6 @@ volatile bool sigMode = false;            // 웹 화면 "신호등 인식" 버�
 volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강(정지), 2 = 초록(주행), 3 = 노랑(서행) (3장 연속 같아야 바뀜)
 const int SIG_Y1 = 54;                    // 이 줄 위쪽(화면 위 약 45%)만 봄 : 라인보다 먼 곳
 const int SIG_MIN = 40;                   // 2칸마다 본 픽셀 중 이만큼 넘게 그 색이면 신호 (위쪽 2160개 중)
-bool sigHeldAuto = false;                 // 라인센서 주행을 빨강 때문에 세워 둠 -> 초록이면 다시 a
-bool slowSent = false;                    // 차에 서행 v 를 보내 둠 (노랑이 끝나면 V 로 풀어 줌)
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
 
 // AI-Thinker ESP32-CAM 핀
@@ -461,7 +459,7 @@ esp_err_t wsHandler(httpd_req_t* r) {
   if (c == 'C') { camDrive = morphView && btOn(); if (camDrive) btSend('m'); return ESP_OK; }   // 카메라 주행 시작 (수동 모드로 맞추고)
   if (c == 'X') { if (camDrive) { camDrive = false; btSend('s'); } return ESP_OK; }               // 카메라 주행 끝
   // 조종 글자 하나 : 앱과 똑같이 그대로 차에. 사람이 조종하면 카메라 주행은 꺼짐 (사람 우선)
-  if (strchr("gblrsqwam", c) && btOn()) { camDrive = false; sigHeldAuto = false; btSend(c); }
+  if (strchr("gblrsqwam", c) && btOn()) { camDrive = false; btSend(c); }
   return ESP_OK;
 }
 
@@ -514,7 +512,7 @@ void handleSet() {
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
   if (hasArg("morph")) { morphView = arg("morph") == "1"; prefs.putBool("morph", morphView); }   // 화면 모드 (바로 바뀜)
-  if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0; sigHeldAuto = false; }
+  if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0; }
   send(200, "text/plain", "ok");
 }
 
@@ -687,24 +685,19 @@ void loop() {
   // 화면이 열려 있는 동안(웹소켓 연결) 차에 연결 신호 h 를 0.6초마다 대신 보냄.
   // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); btSend('h'); }
-  // 카메라 주행 : 화면이 닫혔거나 블루투스·모폴로지가 꺼지면 바로 멈춤 (사람이 안 보고 있으면 안 움직임)
-  // 신호등 + 라인센서 주행 : 빨간불이면 s 로 세우고, 초록불이면 a 로 다시 자동 주행 (교안 4팀의 g/s 와 같은 생각)
-  if (sigMode && btOn() && !camDrive) {
-    if (sigState == 1 && carLine[0] == 'a') { btSend('s'); sigHeldAuto = true; }
-    else if (sigState == 2 && sigHeldAuto) { btSend('a'); sigHeldAuto = false; }
-  }
-  // 신호등 노랑 = 서행 : 차(버전 D)에 v 를 한 번 보내 기본 속도를 SLOW_BASE 로 낮춤. 노랑이 끝나거나 인식을 끄면 V 로 원래대로
-  // (라인센서 주행, 카메라 주행 둘 다. 코너 힘은 그대로)
-  bool wantSlow = sigMode && sigState == 3;
-  if (btOn() && wantSlow != slowSent) { btSend(wantSlow ? 'v' : 'V'); slowSent = wantSlow; }
+  // 신호등 : 지금 신호를 차(버전 D)에 0.2초마다 계속 보냄 (2초면 10번. 교안 4팀처럼 한 번이 아니라 계속 보내서 몇 개 놓쳐도 유지).
+  // x 빨강 = 정지, v 노랑 = 서행, n 초록·신호 없음 = 보통. 차는 모드를 안 바꾸고 라인센서(또는 카메라 주행)로 계속 보면서 따름.
+  // 인식을 끄면 안 보냄 -> 차는 1초 뒤 보통으로
+  static unsigned long lastSig = 0;
+  if (sigMode && btOn() && millis() - lastSig >= 200) { lastSig = millis(); btSend(sigState == 1 ? 'x' : sigState == 3 ? 'v' : 'n'); }
   static unsigned long lastCam = 0, lineAt = 0;
   static char lastCamCmd = 'S';
+  // 카메라 주행 : 화면이 닫혔거나 블루투스·모폴로지가 꺼지면 바로 멈춤 (사람이 안 보고 있으면 안 움직임)
   if (camDrive && (!btOn() || !morphView || millis() - lastViewer > 2500)) { camDrive = false; if (btOn()) btSend('s'); }
   if (camDrive && millis() - lastCam >= 150) {
     lastCam = millis();
     char c = 'S';
-    if (sigMode && sigState == 1) c = 'S';                 // 빨간불 : 정지 (초록이면 다시 감)
-    else if (lastNear.found || lastFar.found) {
+    if (lastNear.found || lastFar.found) {               // 빨간불 정지·노랑 서행은 차(버전 D)가 신호 글자로 알아서
       lineAt = millis();
       int p = lastNear.found && lastFar.found ? (lastNear.pos * 7 + lastFar.pos * 3) / 10 : (lastNear.found ? lastNear.pos : lastFar.pos);
       c = abs(p) <= CAM_SOFT ? 'G' : abs(p) <= CAM_HARD ? (p > 0 ? 'R' : 'L') : (p > 0 ? 'W' : 'Q');

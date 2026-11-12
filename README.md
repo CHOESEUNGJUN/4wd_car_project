@@ -14,14 +14,14 @@
 |---|---|
 | 라인센서 주행 | `a` → 차가 라인센서 3개 + PID 로 스스로 (버전 C 와 같음) |
 | 카메라 주행 | ESP32 가 카메라로 라인 위치를 보고 0.15초마다 `G L R Q W` (속도는 자동 주행과 같음) |
-| 신호등 인식 (켬/끔) | 두 주행 모두 : 🔴 정지, 🟢 다시 주행, 🟡 서행 (`v`/`V`, 기본 속도 120 → 100) |
+| 신호등 인식 (켬/끔) | 라인은 차가 계속 보고, 카메라는 신호만 0.2초마다 계속 보냄 : 🔴 `x` 정지, 🟡 `v` 서행 (기본 속도 120 → 100), 🟢 `n` 보통. 모드는 그대로 |
 
 | | |
 |---|---|
 | 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
 | 카메라 코드 | [`esp32/esp32cam_line/`](esp32/esp32cam_line) (`esp32cam_line.ino`, 웹 화면 `page.h`, 빌드 설정 `platformio.ini`) |
 | 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 구조, 주행 모드, 신호등, 배선(5V 외부 전원), 올리기, 와이파이(프린터처럼), 웹 화면, 영상 처리, 메모리, 맞추기 |
-| 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`G L R Q W`, `v V` 는 버전 D 만) |
+| 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`G L R Q W`, `x v n` 은 버전 D 만) |
 | 작업 보고 | [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) : 잘된 점, 안된 점, 앞으로 할 것 |
 | 다음에 할 일 | `main` 의 [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) (체크리스트) |
 | 업로드 | ESP32-CAM 은 **PlatformIO 로만** : `cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨). 차는 Arduino IDE 로 버전 D |
@@ -199,7 +199,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
-| `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (제출용, 카메라 주행) | 버전 C + 카메라 주행 글자 `G L R Q W` + 서행 `v`/`V` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
+| `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (제출용, 카메라 주행) | 버전 C + 카메라 주행 글자 `G L R Q W` + 신호등 `x v n` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
 | `esp32/esp32cam_line/` (PlatformIO → ESP32-CAM) | ESP32-CAM 펌웨어 | 카메라로 라인·신호등 인식, 와이파이 웹 화면, 블루투스로 차 조종·카메라 주행·서행 |
 | `arduino/diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10**. **신호등 화면** (카메라 신호등 시험용) |
@@ -288,7 +288,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | `s` | 정지 |
 | `a` `m` | 자동 모드로, 수동 모드로 |
 | `h` | 연결 신호 (0.6초마다, 주행에는 영향 없음) |
-| `G` `L` `R` `Q` `W` · `v` `V` | **버전 D 만** : ESP32-CAM 카메라 주행 (직진, 살짝 좌·우, 크게 좌·우) · 서행 켬/끔 (신호등 노랑). `docs/CAMERA.md` |
+| `G` `L` `R` `Q` `W` · `x` `v` `n` | **버전 D 만** : ESP32-CAM 카메라 주행 (직진, 살짝 좌·우, 크게 좌·우) · 신호등 (빨강 정지, 노랑 서행, 보통). `docs/CAMERA.md` |
 
 교재 앱(Eduino_RC_Car_Controller)의 `g l r b s q w` 와 같고, `a m h` 를 새로 추가했다. 명령표에 없는 글자(터미널 앱이 붙이는 줄바꿈 등)는 무시한다.
 
