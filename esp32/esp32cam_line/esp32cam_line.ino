@@ -47,12 +47,13 @@ const float CROSS_RATIO = 0.6;            // 한 줄의 이 비율 넘게 검정
 // 화면 모드 : false = 컬러 (테스트 : 실제 사진 위에 인식 결과, MJPEG 영상), true = 모폴로지 (라인 확인 후 : 정리된 마스크를
 // JPEG 대신 RLE 숫자로 웹소켓에 보내 브라우저가 그림, 가볍고 빠름). 카메라는 늘 컬러로 찍음 (신호등 색을 봐야 해서)
 volatile bool morphView = false;
-// 신호등 인식 : 사진 위쪽에서 빨강·초록 덩어리를 찾음 (교안 3·4팀처럼 색 범위로). 폰 화면 /light 를 신호등으로 씀
+// 신호등 인식 : 사진 위쪽에서 빨강·초록·노랑 덩어리를 찾음 (교안 3·4팀처럼 색 범위로). 아이폰 앱 굴노의 "신호등 화면"을 신호등으로 씀
 volatile bool sigMode = false;            // 웹 화면 "신호등 인식" 버튼으로 켬 (저장)
-volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강, 2 = 초록 (3장 연속 같아야 바뀜)
+volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강(정지), 2 = 초록(주행), 3 = 노랑(서행) (3장 연속 같아야 바뀜)
 const int SIG_Y1 = 54;                    // 이 줄 위쪽(화면 위 약 45%)만 봄 : 라인보다 먼 곳
 const int SIG_MIN = 40;                   // 2칸마다 본 픽셀 중 이만큼 넘게 그 색이면 신호 (위쪽 2160개 중)
 bool sigHeldAuto = false;                 // 라인센서 주행을 빨강 때문에 세워 둠 -> 초록이면 다시 a
+bool slowSent = false;                    // 차에 서행 v 를 보내 둠 (노랑이 끝나면 V 로 풀어 줌)
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
 
 // AI-Thinker ESP32-CAM 핀
@@ -318,7 +319,6 @@ esp_err_t route(httpd_req_t* r) {
 
 void pageMain() { if (setupMode) handleSetupPage(); else send(200, "text/html", PAGE); }
 void pageCam() { send(200, "text/html", PAGE); }
-void pageLight() { send(200, "text/html", PAGE_LIGHT); }   // 폰을 신호등으로 (화면 전체 빨강 / 초록)
 void pageSave() { if (setupMode) handleSave(); else send(403); }
 void pageList() {
   xSemaphoreTake(btLock, portMAX_DELAY); String l = btList; xSemaphoreGive(btLock);
@@ -345,7 +345,7 @@ void startServer() {
   cfg.close_fn = onClose;
   if (httpd_start(&web, &cfg) != ESP_OK) return;
   struct { const char* u; httpd_method_t m; void (*f)(); } routes[] = {
-    {"/", HTTP_GET, pageMain}, {"/cam", HTTP_GET, pageCam}, {"/light", HTTP_GET, pageLight}, {"/save", HTTP_POST, pageSave},
+    {"/", HTTP_GET, pageMain}, {"/cam", HTTP_GET, pageCam}, {"/save", HTTP_POST, pageSave},
     {"/set", HTTP_GET, handleSet},
     {"/bt", HTTP_GET, handleBt}, {"/btlist", HTTP_GET, pageList}};
   for (auto& x : routes) { httpd_uri_t u = {x.u, x.m, route, (void*)x.f}; httpd_register_uri_handler(web, &u); }
@@ -640,10 +640,11 @@ void setup() {
   xTaskCreatePinnedToCore(btTask, "bt", 4096, nullptr, 1, nullptr, 0);
 }
 
-// 신호등 : 위쪽에서 2칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음 (폰 화면 빨강·초록 기준, 실제로 재서 맞추기)
+// 신호등 : 위쪽에서 2칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음, 노랑 = R·G 높고 B 낮음
+// (폰 화면 순수 빨강·초록·노랑 기준, 실제로 재서 맞추기). 가장 많은 색이 SIG_MIN 넘으면 그 신호
 void detectSignal(const uint8_t* b) {
   static uint8_t cand = 0, same = 0;
-  int red = 0, grn = 0;
+  int red = 0, grn = 0, yel = 0;
   for (int y = 0; y < SIG_Y1; y += 2)
     for (int x = 0; x < W; x += 2) {
       int i = y * W + x;
@@ -651,8 +652,13 @@ void detectSignal(const uint8_t* b) {
       int r = (p >> 11) << 3, g = ((p >> 5) & 63) << 2, bl = (p & 31) << 3;
       if (r >= 160 && g <= 80 && bl <= 80) red++;
       else if (g >= 150 && r <= 110 && bl <= 150) grn++;
+      else if (r >= 160 && g >= 150 && bl <= 100) yel++;
     }
-  uint8_t now = red > SIG_MIN && red >= grn ? 1 : grn > SIG_MIN ? 2 : 0;
+  uint8_t now = 0;
+  int best = SIG_MIN;
+  if (red > best) { now = 1; best = red; }
+  if (grn > best) { now = 2; best = grn; }
+  if (yel > best) now = 3;
   if (now == cand) { if (same < 3) same++; } else { cand = now; same = 1; }
   if (same >= 3) sigState = cand;
 }
@@ -687,6 +693,10 @@ void loop() {
     if (sigState == 1 && carLine[0] == 'a') { btSend('s'); sigHeldAuto = true; }
     else if (sigState == 2 && sigHeldAuto) { btSend('a'); sigHeldAuto = false; }
   }
+  // 신호등 노랑 = 서행 : 차(버전 D)에 v 를 한 번 보내 기본 속도를 SLOW_BASE 로 낮춤. 노랑이 끝나거나 인식을 끄면 V 로 원래대로
+  // (라인센서 주행, 카메라 주행 둘 다. 코너 힘은 그대로)
+  bool wantSlow = sigMode && sigState == 3;
+  if (btOn() && wantSlow != slowSent) { btSend(wantSlow ? 'v' : 'V'); slowSent = wantSlow; }
   static unsigned long lastCam = 0, lineAt = 0;
   static char lastCamCmd = 'S';
   if (camDrive && (!btOn() || !morphView || millis() - lastViewer > 2500)) { camDrive = false; if (btOn()) btSend('s'); }

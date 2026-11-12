@@ -17,6 +17,7 @@ struct MiniCarApp: App {
 struct ContentView: View {
     @EnvironmentObject var car: Car
     @State private var askAuto = false
+    @State private var showLight = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -52,9 +53,16 @@ struct ContentView: View {
             .disabled(!car.linkOK)
             .opacity(car.linkOK ? 1 : 0.4)
             Spacer()
+            // 폰을 신호등으로 (카메라 신호등 인식 시험용, 차 연결 없이도 됨)
+            Button("신호등 화면") { showLight = true }
         }
         .padding()
         .frame(minWidth: 320, minHeight: 520)
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showLight) { LightView() }
+        #else
+        .sheet(isPresented: $showLight) { LightView().frame(minWidth: 480, minHeight: 360) }
+        #endif
         .alert("자동 모드로 전환하시겠습니까?", isPresented: $askAuto) {
             Button("전환") { car.requestAuto() }
             Button("취소", role: .cancel) {}

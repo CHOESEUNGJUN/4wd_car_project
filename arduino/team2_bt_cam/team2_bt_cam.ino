@@ -1,6 +1,6 @@
 /* 2팀 블루투스 수동/자동 + PID 라인트레이서 + 카메라 주행 (버전 D = 버전 C + ESP32-CAM 카메라 주행)
  *  - 버전 C (team2_bt_pid) 와 버전 D 둘 다 제출용. 버전 D 는 버전 C 에 ESP32-CAM 카메라 주행을 더한 것 (브랜치 extra/esp32cam)
- *  - 버전 C 와 다른 곳 : 카메라 주행 글자 G L R Q W 를 받음 (serviceBT, driveManual, 장애물 막기). 나머지는 버전 C 와 같음
+ *  - 버전 C 와 다른 곳 : 카메라 주행 글자 G L R Q W, 서행 v / V 를 받음 (serviceBT, driveManual, pidLine, 장애물 막기). 나머지는 버전 C 와 같음
  *  - 자동 모드 주행 : 라인센서 3개(0/1)로 오차를 만들고 PID 로 좌우 속도를 정함. 밝은 바탕 + 검은 선
  *  - Kp, Ki, Kd, 기본 속도는 아래 [설정] 숫자를 고쳐서 업로드 (앱 PID 슬라이더는 쓰지 않음)
  *  - 블루투스/모드 전환/안전장치/상태 줄 : PROTOCOL.md (앱 굴노)
@@ -23,6 +23,8 @@
  *                    이 아두이노는 수동 모드에서 조종 글자처럼 받지만 속도는 자동 주행과 같음 :
  *                    G = BASE/BASE, L·R = BASE∓KP (PID ±1 정도), Q·W = CORNER_OUT/CORNER_IN (코너와 같음).
  *                    수동과 같은 안전장치 : LINK_MS 동안 명령이 없으면 정지, 앞 장애물이면 G L R 막음
+ *  서행 (신호등 노랑, ESP32-CAM 이 보냄) : 'v' = 기본 속도 BASE 대신 SLOW_BASE, 'V' = 원래대로. 모드는 안 바뀜.
+ *                    라인센서 주행(PID)과 카메라 주행 G L R 둘 다 느려짐. 코너(CORNER_OUT/IN)는 힘이 필요해서 그대로
  *  메모리 : String·malloc 을 쓰지 않음 (UNO 는 2KB 라 조각나면 멈춤). 글자는 F() 로 플래시에서 바로
  */
 
@@ -38,6 +40,8 @@ const float KP = 51;        // 오차 1 당 보정. 좌우로 흔들리면 내�
 const float KI = 0.2;         // 누적 오차(오차 x 초) 1 당 보정. 긴 커브에서 점점 더 꺾게 함. 0 부터 조금씩
 const float KD = 30;        // 오차가 한 칸 바뀔 때 반대로 잡아 주는 양. 흔들림이 남으면 올림
 const int BASE = 120;       // 기본 속도 (0~255)
+const int SLOW_BASE = 100;  // 서행 기본 속도 (신호등 노랑). MIN_PWM(90) 가까이면 출발 못 할 수 있음, 차에서 맞춤
+int baseSpeed = BASE;       // 지금 쓰는 기본 속도 (v = SLOW_BASE, V = BASE)
 // --- 코너(오차 ±2)·선 놓침(±3) : 바깥 바퀴와 안쪽 바퀴 힘을 따로 ---
 //   CORNER_IN  -170 : 제자리 회전 (확실히 돌지만 접지력이 많이 필요. 요철에서 미끄러짐)
 //   CORNER_IN   -90 : 안쪽은 천천히 뒤로, 바깥은 앞으로 (4바퀴 모두 돌면서 돎. 시뮬레이션에서 가장 잘 돎)
@@ -235,7 +239,7 @@ void pidLine() {
   pidErr = e;
   pidOut = u;
 
-  int left = BASE + (int)u, right = BASE - (int)u;
+  int left = baseSpeed + (int)u, right = baseSpeed - (int)u;
   // PID 구간(오차 ±1 이내)에서는 안쪽 바퀴를 0 까지만 줄이고 뒤로 돌리지 않는다 (확 꺾여 좌우로 흔들리는 것 방지)
   // 출발 킥과 최소 힘(MIN_PWM)을 거쳐서 보냄. 안 거치면 배터리가 약할 때 기본 속도만으로는 감속기를 못 돌려 출발을 못 한다
   driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
@@ -266,8 +270,9 @@ void serviceBT() {
   while (BT.available()) {
     char c = BT.read();
     // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
-    if (c == 0 || !strchr("gblrsqwamhGLRQW", c)) continue;   // 대문자 G L R Q W = 카메라 주행 (ESP32-CAM 이 보냄)
+    if (c == 0 || !strchr("gblrsqwamhGLRQWvV", c)) continue;   // 대문자 G L R Q W = 카메라 주행, v V = 서행 켬/끔 (ESP32-CAM 이 보냄)
     lastLink = millis();
+    if (c == 'v' || c == 'V') { baseSpeed = c == 'v' ? SLOW_BASE : BASE; continue; }   // 서행 : 속도만 바꿈 (자동이면 자동 그대로)
     // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
     if (c == 'h') continue;
     Serial.print(F("수신: ")); Serial.println(c);
@@ -335,9 +340,9 @@ void driveManual(char c) {
     case 'q': driveManualLR(-MAN_SPIN,  MAN_SPIN); break;            // 제자리 좌회전
     case 'w': driveManualLR( MAN_SPIN, -MAN_SPIN); break;            // 제자리 우회전
     // 카메라 주행 (ESP32-CAM 이 카메라로 보고 0.15초마다 보냄) : 수동 조종처럼 받지만 속도는 자동 주행과 같게
-    case 'G': driveManualLR(BASE, BASE); break;                                        // 직진
-    case 'L': driveManualLR(BASE - (int)KP, BASE + (int)KP); break;                    // 살짝 왼쪽 (PID ±1 보정 정도)
-    case 'R': driveManualLR(BASE + (int)KP, BASE - (int)KP); break;                    // 살짝 오른쪽
+    case 'G': driveManualLR(baseSpeed, baseSpeed); break;                                        // 직진
+    case 'L': driveManualLR(baseSpeed - (int)KP, baseSpeed + (int)KP); break;                    // 살짝 왼쪽 (PID ±1 보정 정도)
+    case 'R': driveManualLR(baseSpeed + (int)KP, baseSpeed - (int)KP); break;                    // 살짝 오른쪽
     case 'Q': driveManualLR(CORNER_IN, CORNER_OUT); break;                             // 크게 왼쪽 (코너와 같음)
     case 'W': driveManualLR(CORNER_OUT, CORNER_IN); break;                             // 크게 오른쪽
     default:  brakeCar(); act = 's'; return;              // 's' 포함 : 브레이크로 바로 섬

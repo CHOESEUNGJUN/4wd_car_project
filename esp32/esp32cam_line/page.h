@@ -39,7 +39,7 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 <span></span><button data-c="b">▼</button><span></span></div>
 <div class="row"><button id="auto">라인센서 주행</button><button id="camGo">카메라 주행</button><button id="man">정지 · 수동</button></div>
 <div class="row"><button id="sigBtn">신호등 인식 : 끔</button><span id="sigS" class="badge">-</span></div>
-<div class="hint">신호등 : 폰 사파리로 <b>gulno-cam.local/light</b> 를 열어 카메라 앞(위쪽)에 두기. 빨강이면 정지, 초록이면 다시 주행</div><div id="cs" class="hint"></div></section>
+<div class="hint">신호등 : 아이폰 앱 굴노의 <b>신호등 화면</b>을 카메라 앞(위쪽)에 두기. 빨강 = 정지, 초록 = 다시 주행, 노랑 = 서행</div><div id="cs" class="hint"></div></section>
 <section class="card"><h2>차 상태</h2><table id="car"><tr><td>블루투스</td><td>연결 안 됨</td></tr></table><div id="raw"></div></section>
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
@@ -61,7 +61,7 @@ function connect(){
     const s=JSON.parse(e.data); badge('bFps',s.fps+' fps'); setView(!!s.morph);
     $('camGo').disabled=!s.morph||!s.bt; $('camGo').classList.toggle('on',!!s.cam);
     $('sigBtn').textContent='신호등 인식 : '+(s.sigm?'켬':'끔'); $('sigBtn').classList.toggle('on',!!s.sigm);
-    $('sigS').textContent=!s.sigm?'-':s.sig==1?'🔴 빨강 : 정지':s.sig==2?'🟢 초록 : 주행':'신호 없음';
+    $('sigS').textContent=!s.sigm?'-':s.sig==1?'🔴 빨강 : 정지':s.sig==2?'🟢 초록 : 주행':s.sig==3?'🟡 노랑 : 서행':'신호 없음';
     $('camGo').title=!s.morph?'카메라 설정에서 모폴로지로 바꾼 뒤 쓸 수 있습니다':!s.bt?'차 블루투스 연결이 필요합니다':'';
     $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; $('morph').checked=!!s.morph; showDir(s); showCar(s);};
   ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
@@ -149,19 +149,4 @@ $('camGo').onclick=()=>{if(confirm('카메라 주행을 시작할까요? (ESP32 
 $('man').onclick=()=>{send('X');send('m');};
 $('sigBtn').onclick=()=>fetch('/set?sig='+($('sigBtn').classList.contains('on')?0:1));
 document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
-</script></body></html>)HTML";
-
-// 폰을 신호등으로 : 사파리로 /light 를 열면 화면 전체가 빨강 <-> 초록. 누르면 바로 바뀜, 아래 숫자는 자동으로 바뀌는 간격(초, 0 = 자동 끔)
-const char PAGE_LIGHT[] PROGMEM = R"HTML(<!doctype html><html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes">
-<title>굴노 신호등</title><style>html,body{margin:0;height:100%;font:20px system-ui;color:#fff;user-select:none}
-#l{position:fixed;inset:0}#c{position:fixed;left:0;right:0;bottom:24px;text-align:center}input{width:64px;font-size:20px}</style></head><body>
-<div id="l"></div><div id="c">자동 <input id="t" type="number" min="0" value="5"> 초 · 화면을 누르면 바뀜 · 밝기 최대로</div>
-<script>
-const C=['#ff0000','#00ff00'];let k=0,tm=null;
-const show=()=>{document.getElementById('l').style.background=C[k];};
-const sched=()=>{clearInterval(tm);const s=+document.getElementById('t').value;if(s>0)tm=setInterval(()=>{k^=1;show();},s*1000);};
-document.getElementById('l').onclick=()=>{k^=1;show();sched();};
-document.getElementById('t').onchange=sched;
-show();sched();
 </script></body></html>)HTML";
