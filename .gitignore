@@ -28,7 +28,7 @@ docs/SIM.md
 .pio/
 
 # ESP32 라이브러리 다시 빌드할 때 자동으로 생기는 것
-esp32cam_line/.dummy/
-esp32cam_line/managed_components/
-esp32cam_line/sdkconfig.*
-esp32cam_line/dependencies.lock
+esp32/esp32cam_line/.dummy/
+esp32/esp32cam_line/managed_components/
+esp32/esp32cam_line/sdkconfig.*
+esp32/esp32cam_line/dependencies.lock

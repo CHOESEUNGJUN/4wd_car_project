@@ -6,7 +6,7 @@
 ## 1. 카메라 (브랜치 `extra/esp32cam`)
 
 시작 : `cd ~/4wd_car_project && git switch extra/esp32cam` → ESP32-CAM 을 MB 보드에 꽂고, 아이폰 핫스팟 켜기 (호환성 최대화).
-올리기 : `cd esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (약 40초. Arduino IDE 로 올리면 안 됨). 자세한 건 브랜치의 `docs/CAMERA.md`, `docs/REPORT_20261111.md`.
+올리기 : `cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (약 40초. Arduino IDE 로 올리면 안 됨). 자세한 건 브랜치의 `docs/CAMERA.md`, `docs/REPORT_20261111.md`.
 
 - [ ] 카메라를 차 앞에 달기 (바닥을 약 45°). 웹 화면(`http://gulno-cam.local`)에서 테이프가 화면 가운데 점선을 따라 보이는지
 - [ ] 실제 트랙에서 라인이 초록으로 잘 칠해지는지. 안 되면 코드의 `DARK_OFFSET`(지금 40) 조절. 어두운 색 물체를 라인으로 잡으면 채도(S) 조건 추가 (교안 3팀 HSV 방식)

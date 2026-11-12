@@ -3,7 +3,8 @@
 4륜 RC카(에듀이노 키트, Arduino UNO)가 **PID 제어로 검은 선을 따라 달리는(자동)** 프로젝트. 폰 앱 "굴노"로 조종(수동)하다가 버튼 하나로 자동으로 바꾼다.
 연결이 끊기면 차가 스스로 멈추고, 자동으로 달리는 동안에도 폰 화면에서 차가 지금 무엇을 하는지(직진, 코너, 선 찾기, 장애물 대기 …)를 볼 수 있다.
 
-- 차량 코드 : **`team2_bt_pid/team2_bt_pid.ino` (버전 C) 하나.** 완성 버전은 [릴리스 1.0 PID 버전](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (앱 APK 포함).
+- 폴더 : **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 코드. 카메라(ESP32, PlatformIO)는 브랜치 `extra/esp32cam` 의 **`esp32/`** 에 있다.
+- 차량 코드 : **`arduino/team2_bt_pid/team2_bt_pid.ino` (버전 C) 하나.** 완성 버전은 [릴리스 1.0 PID 버전](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (앱 APK 포함).
 - 교안 : `minicar_lecture_deck_all_teams_v5.pdf` 의 2팀 (34~48쪽)
 - 통신 프로토콜 (팀 합의 문서) : [`PROTOCOL.md`](PROTOCOL.md) — 앱이나 스케치의 통신 부분을 고치기 전에 먼저 이 문서를 바꾸고 합의한다.
 - 추가 프로젝트 **ESP32-CAM 카메라** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (8장).
@@ -36,7 +37,7 @@ git clone https://github.com/CHOESEUNGJUN/4wd_car_project.git
 
 **3) 업로드**
 1. [Arduino IDE](https://www.arduino.cc/en/software) 설치 (2.x).
-2. `team2_bt_pid/team2_bt_pid.ino` 열기 → 보드 **Arduino Uno**, 포트 선택 → **업로드**.
+2. `arduino/team2_bt_pid/team2_bt_pid.ino` 열기 → 보드 **Arduino Uno**, 포트 선택 → **업로드**.
 3. `Servo.h` 가 없다는 오류가 나면 **라이브러리 매니저**에서 `Servo` 설치.
 
 **4) 센서 확인** — 차를 들어 바퀴를 띄우고 시리얼 모니터 **115200**.
@@ -136,7 +137,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 
 ### 1-4. 설정값과 맞추는 법
 
-`team2_bt_pid/team2_bt_pid.ino` 맨 위 `[설정]` 숫자를 고쳐 업로드한다. 시리얼(115200)과 앱 화면에 오차·보정값이 나온다.
+`arduino/team2_bt_pid/team2_bt_pid.ino` 맨 위 `[설정]` 숫자를 고쳐 업로드한다. 시리얼(115200)과 앱 화면에 오차·보정값이 나온다.
 
 | 이름 | 지금 | 뜻 |
 |---|---|---|
@@ -167,9 +168,9 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
-| `team2_bt_pid/` | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
+| `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
 | 카메라 (추가 프로젝트) | ESP32-CAM 라인 인식 + 와이파이 화면 + 블루투스 조종 | **브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam)** 에만 있음 (아래 8장) |
-| `diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
+| `arduino/diag/` (Arduino IDE → UNO) | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10** |
 | `apps/android/` | 안드로이드 앱 | 안드로이드 + **HC-06** |
 | `apps/web/index.html` | 웹 조종 페이지 | 크롬에서 바로 (HM-10 BLE / 맥에서 HC-06) |
@@ -197,7 +198,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 
 ## 4. 처음 시작하기
 
-1. Arduino IDE 에서 `team2_bt_pid/team2_bt_pid.ino` 를 **파일 → 열기** 로 열어 업로드한다.
+1. Arduino IDE 에서 `arduino/team2_bt_pid/team2_bt_pid.ino` 를 **파일 → 열기** 로 열어 업로드한다.
    (예전 파일을 연 채로 두면 IDE 가 옛 내용을 컴파일한다. 새로 받았으면 탭을 닫고 다시 연다.)
 2. 차를 들어서 바퀴를 띄우고 시리얼 모니터를 연다 — **버전 C 는 115200**, 진단 스케치는 9600.
 3. 폰 앱으로 연결한다 (아래 5번).
@@ -321,7 +322,7 @@ ag,23,010,LINE
     - `장애물=O` 이면 앞에 막혀 전진(g l r)이 안 됨
 - 명령을 받을 때마다 `수신: g` 가 바로 찍힌다.
 - `링크 O` = 앱이 연결되어 0.6초마다 신호를 보내는 중. 시리얼 터미널 앱은 `h` 를 안 보내서 조종할 때만 O.
-- 블루투스가 의심되면 `diag/` 를 올린다: 받은 글자를 16진수로 보여 주고 그대로 돌려보낸다(9600). 모터는 안 움직인다.
+- 블루투스가 의심되면 `arduino/diag/` 를 올린다: 받은 글자를 16진수로 보여 주고 그대로 돌려보낸다(9600). 모터는 안 움직인다.
 
 ### 자주 막히는 곳
 
@@ -354,5 +355,5 @@ ag,23,010,LINE
 |---|---|
 | 받기 | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (이미 받았으면 `git switch extra/esp32cam`) |
 | 설명 | 브랜치의 `docs/CAMERA.md` (배선, 업로드, 와이파이 설정, 웹 화면), 작업 보고 `docs/REPORT_20261111.md` |
-| 업로드 | **PlatformIO 로만** (`cd esp32cam_line && ~/.pio-venv/bin/pio run -t upload`). Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨 |
+| 업로드 | **PlatformIO 로만** (`cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload`). Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨 |
 | 상태 (2026-11-11) | 블루투스 + 와이파이 + 카메라 동시 동작, 라인 인식 표시, 웹 조종 확인. 카메라로 직접 주행은 아직 |
