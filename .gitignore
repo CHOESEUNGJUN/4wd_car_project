@@ -32,3 +32,6 @@ esp32cam_line/.dummy/
 esp32cam_line/managed_components/
 esp32cam_line/sdkconfig.*
 esp32cam_line/dependencies.lock
+
+# 편집기 설정
+esp32cam_line/.vscode/
