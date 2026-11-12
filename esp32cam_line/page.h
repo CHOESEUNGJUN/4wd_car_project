@@ -13,7 +13,7 @@ main{display:grid;gap:14px;padding:14px 16px 28px;max-width:1200px;margin:0 auto
 .side{display:grid;gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
 .card h2{font-size:14px;color:var(--mut);font-weight:600;margin:0 0 10px;letter-spacing:.02em}
 .video{position:relative;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden}
-.video img{width:100%;height:100%;object-fit:contain;display:block}
+.video img,.video canvas{width:100%;height:100%;object-fit:contain;display:block}.video canvas{display:none;background:#fff}
 .video .ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut)}
 .dir{position:absolute;left:10px;top:10px;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;border-radius:12px;background:rgba(0,0,0,.6);font-weight:600}
 .dir b{font-size:34px;line-height:1}#s{color:var(--mut);font-size:13px;margin-top:8px}
@@ -30,7 +30,7 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 </style></head><body>
 <header><h1>굴노 카메라</h1><span id="bCam" class="badge">카메라</span><span id="bCar" class="badge">차 블루투스</span><span id="bFps" class="badge">- fps</span></header>
 <main>
-<section class="card"><div class="video"><div class="ph" id="ph">영상 연결 중…</div><img id="f" alt="">
+<section class="card"><div class="video"><div class="ph" id="ph">영상 연결 중…</div><img id="f" alt=""><canvas id="cv" width="160" height="120"></canvas>
 <div class="dir"><b id="dir">…</b><span id="dirT">-</span></div></div><div id="s"></div></section>
 <div class="side">
 <section class="card"><h2>조종 (와이파이 → 블루투스)</h2>
@@ -43,7 +43,7 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
 <section class="card"><h2>카메라 설정</h2>
 <div class="row"><label><input type="checkbox" id="mir"> 좌우 반전</label><label><input type="checkbox" id="flip"> 위아래 뒤집기</label><label><input type="checkbox" id="morph"> 모폴로지 (빠름)</label></div>
-<div class="hint">컬러 : 초록 = 인식한 라인 · 노란 점 = 경로 · 빨간 선·점 = 향할 곳 · 흰 점선 = 차 가운데<br>모폴로지 : 흰 바탕에 정리된 검정 라인 · 회색 점 = 경로 · 검정 선·점 = 향할 곳<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
+<div class="hint">컬러 : 초록 = 인식한 라인 · 노란 점 = 경로 · 빨간 선·점 = 향할 곳 · 흰 점선 = 차 가운데<br>모폴로지 : 영상 대신 숫자로 받아 그림 (가벼움) · 흰 바탕에 정리된 검정 라인 · 노란 점 = 경로 · 빨간 선·점 = 향할 곳 · 파란 점선 = 차 가운데<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
 </div></main>
 <script>
 const $=i=>document.getElementById(i);
@@ -52,8 +52,11 @@ const badge=(id,t,c)=>{$(id).textContent=t;$(id).className='badge '+(c||'');};
 let ws=null;
 function connect(){
   ws=new WebSocket('ws://'+location.host+'/ws');
+  ws.binaryType='arraybuffer';
   ws.onopen=()=>{badge('bCam','카메라 연결','ok'); ws.send('h');};   // 첫 글자를 보내야 ESP32 가 이 화면을 등록함
-  ws.onmessage=e=>{const s=JSON.parse(e.data); badge('bFps',s.fps+' fps');
+  ws.onmessage=e=>{
+    if(typeof e.data!=='string'){drawMask(new Uint8Array(e.data));return;}   // 모폴로지 화면 (RLE)
+    const s=JSON.parse(e.data); badge('bFps',s.fps+' fps'); setView(!!s.morph);
     $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; $('morph').checked=!!s.morph; showDir(s); showCar(s);};
   ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
 }
@@ -93,11 +96,32 @@ async function loadList(){
 $('btScan').onclick=()=>{fetch('/bt?scan=1');$('btl').innerHTML='<div class="hint">찾는 중… (약 5초)</div>';};
 $('btOn').onclick=()=>fetch('/bt?on=1');
 $('btOff').onclick=()=>fetch('/bt?on=0');
-// 영상 : 같은 주소의 /stream 연속 영상. 끊기면 2초 뒤 다시
-const stream=()=>{$('f').src='/stream?'+Date.now();};
+// 화면 : 컬러 = /stream 연속 영상(MJPEG), 모폴로지 = 웹소켓으로 온 마스크(RLE)를 캔버스에 그림 (영상 안 받음)
+let morph=null;
+const stream=()=>{if(morph===false)$('f').src='/stream?'+Date.now();};
 $('f').onload=()=>{$('ph').style.display='none';};
-$('f').onerror=()=>{$('ph').style.display='grid';setTimeout(stream,2000);};
-stream();
+$('f').onerror=()=>{if(morph===false){$('ph').style.display='grid';setTimeout(stream,2000);}};
+function setView(m){
+  if(m===morph)return; morph=m;
+  $('f').style.display=m?'none':'block'; $('cv').style.display=m?'block':'none';
+  if(m){$('f').removeAttribute('src');$('ph').style.display='none';} else stream();
+}
+const cx=$('cv').getContext('2d'), img=cx.createImageData(160,120);
+function drawMask(b){
+  if(b[0]!==77)return;                                     // 'M'
+  const d=img.data; d.fill(255);                           // 흰 바탕
+  const path=[]; let k=3;
+  for(let y=0;y<120&&k<b.length;y++){
+    const c=b[k++], n=b[k++];
+    for(let i=0;i<n;i++){const s=b[k++],e=b[k++]; for(let x=s;x<=e;x++){const p=(y*160+x)*4; d[p]=d[p+1]=d[p+2]=0;}}   // 검정 라인
+    if(c!==255)path.push([c,y]);
+  }
+  cx.putImageData(img,0,0);
+  cx.fillStyle='#f5b84a'; path.forEach(([x,y],i)=>{if(i%2==0)cx.fillRect(x,y,1,1);});   // 경로 (노랑)
+  cx.fillStyle='#4f9dff'; for(let y=104;y<120;y+=2)cx.fillRect(80,y,1,1);                // 차 가운데 (파랑)
+  if(b[1]!==255){cx.strokeStyle='#ff4b4b';cx.lineWidth=1.5;cx.beginPath();cx.moveTo(80,119);cx.lineTo(b[1],b[2]);cx.stroke();
+    cx.fillStyle='#ff4b4b';cx.fillRect(b[1]-2,b[2]-2,5,5);}                               // 향할 곳 (빨강)
+}
 $('mir').onchange=()=>fetch('/set?mir='+($('mir').checked?1:0));
 $('flip').onchange=()=>fetch('/set?flip='+($('flip').checked?1:0));
 $('morph').onchange=()=>{if(confirm('화면 모드를 바꾸면 카메라가 다시 켜집니다 (몇 초). 바꿀까요?'))fetch('/set?morph='+($('morph').checked?1:0));else $('morph').checked=!$('morph').checked;};   // 라인 확인이 끝나면 켜서 더 빠르게

@@ -438,20 +438,48 @@ esp_err_t wsHandler(httpd_req_t* r) {
   return ESP_OK;
 }
 
-void pushStatus() {
-  static char buf[320];
+// 열려 있는 화면 모두에게 보냄. 보낸 화면이 있으면 true
+bool wsBroadcast(httpd_ws_type_t type, const uint8_t* data, size_t len) {
   bool any = false;
   for (int i = 0; i < MAX_WS; i++) {
     if (wsFd[i] < 0) continue;
     httpd_ws_client_info_t info = httpd_ws_get_fd_info(web, wsFd[i]);
     if (info == HTTPD_WS_CLIENT_INVALID) { wsFd[i] = -1; continue; }   // 닫힘
     if (info != HTTPD_WS_CLIENT_WEBSOCKET) { if (millis() - wsAt[i] > 2000) wsFd[i] = -1; continue; }   // 연결 중이거나 다른 요청
-    if (!any) { buildStatus(buf, sizeof buf); any = true; }
     httpd_ws_frame_t f = {};
-    f.type = HTTPD_WS_TYPE_TEXT; f.payload = (uint8_t*)buf; f.len = strlen(buf);
+    f.type = type; f.payload = (uint8_t*)data; f.len = len;
     httpd_ws_send_frame_async(web, wsFd[i], &f);
+    any = true;
   }
-  if (any) lastViewer = millis();          // 화면이 열려 있음 -> 차에 연결 신호 h 계속
+  return any;
+}
+
+void pushStatus() {
+  static char buf[320];
+  buildStatus(buf, sizeof buf);
+  if (wsBroadcast(HTTPD_WS_TYPE_TEXT, (const uint8_t*)buf, strlen(buf))) lastViewer = millis();   // 화면이 열려 있음 -> 차에 연결 신호 h 계속
+}
+
+// 모폴로지 화면 : JPEG 대신 마스크를 줄마다 검정 구간(시작·끝)으로 보냄 (RLE, 한 번에 약 500바이트). 브라우저가 그림
+// 형식 : 'M', 향할 곳 x, y (없으면 255) | 줄마다 : 라인 가운데 (없으면 255), 구간 수 n, n x (시작, 끝)
+const int MAX_RUNS = 6;                   // 한 줄에 보낼 검정 구간 최대 개수
+void pushMask() {
+  static uint8_t b[3 + H * (2 + 2 * MAX_RUNS)];
+  size_t k = 0;
+  b[k++] = 'M'; b[k++] = tgtX < 0 ? 255 : tgtX; b[k++] = tgtY < 0 ? 255 : tgtY;
+  for (int y = 0; y < H; y++) {
+    const uint8_t* r = mask + y * W;
+    b[k++] = trC[y] < 0 ? 255 : trC[y];
+    size_t nAt = k++; uint8_t n = 0;
+    for (int x = 0; x < W && n < MAX_RUNS;) {
+      if (!r[x]) { x++; continue; }
+      int st = x;
+      while (x < W && r[x]) x++;
+      b[k++] = st; b[k++] = x - 1; n++;
+    }
+    b[nAt] = n;
+  }
+  wsBroadcast(HTTPD_WS_TYPE_BINARY, b, k);
 }
 
 void handleSet() {
@@ -611,6 +639,8 @@ void loop() {
   }
   static unsigned long lastPush = 0;
   if (millis() - lastPush >= 200) { lastPush = millis(); pushStatus(); }
+  static unsigned long lastMask = 0;      // 모폴로지 화면 : 초당 10번
+  if (morphView && millis() - lastMask >= 100) { lastMask = millis(); pushMask(); }
   // 화면이 열려 있는 동안(웹소켓 연결) 차에 연결 신호 h 를 0.6초마다 대신 보냄.
   // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); BT.write('h'); }
