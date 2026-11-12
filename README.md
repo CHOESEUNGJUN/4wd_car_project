@@ -195,7 +195,6 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | `diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10** |
 | `apps/android/` | 안드로이드 앱 | 안드로이드 + **HC-06** |
-| `team2_bt_pid_debug/`, `apps/android_debug/` | **디버그용 (제출용 아님)** | 버전 C + 상태 줄 0.1초·모터 값. 앱 "굴노 디버그"(`dist/gulno-debug.apk`)에서 메모(KP50 KD30 등) 적고 자동 전환하면 기록 시작, 수동 전환하면 CSV 저장 (● ■ 버튼으로도). (`t_ms,mode,act,dist_cm,L,C,R,stage,err,out,motorL,motorR`) |
 | `apps/web/index.html` | 웹 조종 페이지 | 크롬에서 바로 (HM-10 BLE / 맥에서 HC-06) |
 
 ---
