@@ -82,13 +82,14 @@ const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸�
 // ============================================================
 // [핀]
 // ============================================================
-int RightMotor_E_pin = 5, LeftMotor_E_pin = 6;     // 모터 속도(PWM)
-int RightMotor_1_pin = 8, RightMotor_2_pin = 9;    // 오른쪽 모터 방향
-int LeftMotor_3_pin = 10, LeftMotor_4_pin = 11;    // 왼쪽 모터 방향
-int L_Line = A3, C_Line = A4, R_Line = A5;         // 라인센서 왼쪽 A3, 가운데 A4, 오른쪽 A5 (검은 선 = 1)
-int trigPin = 13, echoPin = 12, servoPin = 2;      // 초음파, 서보
-#define BT_RXD 3                                   // 블루투스 모듈 TXD -> D3
-#define BT_TXD 4                                   // 블루투스 모듈 RXD -> D4
+// 핀 (센서 확장 쉴드의 S 번호). 바뀌지 않는 값이라 모두 const int 로 (RAM 을 안 쓰고, 잘못 바꾸면 컴파일 오류)
+const int RightMotor_E_pin = 5, LeftMotor_E_pin = 6;     // 모터 속도(PWM)
+const int RightMotor_1_pin = 8, RightMotor_2_pin = 9;    // 오른쪽 모터 방향
+const int LeftMotor_3_pin = 10, LeftMotor_4_pin = 11;    // 왼쪽 모터 방향
+const int L_Line = A3, C_Line = A4, R_Line = A5;         // 라인센서 왼쪽 A3, 가운데 A4, 오른쪽 A5 (검은 선 = 1)
+const int trigPin = 13, echoPin = 12, servoPin = 2;      // 초음파, 서보
+const int BT_RXD = 3;                                    // 블루투스 모듈 TXD -> D3 (아두이노가 받는 쪽)
+const int BT_TXD = 4;                                    // 블루투스 모듈 RXD -> D4 (아두이노가 보내는 쪽)
 
 // enum 은 첫 함수보다 위에 둔다(아두이노 IDE가 함수 선언을 첫 함수 앞에 끼워 넣음).
 enum Mode { MANUAL, AUTO };
