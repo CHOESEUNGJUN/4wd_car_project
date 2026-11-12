@@ -14,14 +14,6 @@
  *  오차 ±2, ±3 (코너, 선 놓침) : 바깥 바퀴 CORNER_OUT, 안쪽 바퀴 CORNER_IN 으로 회전 (기본: 원을 그리듯)
  *    가운데 센서가 선을 다시 보면 PID 로 돌아감
  *  자세한 설명 : docs/PID.md
- *
- *  주행은 두 가지 (폰 앱 또는 ESP32-CAM 웹 화면의 버튼으로 고름)
- *    라인센서 주행 : 'a' -> 자동 모드. 위의 라인센서 3개 + PID 로 이 아두이노가 스스로 달림 (0.02초마다 판단)
- *    카메라 주행   : ESP32-CAM 이 카메라로 라인을 보고 대문자 G L R Q W 를 0.15초마다 보냄 (브랜치 extra/esp32cam).
- *                    이 아두이노는 수동 모드에서 조종 글자처럼 받지만 속도는 자동 주행과 같음 :
- *                    G = BASE/BASE, L·R = BASE∓KP (PID ±1 정도), Q·W = CORNER_OUT/CORNER_IN (코너와 같음).
- *                    수동과 같은 안전장치 : LINK_MS 동안 명령이 없으면 정지, 앞 장애물이면 G L R 막음
- *  메모리 : String·malloc 을 쓰지 않음 (UNO 는 2KB 라 조각나면 멈춤). 글자는 F() 로 플래시에서 바로
  */
 
 #include <SoftwareSerial.h>
@@ -63,7 +55,7 @@ const unsigned long PING_MS = 60;     // 초음파 쏘는 간격
 const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
 
 // --- 블루투스 / 모드 ---
-const unsigned long LINK_MS = 450;         // 수동·카메라 주행: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다, 카메라 주행은 0.15초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
+const unsigned long LINK_MS = 450;         // 수동: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
 // --- 수동 조종 힘 (바닥에서 4륜은 바퀴가 미끄러지며 돌아서 힘이 많이 듦. 차에 맞게 조정) ---
 const int MAN_FWD = 100;            // 전진·후진 (새 배터리에서 130 은 빠름. MIN_PWM 90 보다 작으면 출발 못 함)
 const int MAN_CURVE_OUT = 100;      // 곡선 회전 바깥 바퀴 (255 -> 100, 차에서 맞춤)
@@ -158,7 +150,7 @@ void loop() {
   stage = "MAN";
   pidErr = 0; pidOut = 0;
   if (millis() - lastRx > LINK_MS) cmd = 's';
-  bool blocked = obstacleStopped && strchr("glrGLR", cmd);   // 앞에 장애물 : 앞으로 가는 명령만 막음 (카메라 주행 글자 포함)
+  bool blocked = obstacleStopped && (cmd == 'g' || cmd == 'l' || cmd == 'r');
   driveManual(blocked ? 's' : cmd);
   if (blocked) act = 'o';
 }
@@ -263,7 +255,7 @@ void serviceBT() {
   while (BT.available()) {
     char c = BT.read();
     // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
-    if (c == 0 || !strchr("gblrsqwamhGLRQW", c)) continue;   // 대문자 G L R Q W = 카메라 주행 (ESP32-CAM 이 보냄)
+    if (c == 0 || !strchr("gblrsqwamh", c)) continue;
     lastLink = millis();
     // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
     if (c == 'h') continue;
@@ -331,15 +323,9 @@ void driveManual(char c) {
     case 'r': driveManualLR( MAN_CURVE_OUT, MAN_CURVE_IN); break;    // 우회전(곡선)
     case 'q': driveManualLR(-MAN_SPIN,  MAN_SPIN); break;            // 제자리 좌회전
     case 'w': driveManualLR( MAN_SPIN, -MAN_SPIN); break;            // 제자리 우회전
-    // 카메라 주행 (ESP32-CAM 이 카메라로 보고 0.15초마다 보냄) : 수동 조종처럼 받지만 속도는 자동 주행과 같게
-    case 'G': driveManualLR(BASE, BASE); break;                                        // 직진
-    case 'L': driveManualLR(BASE - (int)KP, BASE + (int)KP); break;                    // 살짝 왼쪽 (PID ±1 보정 정도)
-    case 'R': driveManualLR(BASE + (int)KP, BASE - (int)KP); break;                    // 살짝 오른쪽
-    case 'Q': driveManualLR(CORNER_IN, CORNER_OUT); break;                             // 크게 왼쪽 (코너와 같음)
-    case 'W': driveManualLR(CORNER_OUT, CORNER_IN); break;                             // 크게 오른쪽
     default:  brakeCar(); act = 's'; return;              // 's' 포함 : 브레이크로 바로 섬
   }
-  act = tolower(c);                                       // 앱에는 소문자로 (g l r q w 와 같은 동작 이름)
+  act = c;
 }
 
 // 수동 조종용 모터 힘 다듬기
