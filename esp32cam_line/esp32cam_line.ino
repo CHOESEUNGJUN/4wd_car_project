@@ -107,6 +107,7 @@ char carLine[64] = "";                    // 아두이노 상태 줄 (loop 에�
 volatile bool carClear = false;           // 블루투스 끊김 -> 상태 줄 비우기 (btTask 가 표시, loop 가 비움)
 volatile bool btWant = false;             // 연결 유지 (끄면 폰 앱이 HC-06 을 쓸 수 있음)
 volatile bool btScanReq = false, btScanning = false, btFail = false;
+const uint32_t HEAP_MIN = 12000;          // 내부 메모리가 이보다 적게 5초 이어지면 재시작 (아래 loop)
 const uint32_t BT_NEED = 40000;           // 블루투스를 켤 때 남아 있어야 할 내부 메모리 (PlatformIO 빌드는 블루투스가 외부 메모리를 먼저 써서 적게 필요)
 String btAddr, btName;                    // 연결할 기기 (목록에서 고르면 ESP32 에 저장)
 char btLabel[40] = "";                    // 화면에 보일 기기 이름 (바꿀 때 한 번만 만들어 둠)
@@ -614,6 +615,13 @@ void loop() {
   // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); BT.write('h'); }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
+  // 메모리 안전장치 : 남은 내부 메모리가 HEAP_MIN 보다 적은 상태가 5초 이어지면, 멈추기 전에 스스로 재시작
+  // (핫스팟·블루투스는 저장돼 있어서 다시 붙음). 누수가 있으면 시리얼 I,heap 값이 계속 줄어든다
+  static unsigned long lowSince = 0;
+  if (heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < HEAP_MIN) {
+    if (!lowSince) lowSince = millis();
+    else if (millis() - lowSince > 5000) { Serial.println("I,restart,low_heap"); delay(100); ESP.restart(); }
+  } else lowSince = 0;
   if (lastInfo == 0 || millis() - lastInfo >= 10000) {     // 안내 줄 (I 로 시작 : 아두이노는 C 줄만 읽어서 상관없음)
     lastInfo = millis();
     if (setupMode) {
