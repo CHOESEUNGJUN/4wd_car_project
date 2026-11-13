@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 버전 E `motor_control_low_frequency` 시험용, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
+| 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 버전 E `motor_control_low_frequency`·카메라용 `motor_control_low_frequency_cam` 저주파 PWM 시험용, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
 | 카메라 코드 | [`esp32/esp32cam_line/`](esp32/esp32cam_line) (`esp32cam_line.ino`, 웹 화면 `page.h`, 빌드 설정 `platformio.ini`) |
 | 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 구조, 주행 모드, 신호등, 배선(5V 외부 전원), 올리기, 와이파이(프린터처럼), 웹 화면, 영상 처리, 메모리, 맞추기 |
 | 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`G L R Q W`, `x v n` 은 버전 D 만) |

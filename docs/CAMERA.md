@@ -12,6 +12,7 @@
 |---|---|
 | `esp32/esp32cam_line/` (`esp32cam_line.ino`, 웹 화면 `page.h`, `platformio.ini`, `huge_app.csv`) | ESP32-CAM (AI Thinker) : **PlatformIO** |
 | `arduino/team2_bt_cam/team2_bt_cam.ino` | 아두이노 UNO : **버전 D** = 버전 C + 카메라 주행 글자 `G L R Q W` + 신호등 글자 `x v n` : Arduino IDE |
+| `arduino/motor_control_low_frequency_cam/` | 아두이노 UNO : **버전 D + 저주파 PWM** (시험용, 약 122Hz, 배선 4개 맞바꿈 ENA 9 · IN2 5 · ENB 10 · IN3 6). 안 좋으면 선 되돌리고 버전 D : Arduino IDE |
 | `apps/ios_mac/` | 아이폰 앱 굴노 : **"신호등 화면"** (폰을 신호등으로) : Xcode |
 
 ---
@@ -134,6 +135,8 @@ ESP32-CAM-MB 에 꽂고 `~/.pio-venv/bin/pio device monitor` (또는 Arduino IDE
 ### 차 (버전 D, Arduino IDE)
 
 `arduino/team2_bt_cam/team2_bt_cam.ino` 를 열고 보드 Arduino UNO 로 업로드. 핀·PID 값은 버전 C 와 같다.
+
+저주파 PWM 시험 : `arduino/motor_control_low_frequency_cam/` (버전 D 와 같고 모터 PWM 만 약 122Hz). **먼저 배선 4개를 맞바꿈** (L298N ENA 선 5 → 9, IN2 선 9 → 5, ENB 선 6 → 10, IN3 선 10 → 6), 바퀴를 띄우고 방향부터 확인. 되돌릴 때는 선을 되돌리고 버전 D. 이유·비교 : `docs/PID.md` 끝
 
 ### 아이폰 앱 (Xcode)
 
