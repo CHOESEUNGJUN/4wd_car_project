@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
+| 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 버전 E `team2_bt_pid_pwm` 시험용, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
 | 카메라 코드 | [`esp32/esp32cam_line/`](esp32/esp32cam_line) (`esp32cam_line.ino`, 웹 화면 `page.h`, 빌드 설정 `platformio.ini`) |
 | 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 구조, 주행 모드, 신호등, 배선(5V 외부 전원), 올리기, 와이파이(프린터처럼), 웹 화면, 영상 처리, 메모리, 맞추기 |
 | 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`G L R Q W`, `x v n` 은 버전 D 만) |
@@ -169,7 +169,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 센서가 0/1 뿐이라 오차가 0 → 1 처럼 **계단**으로 바뀜. 보통 D 는 바뀐 순간 20ms 만 생겼다 사라져 모터가 반응하기 전에 끝남 | D 를 20ms 마다 0.8 배씩 줄이며 약 0.1초 이어지게 (`D_DECAY` 0.8) |
 | I 가 쌓이면 커브 뒤 반대로 휘청 | 오차가 반대쪽으로 넘어가면 0 으로 비우고, ±50 을 넘지 않게 (`I_LIMIT`) |
 | PID 만으로는 급한 코너(끝 센서만 선을 봄)를 못 돎 | 코너는 PID 대신 바깥 180 / 안쪽 −90 으로 확실히 돌기. 돌고 나서 PID 로 돌아갈 때 쌓인 I·D 를 비워 튀지 않게 |
-| 모터 감속기가 작아 작은 PWM 은 바퀴가 안 돎 | 0 이 아니면 최소 90, 방향이 바뀌는 순간 0.12초 최대 힘(255). 근본 해결로 **저주파 PWM 스위치** `LOW_FREQ_PWM` (약 122Hz, 배선 4개 맞바꿈, 기본 꺼짐, `docs/PID.md`) |
+| 모터 감속기가 작아 작은 PWM 은 바퀴가 안 돎 | 0 이 아니면 최소 90, 방향이 바뀌는 순간 0.12초 최대 힘(255). 근본 해결 시험으로 **버전 E** (저주파 PWM 약 122Hz, 배선 4개 맞바꿈) |
 | 센서 간격(4.9cm)이 테이프(1.9cm)보다 넓어, 선이 센서 사이 틈에 들어가면 `000` 이 됨. 코너 뒤 넘치면 선이 반대쪽에 있음 | 놓치자마자 돌지 않고 먼저 PID 로 0.5초 보정, 그래도 없으면 마지막 쪽 → 반대쪽 순서로 찾기 |
 | 배터리 전압에 따라 같은 PWM 도 회전량이 다름 | 새 배터리에서 코너 바깥 220 → 180 으로 맞춤 (약해지면 200~220) |
 
@@ -207,6 +207,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
+| `arduino/team2_bt_pid_pwm/` (Arduino IDE → UNO) | **버전 E** (시험용) = 버전 C + 저주파 PWM | 저속 힘 부족·"삐-" 소리·툭툭 튀는 것 시험. **배선 4개 맞바꿈** (ENA 9, IN2 5, ENB 10, IN3 6). 안 좋으면 선 되돌리고 버전 C. `docs/PID.md` 끝 |
 | `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (제출용, 카메라 주행) | 버전 C + 카메라 주행 글자 `G L R Q W` + 신호등 `x v n` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
 | `esp32/esp32cam_line/` (PlatformIO → ESP32-CAM) | ESP32-CAM 펌웨어 | 카메라로 라인·신호등 인식, 와이파이 웹 화면, 블루투스로 차 조종·카메라 주행·서행 |
 | `arduino/diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
@@ -222,7 +223,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 
 | 부품 | 핀 |
 |---|---|
-| 모터 드라이버 L298N | ENA 5, IN1·IN2 8·9 (오른쪽) / ENB 6, IN3·IN4 10·11 (왼쪽). `LOW_FREQ_PWM = true` 이면 **ENA 9, IN2 5 / ENB 10, IN3 6** 으로 선을 맞바꿈 |
+| 모터 드라이버 L298N | ENA 5, IN1·IN2 8·9 (오른쪽) / ENB 6, IN3·IN4 10·11 (왼쪽). **버전 E** 는 **ENA 9, IN2 5 / ENB 10, IN3 6** 으로 선을 맞바꿈 |
 | 라인센서 3개 | 왼 A3 / 가운데 A4 / 오른 A5 (검은 선 = 1) |
 | 초음파 | TRIG 13, ECHO 12 |
 | 서보 (초음파 받침) | 2 — **빼지 않는다**. 켜면 정면(90°)을 보게 함 |
