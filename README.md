@@ -26,7 +26,7 @@
 
 | | |
 |---|---|
-| 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 버전 E `team2_bt_pid_pwm` 시험용, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
+| 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 버전 E `motor_control_low_frequency` 시험용, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
 | 카메라 코드 | [`esp32/esp32cam_line/`](esp32/esp32cam_line) (`esp32cam_line.ino`, 웹 화면 `page.h`, 빌드 설정 `platformio.ini`) |
 | 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 구조, 주행 모드, 신호등, 배선(5V 외부 전원), 올리기, 와이파이(프린터처럼), 웹 화면, 영상 처리, 메모리, 맞추기 |
 | 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`G L R Q W`, `x v n` 은 버전 D 만) |
@@ -207,7 +207,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
-| `arduino/team2_bt_pid_pwm/` (Arduino IDE → UNO) | **버전 E** (시험용) = 버전 C + 저주파 PWM | 저속 힘 부족·"삐-" 소리·툭툭 튀는 것 시험. **배선 4개 맞바꿈** (ENA 9, IN2 5, ENB 10, IN3 6). 안 좋으면 선 되돌리고 버전 C. `docs/PID.md` 끝 |
+| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **버전 E** (시험용) = 버전 C + 저주파 PWM | 저속 힘 부족·"삐-" 소리·툭툭 튀는 것 시험. **배선 4개 맞바꿈** (ENA 9, IN2 5, ENB 10, IN3 6). 안 좋으면 선 되돌리고 버전 C. `docs/PID.md` 끝 |
 | `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (제출용, 카메라 주행) | 버전 C + 카메라 주행 글자 `G L R Q W` + 신호등 `x v n` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
 | `esp32/esp32cam_line/` (PlatformIO → ESP32-CAM) | ESP32-CAM 펌웨어 | 카메라로 라인·신호등 인식, 와이파이 웹 화면, 블루투스로 차 조종·카메라 주행·서행 |
 | `arduino/diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
