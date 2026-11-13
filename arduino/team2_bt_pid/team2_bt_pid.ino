@@ -62,7 +62,7 @@ const int MAN_CURVE_OUT = 100;      // 곡선 회전 바깥 바퀴 (255 -> 100, 
 const int MAN_CURVE_IN = 80;       // 곡선 회전 안쪽 바퀴
 const int MAN_SPIN = 130;           // 제자리 회전 (230 -> 130, 차에서 맞춤)
 const int MIN_PWM = 90;             // 0 이 아니면 최소 이만큼 (작으면 바닥에서 모터가 안 돎)
-const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘 (수동에서 툭툭 튀어나가면 이것을 낮춤. 저주파 PWM 이면 180 정도로도 출발)
+const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘
 const unsigned long KICK_MS = 120;  // 그 시간 (배터리가 약해도 출발하게 0.08 -> 0.12초)
 const float TRIM_L = 1.0, TRIM_R = 1.0;   // 한쪽이 빠르면 빠른 쪽을 0.9 처럼 낮춰 맞춤
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
@@ -73,14 +73,9 @@ const unsigned long LINK_SHOW_MS = 1500;   // 앱은 0.6초마다 'h'를 보낸�
 // [핀]
 // ============================================================
 // 핀 (센서 확장 쉴드의 S 번호). 바뀌지 않는 값이라 모두 const int 로 (RAM 을 안 쓰고, 잘못 바꾸면 컴파일 오류)
-// [모터 PWM 주파수] false = 기본 약 980Hz (5·6번). 저속에서 힘이 없고 "삐-" 소리가 남.
-//   true = 약 122Hz : 한 번 켤 때 전류가 충분히 차서 저속 힘이 생김 (대신 낮은 "웅" 소리·떨림).
-//   5·6번(Timer0)은 millis() 와 같이 쓰여 바꾸면 시간이 틀어지므로, 속도 핀을 9·10번(Timer1)으로 옮긴다.
-//   true 로 바꾸면 배선을 맞바꿔야 함 : L298N ENA 선 5 <-> IN2 선 9, ENB 선 6 <-> IN3 선 10 (선 4개)
-const bool LOW_FREQ_PWM = false;
-const int RightMotor_E_pin = LOW_FREQ_PWM ? 9 : 5, LeftMotor_E_pin = LOW_FREQ_PWM ? 10 : 6;      // 모터 속도(PWM)
-const int RightMotor_1_pin = 8, RightMotor_2_pin = LOW_FREQ_PWM ? 5 : 9;                     // 오른쪽 모터 방향
-const int LeftMotor_3_pin = LOW_FREQ_PWM ? 6 : 10, LeftMotor_4_pin = 11;                     // 왼쪽 모터 방향
+const int RightMotor_E_pin = 5, LeftMotor_E_pin = 6;     // 모터 속도(PWM)
+const int RightMotor_1_pin = 8, RightMotor_2_pin = 9;    // 오른쪽 모터 방향
+const int LeftMotor_3_pin = 10, LeftMotor_4_pin = 11;    // 왼쪽 모터 방향
 const int L_Line = A3, C_Line = A4, R_Line = A5;         // 라인센서 왼쪽 A3, 가운데 A4, 오른쪽 A5 (검은 선 = 1)
 const int trigPin = 13, echoPin = 12, servoPin = 2;      // 초음파, 서보
 const int BT_RXD = 3;                                    // 블루투스 모듈 TXD -> D3 (아두이노가 받는 쪽)
@@ -120,9 +115,6 @@ void setup() {
   EduServo.write(90);
   delay(400);
   EduServo.detach();
-  // 저주파 PWM : Timer1 을 8비트 위상 보정 PWM, 분주 256 으로 -> 16MHz / 256 / 510 = 약 122Hz (9·10번 핀).
-  // 서보 라이브러리가 detach 뒤에도 Timer1 인터럽트를 켜 두어 PWM 값을 덮어쓰므로 먼저 끈다 (서보는 위에서 한 번만 씀)
-  if (LOW_FREQ_PWM) { TIMSK1 = 0; TCCR1A = _BV(WGM10); TCCR1B = _BV(CS12); }
   pinMode(echoPin, INPUT);
   pinMode(trigPin, OUTPUT);
   pinMode(RightMotor_E_pin, OUTPUT);
