@@ -169,7 +169,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | 폴더 | 무엇 | 언제 쓰나 |
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
-| `arduino/team2_bt_pid_pwm/` (Arduino IDE → UNO) | **버전 E** (시험용) = 버전 C + 저주파 PWM | 저속 힘 부족·"삐-" 소리·툭툭 튀는 것 시험. **배선 4개 맞바꿈** (ENA 9, IN2 5, ENB 10, IN3 6). 안 좋으면 선 되돌리고 버전 C. `docs/PID.md` 끝 |
+| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **버전 E** (시험용) = 버전 C + 저주파 PWM | 저속 힘 부족·"삐-" 소리·툭툭 튀는 것 시험. **배선 4개 맞바꿈** (ENA 9, IN2 5, ENB 10, IN3 6). 안 좋으면 선 되돌리고 버전 C. `docs/PID.md` 끝 |
 | 카메라 (추가 프로젝트) | ESP32-CAM 라인 인식 + 와이파이 화면 + 블루투스 조종 | **브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam)** 에만 있음 (아래 8장) |
 | `arduino/diag/` (Arduino IDE → UNO) | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10** |
