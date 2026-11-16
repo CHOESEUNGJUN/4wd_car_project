@@ -58,6 +58,10 @@ const int COLOR_S_MIN = 110;              // 이보다 채도가 높아야 색 (
 const int COLOR_V_MIN = 60;               // 이보다 밝아야 색 (너무 어두우면 색상을 믿을 수 없음)
 const int WHITE_S_MAX = 50, WHITE_V_MIN = 170;   // 흰색 : 채도 낮고 밝음 (정지 표지판 글자·테두리)
 uint8_t colorLut[4096];
+inline int lutIndex(uint16_t p) { return ((p >> 4) & 0xF00) | ((p >> 3) & 0x0F0) | ((p >> 1) & 0x00F); }   // RGB565 -> R4 G4 B4
+// HSV 보기 (웹 카메라 설정) : 영상을 실제 색 대신 ESP 가 본 색 종류로 칠함. 없음 = 어두운 회색, 빨강, 초록, 노랑, 흰색 (RGB565)
+volatile bool hsvView = false;
+const uint16_t HSV_PAL[5] = {0x2945, 0xF920, 0x2F0B, 0xFEA0, 0xFFFF};
 uint8_t colorClass(int r, int g, int b) {  // 0~255 RGB -> 종류 (표 만들 때만 씀)
   int mx = max(r, max(g, b)), mn = min(r, min(g, b)), d = mx - mn;
   int v = mx, sat = mx ? d * 255 / mx : 0;
@@ -424,8 +428,8 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"sf\":%d,\"sw\":%d,\"stop\":%lu,\"rot\":%d,\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
-           sigFill, sigWhite, stopLeft(), camRot * 90, camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
+  snprintf(buf, n, "{\"sf\":%d,\"sw\":%d,\"stop\":%lu,\"hsv\":%d,\"rot\":%d,\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
+           sigFill, sigWhite, stopLeft(), hsvView ? 1 : 0, camRot * 90, camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine, sdOk ? 1 : 0, recOn ? 1 : 0, recNo, (unsigned long)recFrames);
 }
 
@@ -493,6 +497,7 @@ void handleSet() {
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
   if (hasArg("rot")) { camRot = (arg("rot").toInt() / 90) & 3; prefs.putInt("rot", camRot); }   // 0 / 90 / 180 / 270
+  if (hasArg("hsv")) hsvView = arg("hsv") == "1";   // HSV 보기 (저장 안 함 : 켤 때는 늘 실제 영상)
   if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0;
     if (!sigMode && btOn()) for (int i = 0; i < 3; i++) btSend('n'); }   // 인식을 끄면 차의 빨강 정지를 풀어 줌 (빨강은 시간으로 안 풀려서)
   if (hasArg("rec")) {                    // SD 기록 켬/끔. 켤 때마다 번호 +1 (rec_0001.mjpeg, log_0001.csv …)
@@ -638,9 +643,15 @@ HOT void shrinkView(const uint8_t* src) {
   const int SX = CW / W;                   // 1 = 그대로, 2 = 한 칸 건너
   uint8_t row[CW * 2], o[W * 2];
   int r = camRot;
+  bool hv = hsvView;
   int ow = (r & 1) ? H : W, oh = (r & 1) ? W : H;   // 돌린 뒤 크기
   for (int y = 0; y < H; y++) {
     memcpy(row, src + (SX * y) * CW * 2, CW * 2);
+    if (hv)                                // HSV 보기 : 칸마다 색 종류로 칠함
+      for (int x = 0; x < W; x++) {
+        uint16_t q = HSV_PAL[colorLut[lutIndex((row[2 * SX * x] << 8) | row[2 * SX * x + 1])]];
+        row[2 * SX * x] = q >> 8; row[2 * SX * x + 1] = q & 0xFF;
+      }
     if (r == 0) {
       for (int x = 0; x < W; x++) { o[2 * x] = row[2 * SX * x]; o[2 * x + 1] = row[2 * SX * x + 1]; }
       memcpy(color + y * W * 2, o, W * 2);
@@ -667,15 +678,18 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
   // 빨강 덩어리 네모 칸이 정해진 뒤 그 안의 흰색을 외부 메모리를 다시 읽지 않고 셈
   static uint8_t row[CW * 2];
   static uint32_t whiteBits[CH][(CW + 31) / 32];
+  static uint8_t vrow[CW * 2];             // HSV 보기 : 이 줄을 색 종류로 칠한 것
+  const bool hsvOut = copyView && hsvView && camRot == 0 && CW == W && SIG_STEP == 1 && SIG_Y1 == CH;
   int red = 0, grn = 0, yel = 0, x0 = CW, x1 = -1, y0 = CH, y1 = -1;   // x0~y1 = 빨강 덩어리를 감싼 네모 칸
   for (int y = 0; y < SIG_Y1; y += SIG_STEP) {
     memcpy(row, b + y * CW * 2, CW * 2);
-    if (copyView) memcpy(color + y * W * 2, row, W * 2);
+    if (copyView && !hsvOut) memcpy(color + y * W * 2, row, W * 2);
     uint32_t* wb = whiteBits[y];
     memset(wb, 0, sizeof whiteBits[0]);
     for (int x = 0; x < CW; x += SIG_STEP) {
       uint16_t p = (row[2 * x] << 8) | row[2 * x + 1];
-      uint8_t c = colorLut[((p >> 4) & 0xF00) | ((p >> 3) & 0x0F0) | ((p >> 1) & 0x00F)];   // RGB565 -> R4 G4 B4 -> 종류
+      uint8_t c = colorLut[lutIndex(p)];   // RGB565 -> R4 G4 B4 -> 종류
+      if (hsvOut) { vrow[2 * x] = HSV_PAL[c] >> 8; vrow[2 * x + 1] = HSV_PAL[c] & 0xFF; }
       if (c == C_RED) {
         red++;
         if (x < x0) x0 = x;
@@ -687,6 +701,7 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
       else if (c == C_YELLOW) yel++;
       else if (c == C_WHITE) wb[x >> 5] |= 1u << (x & 31);
     }
+    if (hsvOut) memcpy(color + y * W * 2, vrow, W * 2);
   }
   sigR = red; sigG = grn; sigY = yel;
   // 빨강 덩어리 모양 : 네모 칸을 얼마나 채웠나(%), 칸 안에 흰색이 얼마나(%) -> 정지 표지판인지 신호등(폰 화면)인지

@@ -43,8 +43,8 @@ label{display:block;margin:6px 0 2px}select{font:inherit;color:var(--fg);backgro
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
 <section class="card"><h2>카메라 설정</h2>
-<div class="row"><label><input type="checkbox" id="mir"> 좌우 반전</label><label><input type="checkbox" id="flip"> 위아래 뒤집기</label><label>회전 <select id="rot"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label></div>
-<div class="hint">신호등 인식을 켜면 영상 테두리가 지금 신호 색 (빨강 / 초록 / 노랑, 정지 표지판 = 자홍, 없음 = 회색). 정지 표지판은 3초 서 있다가 출발. 아래 숫자는 사진에서 센 각 색 픽셀 수 : 기준(SIG_MIN)을 넘고 가장 많은 색이 신호<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
+<div class="row"><label><input type="checkbox" id="mir"> 좌우 반전</label><label><input type="checkbox" id="flip"> 위아래 뒤집기</label><label><input type="checkbox" id="hsv"> HSV 보기</label><label>회전 <select id="rot"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label></div>
+<div class="hint">신호등 인식을 켜면 영상 테두리가 지금 신호 색 (빨강 / 초록 / 노랑, 정지 표지판 = 자홍, 없음 = 회색). 정지 표지판은 3초 서 있다가 출발. 아래 숫자는 사진에서 센 각 색 픽셀 수 : 기준(SIG_MIN)을 넘고 가장 많은 색이 신호<br>HSV 보기 : 영상을 ESP 가 본 색 종류로 칠함 (빨강·초록·노랑·흰색, 회색 = 신호 아님). 기준을 맞출 때 켜기<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
 </div></main>
 <script>
 const $=i=>document.getElementById(i);
@@ -62,7 +62,7 @@ function connect(){
     $('s').textContent=s.sigm?`센 픽셀 : 빨강 ${s.rc} · 초록 ${s.gc} · 노랑 ${s.yc} (기준 ${s.smin} 넘고 가장 많은 색) · 빨강 덩어리 채움 ${s.sf}% 흰색 ${s.sw}% (채움 80% 아래 + 흰색 4% 넘으면 정지 표지판)`:'신호등 인식 꺼짐';
     $('recBtn').textContent='SD 기록 : '+(s.rec?'켬':'끔'); $('recBtn').classList.toggle('on',!!s.rec); $('recBtn').disabled=!s.sd;
     $('recS').textContent=!s.sd?'SD 카드 없음':s.rec?('rec_'+String(s.recn).padStart(4,'0')+' · '+s.recf+'장'):'-';
-    $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; if(document.activeElement!==$('rot'))$('rot').value=String(s.rot||0); showCar(s);};
+    $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; if(document.activeElement!==$('rot'))$('rot').value=String(s.rot||0); $('hsv').checked=!!s.hsv; showCar(s);};
   ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
 }
 connect();
@@ -98,7 +98,8 @@ $('f').onerror=()=>{$('ph').style.display='grid';setTimeout(stream,2000);};
 stream();
 $('mir').onchange=()=>fetch('/set?mir='+($('mir').checked?1:0));
 $('flip').onchange=()=>fetch('/set?flip='+($('flip').checked?1:0));
-$('rot').onchange=()=>fetch('/set?rot='+$('rot').value);   // 카메라를 90도 돌려 달았을 때 (영상만 돌림, 신호 판단은 같음)
+$('rot').onchange=()=>fetch('/set?rot='+$('rot').value);
+$('hsv').onchange=()=>fetch('/set?hsv='+($('hsv').checked?1:0));   // ESP 가 본 색 종류로 칠한 영상 (빨강·초록·노랑·흰색, 회색 = 신호 아님)   // 카메라를 90도 돌려 달았을 때 (영상만 돌림, 신호 판단은 같음)
 // 앱과 같은 규칙 : 누르는 동안 0.2초마다 같은 글자, 떼면 s 두 번. 연결 신호 h 는 ESP32 가 대신 보냄
 const send=c=>{if(ws&&ws.readyState===1)ws.send(c);};
 let held=null,rep=null;
