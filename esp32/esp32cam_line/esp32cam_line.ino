@@ -28,8 +28,13 @@ const char* BT_PIN = "1234";                   // HC-06 기본 PIN
 const unsigned long CONNECT_WAIT_MS = 15000;   // 켤 때 저장된 핫스팟을 이만큼 기다리고, 못 붙으면 설정 모드
 // 핫스팟 이름·암호는 여기 적지 않는다 (공개 저장소). 설정 화면에서 넣으면 ESP32 안(Preferences)에 저장된다
 
-const int CW = 320, CH = 240;             // 카메라로 찍고 신호를 판단하는 크기 (QVGA 컬러, 예전 160x120 의 4배 픽셀 : 멀리 있는 작은 신호등·표지판도)
-const int W = 160, H = 120;               // 웹 영상·SD 기록 크기 (한 칸 건너 뽑음 : 압축이 가벼워 빠름)
+// 인지 속도 우선 (2026-11-16) : 카메라 센서가 컬러를 가장 빨리 주는 160x120 (초당 약 25장). 320x240 은 센서가 초당 9~10장만 줘서 느림.
+// 대신 신호는 모든 칸(SIG_STEP 1)을 봐서 작은·먼 표지판도 잡음. 화각 : 4:3 크기는 센서 전체를 줄여 써서 이미 최대 (더 넓게는 광각 렌즈)
+const framesize_t CAM_SIZE = FRAMESIZE_QQVGA;
+const int CW = 160, CH = 120;             // 카메라로 찍고 신호를 판단하는 크기 (= CAM_SIZE)
+const int SIG_STEP = 1;                   // 신호 볼 때 몇 칸마다 (1 = 모든 칸)
+const int CAM_XCLK = 20000000;            // 카메라 클럭 (Hz). 24MHz 는 더 빠르지 않고 덜 찍힌 사진만 늘어남 (2026-11-16 시험)
+const int W = 160, H = 120;               // 웹 영상·SD 기록 크기 (카메라가 더 크면 건너 뽑음)
 const int FLASH_DUTY = 30;                // 앞 플래시 LED 밝기 (0~255). 최대로 오래 켜면 뜨겁고 전원이 약하면 재부팅
 const int JPEG_Q = 40, JPEG_Q_BT = 25;     // 화면 영상 압축 (낮을수록 많이 압축 = 작고 흐림). _BT = 차와 블루투스로 연결됐을 때
 const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초당 10장 / 블루투스 연결 중 5장)
@@ -38,7 +43,7 @@ const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초�
 volatile bool sigMode = false;            // 웹 화면 "신호등 인식" 버튼으로 켬 (저장)
 volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강(정지), 2 = 초록(주행), 3 = 노랑(서행), 4 = 정지 표지판 (3장 연속 같아야 바뀜, 빨강은 2장)
 const int SIG_Y1 = CH;                    // 이 줄 위쪽만 봄 (카메라 크기 기준). CH = 화면 전체 (카메라가 라인을 안 보니 바닥 테이프와 섞일 일이 없음). 바닥 색이 걸리면 줄임
-const int SIG_MIN = 160;                  // 2칸마다 본 픽셀 중 이만큼 넘게 그 색이면 신호 (320x240 화면 전체면 19200개 중. 예전 160x120 의 40 과 같은 넓이)
+const int SIG_MIN = 160;                  // 본 픽셀 중 이만큼 넘게 그 색이면 신호 (160x120 모든 칸이면 19200개 중 0.8%)
 volatile int sigR = 0, sigG = 0, sigY = 0; // 마지막 사진에서 센 빨강·초록·노랑 픽셀 수 (웹 화면·로그로 기준 맞추기)
 // 정지 표지판 = 빨간 팔각형 + 흰 테두리·글자. 신호등(폰 화면 빨강)과 같은 빨강이라 모양으로 가름 :
 //   빨강 덩어리를 감싼 네모 칸에서 빨강이 차지하는 비율(채움)이 SIGN_FILL_MAX% 보다 작고 (팔각형은 모서리가 비고 글자가 있음)
@@ -217,7 +222,7 @@ bool makeJpeg(uint8_t** jpg, size_t* len, int q) {   // q = 압축 품질
       for (int x = 0; x < dw; x++) { dot(x, k, c); dot(x, dh - 1 - k, c); }
       for (int y = 0; y < dh; y++) { dot(k, y, c); dot(dw - 1 - k, y, c); }
     }
-    if (SIG_Y1 < CH && camRot == 0) for (int x = 0; x < W; x += 3) dot(x, SIG_Y1 / 2, WHITE);
+    if (SIG_Y1 < CH && camRot == 0) for (int x = 0; x < W; x += 3) dot(x, SIG_Y1 * H / CH, WHITE);
   }
   return fmt2jpg(view, dw * dh * 2, dw, dh, PIXFORMAT_RGB565, q, jpg, len);
 }
@@ -563,9 +568,9 @@ bool startCamera() {
   c.pin_xclk = XCLK_GPIO_NUM; c.pin_pclk = PCLK_GPIO_NUM; c.pin_vsync = VSYNC_GPIO_NUM; c.pin_href = HREF_GPIO_NUM;
   c.pin_sccb_sda = SIOD_GPIO_NUM; c.pin_sccb_scl = SIOC_GPIO_NUM;
   c.pin_pwdn = PWDN_GPIO_NUM; c.pin_reset = RESET_GPIO_NUM;
-  c.xclk_freq_hz = 20000000;
+  c.xclk_freq_hz = CAM_XCLK;
   c.pixel_format = PIXFORMAT_RGB565;       // 늘 컬러 : 라인은 밝기만 뽑아서, 신호등은 색으로
-  c.frame_size = FRAMESIZE_QVGA;           // 320 x 240 (신호 판단은 이 크기로, 영상은 한 칸 건너 160 x 120)
+  c.frame_size = CAM_SIZE;
   c.fb_count = 2;                          // 2장 : 한 장을 처리하는 동안 다음 장을 미리 찍음 (외부 메모리 38KB 더, 처리와 촬영이 겹쳐서 빨라짐)
   c.fb_location = CAMERA_FB_IN_PSRAM;
   c.grab_mode = CAMERA_GRAB_LATEST;        // 항상 가장 최근 프레임
@@ -601,13 +606,14 @@ void setup() {
 // 카메라 사진(CW x CH) -> 웹 영상·기록용(W x H) : 짝수 줄·짝수 칸만 뽑음. 한 줄씩 내부 메모리로 옮겨서 (외부 메모리를 덜 읽게)
 // camRot 이 0 이 아니면 뽑으면서 돌림 (시계 방향 90 / 180 / 270 도)
 void shrinkView(const uint8_t* src) {
+  const int SX = CW / W;                   // 1 = 그대로, 2 = 한 칸 건너
   uint8_t row[CW * 2], o[W * 2];
   int r = camRot;
   int ow = (r & 1) ? H : W, oh = (r & 1) ? W : H;   // 돌린 뒤 크기
   for (int y = 0; y < H; y++) {
-    memcpy(row, src + (2 * y) * CW * 2, CW * 2);
+    memcpy(row, src + (SX * y) * CW * 2, CW * 2);
     if (r == 0) {
-      for (int x = 0; x < W; x++) { o[2 * x] = row[4 * x]; o[2 * x + 1] = row[4 * x + 1]; }
+      for (int x = 0; x < W; x++) { o[2 * x] = row[2 * SX * x]; o[2 * x + 1] = row[2 * SX * x + 1]; }
       memcpy(color + y * W * 2, o, W * 2);
       continue;
     }
@@ -617,7 +623,7 @@ void shrinkView(const uint8_t* src) {
       else if (r == 2) { dx = W - 1 - x; dy = H - 1 - y; }   // 180 도
       else             { dx = y;         dy = W - 1 - x; }   // 270 도
       uint8_t* d = color + (dy * ow + dx) * 2;
-      d[0] = row[4 * x]; d[1] = row[4 * x + 1];
+      d[0] = row[2 * SX * x]; d[1] = row[2 * SX * x + 1];
     }
   }
   viewW = ow; viewH = oh;
@@ -625,11 +631,17 @@ void shrinkView(const uint8_t* src) {
 
 void detectSignal(const uint8_t* b) {
   static uint8_t cand = 0, same = 0;
+  // 한 줄씩 빠른 내부 메모리로 옮겨서 봄 (외부 메모리를 칸마다 읽으면 느림). 흰색 칸은 비트로 적어 둠 (내부 2.4KB) :
+  // 빨강 덩어리 네모 칸이 정해진 뒤 그 안의 흰색을 외부 메모리를 다시 읽지 않고 셈
+  static uint8_t row[CW * 2];
+  static uint32_t whiteBits[CH][(CW + 31) / 32];
   int red = 0, grn = 0, yel = 0, x0 = CW, x1 = -1, y0 = CH, y1 = -1;   // x0~y1 = 빨강 덩어리를 감싼 네모 칸
-  for (int y = 0; y < SIG_Y1; y += 2)
-    for (int x = 0; x < CW; x += 2) {
-      int i = y * CW + x;
-      uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
+  for (int y = 0; y < SIG_Y1; y += SIG_STEP) {
+    memcpy(row, b + y * CW * 2, CW * 2);
+    uint32_t* wb = whiteBits[y];
+    memset(wb, 0, sizeof whiteBits[0]);
+    for (int x = 0; x < CW; x += SIG_STEP) {
+      uint16_t p = (row[2 * x] << 8) | row[2 * x + 1];
       int r = (p >> 11) << 3, g = ((p >> 5) & 63) << 2, bl = (p & 31) << 3;
       if (r >= 160 && g <= 80 && bl <= 80) {
         red++;
@@ -640,18 +652,16 @@ void detectSignal(const uint8_t* b) {
       }
       else if (g >= 150 && r <= 110 && bl <= 150) grn++;
       else if (r >= 160 && g >= 150 && bl <= 100) yel++;
+      else if (r >= 180 && g >= 180 && bl >= 180) wb[x >> 5] |= 1u << (x & 31);   // 흰색
     }
+  }
   sigR = red; sigG = grn; sigY = yel;
   // 빨강 덩어리 모양 : 네모 칸을 얼마나 채웠나(%), 칸 안에 흰색이 얼마나(%) -> 정지 표지판인지 신호등(폰 화면)인지
   int fill = 0, white = 0;
   if (red > SIG_MIN) {
-    int area = ((x1 - x0) / 2 + 1) * ((y1 - y0) / 2 + 1), wc = 0;
-    for (int y = y0; y <= y1; y += 2)
-      for (int x = x0; x <= x1; x += 2) {
-        int i = y * CW + x;
-        uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
-        if ((p >> 11) << 3 >= 180 && ((p >> 5) & 63) << 2 >= 180 && (p & 31) << 3 >= 180) wc++;
-      }
+    int area = ((x1 - x0) / SIG_STEP + 1) * ((y1 - y0) / SIG_STEP + 1), wc = 0;
+    for (int y = y0; y <= y1; y += SIG_STEP)
+      for (int x = x0; x <= x1; x += SIG_STEP) wc += (whiteBits[y][x >> 5] >> (x & 31)) & 1;
     fill = red * 100 / area; white = wc * 100 / area;
   }
   sigFill = fill; sigWhite = white;
@@ -678,7 +688,7 @@ void loop() {
       if (sigMode) detectSignal(b);         // 320x240 그대로 (풀 필요 없음)
       uint32_t tc = micros();
       tSig += tc - ts;
-      if (viewers > 0 || recOn) { shrinkView(b); colorNo++; }   // 영상을 보거나 SD 기록 중일 때만 160x120 으로 (짝수 줄·칸)
+      if (viewers > 0 || recOn) { shrinkView(b); colorNo++; }   // 영상을 보거나 SD 기록 중일 때만 (회전 포함)
       tCopy += micros() - tc;
       frames++;
     }
