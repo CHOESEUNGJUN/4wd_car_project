@@ -38,13 +38,13 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 <div class="row"><button id="auto">라인센서 주행</button><button id="man">정지 · 수동</button></div>
 <div class="row"><button id="sigBtn">신호등 인식 : 끔</button><span id="sigS" class="badge">-</span></div>
 <div class="row"><button id="recBtn">SD 기록 : 끔</button><span id="recS" class="badge">-</span></div>
-<div class="hint">라인은 차가 라인센서로 따라가고, 카메라는 신호등만 봅니다. 신호등 : 아이폰 앱 굴노의 <b>신호등 화면</b>을 카메라 앞에 두기. 빨강 = 정지, 초록 = 다시 주행, 노랑 = 서행</div><div id="cs" class="hint"></div></section>
+<div class="hint">라인은 차가 라인센서로 따라가고, 카메라는 신호등만 봅니다. 신호등 : 아이폰 앱 굴노의 <b>신호등 화면</b>을 카메라 앞에 두기. 빨강 = 정지, 초록 = 다시 주행, 노랑 = 서행, <b>정지 표지판</b> = 3초 서 있다가 출발</div><div id="cs" class="hint"></div></section>
 <section class="card"><h2>차 상태</h2><table id="car"><tr><td>블루투스</td><td>연결 안 됨</td></tr></table><div id="raw"></div></section>
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
 <section class="card"><h2>카메라 설정</h2>
 <div class="row"><label><input type="checkbox" id="mir"> 좌우 반전</label><label><input type="checkbox" id="flip"> 위아래 뒤집기</label></div>
-<div class="hint">신호등 인식을 켜면 영상 테두리가 지금 신호 색 (빨강 / 초록 / 노랑, 없음 = 회색). 아래 숫자는 사진에서 센 각 색 픽셀 수 : 기준(SIG_MIN)을 넘고 가장 많은 색이 신호<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
+<div class="hint">신호등 인식을 켜면 영상 테두리가 지금 신호 색 (빨강 / 초록 / 노랑, 정지 표지판 = 자홍, 없음 = 회색). 정지 표지판은 3초 서 있다가 출발. 아래 숫자는 사진에서 센 각 색 픽셀 수 : 기준(SIG_MIN)을 넘고 가장 많은 색이 신호<br>앞 LED : 연결 중 깜빡, 연결되면 켜짐</div></section>
 </div></main>
 <script>
 const $=i=>document.getElementById(i);
@@ -57,8 +57,9 @@ function connect(){
   ws.onmessage=e=>{
     const s=JSON.parse(e.data); badge('bFps',s.fps+' fps');
     $('sigBtn').textContent='신호등 인식 : '+(s.sigm?'켬':'끔'); $('sigBtn').classList.toggle('on',!!s.sigm);
-    $('sigS').textContent=!s.sigm?'-':s.sig==1?'🔴 빨강 : 정지':s.sig==2?'🟢 초록 : 주행':s.sig==3?'🟡 노랑 : 서행':'신호 없음';
-    $('s').textContent=s.sigm?`센 픽셀 : 빨강 ${s.rc} · 초록 ${s.gc} · 노랑 ${s.yc} (기준 ${s.smin} 넘고 가장 많은 색)`:'신호등 인식 꺼짐';
+    $('sigS').textContent=!s.sigm?'-':s.sig==1?'🔴 빨강 : 정지':s.sig==2?'🟢 초록 : 주행':s.sig==3?'🟡 노랑 : 서행':s.sig==4?'🛑 정지 표지판':'신호 없음';
+    if(s.sigm&&s.stop>0)$('sigS').textContent='🛑 정지 표지판 : '+(s.stop/1000).toFixed(1)+'초 뒤 출발';
+    $('s').textContent=s.sigm?`센 픽셀 : 빨강 ${s.rc} · 초록 ${s.gc} · 노랑 ${s.yc} (기준 ${s.smin} 넘고 가장 많은 색) · 빨강 덩어리 채움 ${s.sf}% 흰색 ${s.sw}% (채움 80% 아래 + 흰색 4% 넘으면 정지 표지판)`:'신호등 인식 꺼짐';
     $('recBtn').textContent='SD 기록 : '+(s.rec?'켬':'끔'); $('recBtn').classList.toggle('on',!!s.rec); $('recBtn').disabled=!s.sd;
     $('recS').textContent=!s.sd?'SD 카드 없음':s.rec?('rec_'+String(s.recn).padStart(4,'0')+' · '+s.recf+'장'):'-';
     $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; showCar(s);};

@@ -35,10 +35,20 @@ const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초�
 // 안테나 하나를 와이파이·블루투스가 나눠 써서, 영상이 무거우면 조종 글자(블루투스)가 늦어진다 -> 차와 연결되면 영상을 가볍게
 // 신호등 인식 : 사진에서 빨강·초록·노랑 덩어리를 찾음 (교안 3·4팀처럼 색 범위로). 아이폰 앱 굴노의 "신호등 화면"을 신호등으로 씀
 volatile bool sigMode = false;            // 웹 화면 "신호등 인식" 버튼으로 켬 (저장)
-volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강(정지), 2 = 초록(주행), 3 = 노랑(서행) (3장 연속 같아야 바뀜)
+volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강(정지), 2 = 초록(주행), 3 = 노랑(서행), 4 = 정지 표지판 (3장 연속 같아야 바뀜, 빨강은 2장)
 const int SIG_Y1 = H;                     // 이 줄 위쪽만 봄. H = 화면 전체 (카메라가 라인을 안 보니 바닥 테이프와 섞일 일이 없음). 바닥 색이 걸리면 줄임
 const int SIG_MIN = 40;                   // 2칸마다 본 픽셀 중 이만큼 넘게 그 색이면 신호 (화면 전체면 4800개 중)
 volatile int sigR = 0, sigG = 0, sigY = 0; // 마지막 사진에서 센 빨강·초록·노랑 픽셀 수 (웹 화면·로그로 기준 맞추기)
+// 정지 표지판 = 빨간 팔각형 + 흰 테두리·글자. 신호등(폰 화면 빨강)과 같은 빨강이라 모양으로 가름 :
+//   빨강 덩어리를 감싼 네모 칸에서 빨강이 차지하는 비율(채움)이 SIGN_FILL_MAX% 보다 작고 (팔각형은 모서리가 비고 글자가 있음)
+//   그 칸 안에 흰색이 SIGN_WHITE_MIN% 넘게 있으면 표지판. 폰 빨간 화면은 채움 90% 넘고 흰색이 거의 없음
+const int SIGN_FILL_MAX = 80;             // % (가짜 사진 시험 : 표지판 61~68%, 폰 빨간 화면 86~100% (아래 버튼 칸 포함) -> 사이)
+const int SIGN_WHITE_MIN = 4;             // %
+const unsigned long STOP_WAIT_MS = 3000;  // 정지 표지판 : 이만큼 서 있다가 스스로 출발 (빨간불은 초록이 될 때까지)
+const unsigned long STOP_IGNORE_MS = 5000; // 출발한 뒤 이만큼은 같은 표지판을 무시 (지나가는 동안 또 서지 않게)
+volatile int sigFill = 0, sigWhite = 0;   // 마지막 사진의 빨강 덩어리 채움 % / 흰색 % (웹 화면·로그)
+volatile unsigned long stopUntil = 0;     // 정지 표지판으로 서 있는 끝 시각 (0 = 아님)
+unsigned long stopLeft() { long d = (long)(stopUntil - millis()); return stopUntil && d > 0 ? d : 0; }
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
 
 // AI-Thinker ESP32-CAM 핀
@@ -151,7 +161,7 @@ void recTask(void*) {                     // 기록 하나 : 붙이고 -> 파일
     lg = SD_MMC.open(p2, FILE_WRITE);
   }
   if (vid && lg) {
-    lg.print("ms,frame,fps,heap,sig_mode,sig,red,green,yellow,bt,car\n");
+    lg.print("ms,frame,fps,heap,sig_mode,sig,red,green,yellow,fill,white,stop_ms,bt,car\n");
     recFrames = 0;
     unsigned long lastFrame = 0, lastLog = 0, lastFlush = millis();
     while (recOn) {
@@ -166,9 +176,9 @@ void recTask(void*) {                     // 기록 하나 : 붙이고 -> 파일
       }
       if (now - lastLog >= REC_LOG_MS) {
         lastLog = now;
-        int n = snprintf(line, sizeof line, "%lu,%lu,%.1f,%u,%d,%d,%d,%d,%d,%d,\"%s\"\n",
+        int n = snprintf(line, sizeof line, "%lu,%lu,%.1f,%u,%d,%d,%d,%d,%d,%d,%d,%lu,%d,\"%s\"\n",
                          now, (unsigned long)recFrames, fps, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-                         sigMode ? 1 : 0, sigState, sigR, sigG, sigY, btOn() ? 1 : 0, carLine);
+                         sigMode ? 1 : 0, sigState, sigR, sigG, sigY, sigFill, sigWhite, stopLeft(), btOn() ? 1 : 0, carLine);
         if (n > 0 && lg.write((const uint8_t*)line, min(n, (int)sizeof line - 1)) == 0) recOn = false;
       }
       if (now - lastFlush >= REC_FLUSH_MS) { lastFlush = now; vid.flush(); lg.flush(); }   // 2초마다 실제로 씀 (전원이 꺼져도 거기까지는 남음)
@@ -187,7 +197,7 @@ void recTask(void*) {                     // 기록 하나 : 붙이고 -> 파일
 
 // 지금 프레임 + 신호 표시를 JPEG 로 (웹 영상, SD 기록 공용). 신호등 인식이 켜져 있으면 테두리를 지금 신호 색으로
 // (빨강 / 초록 / 노랑, 없음 = 회색). SIG_Y1 이 화면보다 작으면 보는 범위 아래 끝에 흰 점선
-const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF, GRAY = 0x8410;
+const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF, GRAY = 0x8410, MAGENTA = 0xF81F;
 inline void dot(int x, int y, uint16_t c) {
   if (x < 0 || x >= W || y < 0 || y >= H) return;
   view[(y * W + x) * 2] = c >> 8; view[(y * W + x) * 2 + 1] = c & 0xFF;
@@ -195,7 +205,7 @@ inline void dot(int x, int y, uint16_t c) {
 bool makeJpeg(uint8_t** jpg, size_t* len, int q) {   // q = 압축 품질
   memcpy(view, color, W * H * 2);
   if (sigMode) {
-    uint16_t c = sigState == 1 ? RED : sigState == 2 ? GREEN : sigState == 3 ? YELLOW : GRAY;
+    uint16_t c = sigState == 1 ? RED : sigState == 2 ? GREEN : sigState == 3 ? YELLOW : sigState == 4 ? MAGENTA : GRAY;   // 정지 표지판 = 자홍
     for (int k = 0; k < 3; k++) {
       for (int x = 0; x < W; x++) { dot(x, k, c); dot(x, H - 1 - k, c); }
       for (int y = 0; y < H; y++) { dot(k, y, c); dot(W - 1 - k, y, c); }
@@ -374,8 +384,8 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
-           camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
+  snprintf(buf, n, "{\"sf\":%d,\"sw\":%d,\"stop\":%lu,\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
+           sigFill, sigWhite, stopLeft(), camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine, sdOk ? 1 : 0, recOn ? 1 : 0, recNo, (unsigned long)recFrames);
 }
 
@@ -582,20 +592,39 @@ void setup() {
 // (폰 화면 순수 빨강·초록·노랑 기준, 실제로 재서 맞추기). 가장 많은 색이 SIG_MIN 넘으면 그 신호
 void detectSignal(const uint8_t* b) {
   static uint8_t cand = 0, same = 0;
-  int red = 0, grn = 0, yel = 0;
+  int red = 0, grn = 0, yel = 0, x0 = W, x1 = -1, y0 = H, y1 = -1;   // x0~y1 = 빨강 덩어리를 감싼 네모 칸
   for (int y = 0; y < SIG_Y1; y += 2)
     for (int x = 0; x < W; x += 2) {
       int i = y * W + x;
       uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
       int r = (p >> 11) << 3, g = ((p >> 5) & 63) << 2, bl = (p & 31) << 3;
-      if (r >= 160 && g <= 80 && bl <= 80) red++;
+      if (r >= 160 && g <= 80 && bl <= 80) {
+        red++;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
       else if (g >= 150 && r <= 110 && bl <= 150) grn++;
       else if (r >= 160 && g >= 150 && bl <= 100) yel++;
     }
   sigR = red; sigG = grn; sigY = yel;
+  // 빨강 덩어리 모양 : 네모 칸을 얼마나 채웠나(%), 칸 안에 흰색이 얼마나(%) -> 정지 표지판인지 신호등(폰 화면)인지
+  int fill = 0, white = 0;
+  if (red > SIG_MIN) {
+    int area = ((x1 - x0) / 2 + 1) * ((y1 - y0) / 2 + 1), wc = 0;
+    for (int y = y0; y <= y1; y += 2)
+      for (int x = x0; x <= x1; x += 2) {
+        int i = y * W + x;
+        uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
+        if ((p >> 11) << 3 >= 180 && ((p >> 5) & 63) << 2 >= 180 && (p & 31) << 3 >= 180) wc++;
+      }
+    fill = red * 100 / area; white = wc * 100 / area;
+  }
+  sigFill = fill; sigWhite = white;
   uint8_t now = 0;
   int best = SIG_MIN;
-  if (red > best) { now = 1; best = red; }
+  if (red > best) { now = fill < SIGN_FILL_MAX && white >= SIGN_WHITE_MIN ? 4 : 1; best = red; }   // 4 = 정지 표지판
   if (grn > best) { now = 2; best = grn; }
   if (yel > best) now = 3;
   if (now == cand) { if (same < 3) same++; } else { cand = now; same = 1; }
@@ -633,13 +662,18 @@ void loop() {
   // x 빨강 = 정지, v 노랑 = 서행, n 초록·신호 없음 = 보통. 차는 모드를 안 바꾸고 라인센서로 계속 라인을 따라가면서 신호만 따름.
   // 인식을 끄면 n 을 3번 보내고 그만 보냄 (빨강은 차에서 시간으로 안 풀림, 노랑은 1초 뒤 풀림)
   // 색이 바뀌면 0.2초를 기다리지 않고 바로 보냄
+  // 정지 표지판 : 처음 보면 STOP_WAIT_MS 동안 x (정지) -> 그 뒤 n 으로 출발, STOP_IGNORE_MS 동안은 표지판을 무시 (지나가는 동안 또 서지 않게)
+  static unsigned long ignoreUntil = 0;
+  if (sigMode && sigState == 4 && (long)(millis() - ignoreUntil) >= 0) { stopUntil = millis() + STOP_WAIT_MS; ignoreUntil = stopUntil + STOP_IGNORE_MS; }
+  if (stopUntil && !stopLeft()) stopUntil = 0;
+  char want = sigState == 1 || stopLeft() ? 'x' : sigState == 3 ? 'v' : 'n';
   static unsigned long lastSig = 0;
-  static uint8_t sentSig = 255;
-  if (sigMode && btOn() && (sigState != sentSig || millis() - lastSig >= 200)) {
-    lastSig = millis(); sentSig = sigState;
-    btSend(sigState == 1 ? 'x' : sigState == 3 ? 'v' : 'n');
+  static char sentSig = 0;
+  if (sigMode && btOn() && (want != sentSig || millis() - lastSig >= 200)) {
+    lastSig = millis(); sentSig = want;
+    btSend(want);
   }
-  if (!sigMode) sentSig = 255;
+  if (!sigMode) { sentSig = 0; stopUntil = 0; }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }
   // 메모리 안전장치 : 남은 내부 메모리가 HEAP_MIN 보다 적은 상태가 5초 이어지면, 멈추기 전에 스스로 재시작
   // (핫스팟·블루투스는 저장돼 있어서 다시 붙음). 누수가 있으면 시리얼 I,heap 값이 계속 줄어든다
