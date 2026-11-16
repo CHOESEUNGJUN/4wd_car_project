@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>굴노 기록 보기</title>
+<!-- ESP32-CAM SD 기록 (rec_NNNN.mjpeg + log_NNNN.csv) 을 같이 보는 페이지. 인터넷·설치 필요 없음, 파일은 브라우저 안에서만 읽음 -->
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --ink:#1d1d1f; --mute:#6b6b70; --line:#e2e2df; --acc:#0a7cff; --warn:#d9480f; --ok:#2b8a3e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141416; --card:#1e1e21; --ink:#eee; --mute:#9a9aa0; --line:#333338; --acc:#4da3ff; --warn:#ff8a5c; --ok:#69db7c; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui,-apple-system,sans-serif; }
+  header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  h1 { font-size:18px; margin:0 12px 0 0; }
+  main { display:grid; grid-template-columns:minmax(0,640px) minmax(0,1fr); gap:16px; padding:16px; max-width:1300px; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  #drop { border:2px dashed var(--line); border-radius:12px; padding:18px; text-align:center; color:var(--mute); }
+  #drop.over { border-color:var(--acc); color:var(--acc); }
+  #view { width:100%; aspect-ratio:4/3; image-rendering:pixelated; background:#000; border-radius:8px; display:block; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; }
+  button, select { font:inherit; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+  input[type=range] { flex:1; min-width:160px; }
+  .mono { font-family:ui-monospace,Menlo,monospace; font-size:13px; }
+  table { border-collapse:collapse; width:100%; }
+  td { padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td:first-child { color:var(--mute); width:42%; }
+  .warn { color:var(--warn); font-weight:600; }
+  .ok { color:var(--ok); font-weight:600; }
+  #plot { width:100%; height:160px; display:block; }
+  .legend span { margin-right:12px; }
+  .hint { color:var(--mute); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>굴노 기록 보기</h1>
+  <span class="hint">SD 카드의 <b>rec_NNNN.mjpeg</b> 와 같은 번호의 <b>log_NNNN.csv</b> 를 같이 고르세요 (끌어다 놓아도 됨)</span>
+  <input id="files" type="file" multiple accept=".mjpeg,.mjpg,.csv">
+</header>
+<main>
+  <section>
+    <div id="drop" class="card">여기에 rec_NNNN.mjpeg 와 log_NNNN.csv 를 끌어다 놓기</div>
+    <div class="card" style="margin-top:12px">
+      <img id="view" alt="">
+      <div class="row">
+        <button id="prev" title="← 키">◀ 한 장</button>
+        <button id="play" class="primary" title="스페이스">▶ 재생</button>
+        <button id="next" title="→ 키">한 장 ▶</button>
+        <select id="speed"><option value="0.5">0.5배</option><option value="1" selected>1배 (초당 5장)</option><option value="2">2배</option><option value="4">4배</option></select>
+      </div>
+      <div class="row"><input id="seek" type="range" min="0" max="0" value="0"><span id="pos" class="mono">0 / 0</span></div>
+      <p class="hint">키보드 : ← → 한 장, 스페이스 재생/정지. 아래 그래프를 눌러도 그 장면으로 감.</p>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <canvas id="plot"></canvas>
+      <div class="legend hint"><span style="color:#0a7cff">● 가까운 라인 위치</span><span style="color:#f59f00">● 먼 라인 위치</span><span style="color:#e03131">▮ 교차선</span><span style="color:#e03131">― 빨강 신호</span> (위치 −100 왼쪽 ~ +100 오른쪽)</div>
+    </div>
+  </section>
+  <section class="card">
+    <h3 style="margin:4px 0 8px">이 장면의 로그</h3>
+    <table id="info"><tr><td>파일</td><td>아직 없음</td></tr></table>
+    <h3 style="margin:16px 0 8px">이 장면 동안의 줄 (0.1초마다)</h3>
+    <div id="rows" class="mono hint">-</div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let frames = [], rows = [], idx = 0, timer = null, names = {};
+
+// MJPEG = JPEG 를 이어 붙인 것 : FFD8 (시작) ~ FFD9 (끝) 으로 자름
+function splitJpeg(buf) {
+  const b = new Uint8Array(buf), out = [];
+  let i = 0;
+  while (i < b.length - 3) {
+    if (b[i] === 0xFF && b[i + 1] === 0xD8 && b[i + 2] === 0xFF) {
+      let j = i + 2;
+      while (j < b.length - 1 && !(b[j] === 0xFF && b[j + 1] === 0xD9)) j++;
+      if (j >= b.length - 1) break;            // 끝이 잘린 마지막 장은 버림
+      out.push(URL.createObjectURL(new Blob([b.subarray(i, j + 2)], { type: 'image/jpeg' })));
+      i = j + 2;
+    } else i++;
+  }
+  return out;
+}
+
+// CSV : 마지막 열(car)은 따옴표 안에 쉼표가 있음
+function parseCsv(text) {
+  const lines = text.trim().split(/\r?\n/), head = lines.shift().split(',');
+  return lines.map(l => {
+    const q = l.indexOf('"'), plain = (q < 0 ? l : l.slice(0, q)).split(',');
+    const r = {};
+    head.forEach((h, k) => r[h] = plain[k]);
+    if (q >= 0) r.car = l.slice(q + 1, l.lastIndexOf('"'));
+    ['ms','frame','fps','heap','near_found','near_pos','far_found','far_pos','cross','cam_drive','sig_mode','sig','bt'].forEach(k => r[k] = +r[k]);
+    return r;
+  });
+}
+
+async function load(fileList) {
+  for (const f of fileList) {
+    if (/\.mjpe?g$/i.test(f.name)) { frames.forEach(URL.revokeObjectURL); frames = splitJpeg(await f.arrayBuffer()); names.v = f.name; }
+    else if (/\.csv$/i.test(f.name)) { rows = parseCsv(await f.text()); names.l = f.name; }
+  }
+  $('seek').max = Math.max(0, frames.length - 1);
+  show(0); drawPlot();
+}
+
+const SIG = ['없음', '🔴 빨강 (정지)', '🟢 초록', '🟡 노랑 (서행)'];
+const CMD = { G: 'G 직진', L: 'L 살짝 왼쪽', R: 'R 살짝 오른쪽', Q: 'Q 크게 왼쪽', W: 'W 크게 오른쪽', S: 'S 정지', '-': '-' };
+function rowsOf(k) { return rows.filter(r => r.frame === k + 1); }   // frame 열 = 그때까지 저장한 장 수 -> k 번째 장(0부터)은 frame == k+1 인 줄들
+
+function show(k) {
+  if (!frames.length && !rows.length) return;
+  idx = Math.max(0, Math.min(k, Math.max(frames.length - 1, 0)));
+  if (frames[idx]) $('view').src = frames[idx];
+  $('seek').value = idx;
+  $('pos').textContent = `${idx + 1} / ${frames.length}`;
+  const rs = rowsOf(idx), r = rs[rs.length - 1] || rows.find(x => x.frame >= idx + 1) || {};
+  const t0 = rows.length ? rows[0].ms : 0;
+  const car = (r.car || '').split(',');
+  $('info').innerHTML = [
+    ['파일', `${names.v || '-'} · ${names.l || '-'}`],
+    ['시간', r.ms != null ? `${((r.ms - t0) / 1000).toFixed(1)}초 (켠 뒤 ${r.ms} ms)` : '-'],
+    ['가까운 라인', r.near_found ? `위치 ${r.near_pos}` : '<span class="warn">못 찾음</span>'],
+    ['먼 라인', r.far_found ? `위치 ${r.far_pos}` : '없음'],
+    ['교차선', r.cross ? '<span class="warn">교차선으로 봄</span>' : '아님'],
+    ['카메라 주행', r.cam_drive ? `<span class="ok">켬</span> · ${CMD[r.cam_cmd] || r.cam_cmd}` : '끔'],
+    ['신호등', r.sig_mode ? SIG[r.sig] || r.sig : '인식 끔'],
+    ['차 블루투스', r.bt ? '<span class="ok">연결</span>' : '안 됨'],
+    ['차 상태 줄', r.car ? `<span class="mono">${r.car}</span> (모드·동작 ${car[0]}, 거리 ${car[1]}cm, 센서 ${car[2]}, 단계 ${car[3]}, 오차 ${car[4]}, 보정 ${car[5]})` : '-'],
+    ['ESP', r.fps != null ? `${r.fps} fps · 내부 메모리 ${Math.round(r.heap / 1024)}KB` : '-'],
+  ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  $('rows').innerHTML = rs.length ? rs.map(x => `${((x.ms - t0) / 1000).toFixed(1)}s 가까이 ${x.near_found ? x.near_pos : '✕'} 멀리 ${x.far_found ? x.far_pos : '✕'}${x.cross ? ' 교차' : ''} ${x.cam_drive ? x.cam_cmd : ''} ${x.car ? '| ' + x.car : ''}`).join('<br>') : '-';
+  drawPlot();
+}
+
+function drawPlot() {
+  const c = $('plot'), dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  g.strokeStyle = css.getPropertyValue('--line'); g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+  if (!rows.length) return;
+  const n = rows.length, X = i => i / Math.max(n - 1, 1) * w, Y = v => h / 2 - v / 100 * (h / 2 - 6);
+  rows.forEach((r, i) => {
+    if (r.cross) { g.fillStyle = 'rgba(224,49,49,.18)'; g.fillRect(X(i) - 1, 0, Math.max(2, w / n), h); }
+    if (r.sig_mode && r.sig === 1) { g.fillStyle = '#e03131'; g.fillRect(X(i), h - 3, Math.max(2, w / n), 3); }
+  });
+  for (const [key, ok, col] of [['near_pos', 'near_found', '#0a7cff'], ['far_pos', 'far_found', '#f59f00']]) {
+    g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); let on = false;
+    rows.forEach((r, i) => { if (!r[ok]) { on = false; return; } on ? g.lineTo(X(i), Y(r[key])) : g.moveTo(X(i), Y(r[key])); on = true; });
+    g.stroke();
+  }
+  const at = rows.findIndex(r => r.frame >= idx + 1);
+  if (at >= 0) { g.strokeStyle = css.getPropertyValue('--ink'); g.lineWidth = 1; g.beginPath(); g.moveTo(X(at), 0); g.lineTo(X(at), h); g.stroke(); }
+}
+
+function play(on) {
+  clearInterval(timer); timer = null;
+  $('play').textContent = on ? '⏸ 정지' : '▶ 재생';
+  if (on) timer = setInterval(() => { if (idx >= frames.length - 1) play(false); else show(idx + 1); }, 200 / +$('speed').value);
+}
+
+$('files').onchange = e => load(e.target.files);
+$('play').onclick = () => play(!timer);
+$('prev').onclick = () => { play(false); show(idx - 1); };
+$('next').onclick = () => { play(false); show(idx + 1); };
+$('seek').oninput = e => { play(false); show(+e.target.value); };
+$('speed').onchange = () => { if (timer) play(true); };
+$('plot').onclick = e => {
+  if (!rows.length) return;
+  const i = Math.round(e.offsetX / e.target.clientWidth * (rows.length - 1));
+  play(false); show(Math.max(0, rows[i].frame - 1));
+};
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
+  if (e.key === 'ArrowLeft') { play(false); show(idx - 1); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { play(false); show(idx + 1); e.preventDefault(); }
+  if (e.key === ' ') { play(!timer); e.preventDefault(); }
+});
+const drop = $('drop');
+['dragenter', 'dragover'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+document.addEventListener('drop', e => load(e.dataTransfer.files));
+addEventListener('resize', drawPlot);
+</script>
+</body>
+</html>
