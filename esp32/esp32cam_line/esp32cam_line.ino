@@ -51,6 +51,10 @@ volatile int sigFill = 0, sigWhite = 0;   // 마지막 사진의 빨강 덩어�
 volatile unsigned long stopUntil = 0;     // 정지 표지판으로 서 있는 끝 시각 (0 = 아님)
 unsigned long stopLeft() { long d = (long)(stopUntil - millis()); return stopUntil && d > 0 ? d : 0; }
 bool camFlip = false, camMirror = true;   // 화면 위아래 / 좌우. 이 보드는 그대로면 좌우가 바뀌어 보여서 좌우 반전이 기본. 웹 화면에서 바꾸면 저장됨
+// 화면 회전 (카메라를 90도 돌려 달았을 때) : 0 / 1 / 2 / 3 = 0 / 90 / 180 / 270 도 (시계 방향). 카메라 칩은 좌우·위아래만 돼서 영상(웹·SD)만 소프트웨어로 돌림.
+// 신호 판단(색 픽셀 수, 덩어리 채움·흰색)은 돌려도 결과가 같아서 돌리지 않음. 웹 화면에서 바꾸면 저장됨
+volatile int camRot = 0;
+volatile int viewW = 160, viewH = 120;   // 지금 영상 크기 (90·270 도면 120 x 160 세로)
 
 // AI-Thinker ESP32-CAM 핀
 #define PWDN_GPIO_NUM 32
@@ -199,21 +203,23 @@ void recTask(void*) {                     // 기록 하나 : 붙이고 -> 파일
 // 지금 프레임 + 신호 표시를 JPEG 로 (웹 영상, SD 기록 공용). 신호등 인식이 켜져 있으면 테두리를 지금 신호 색으로
 // (빨강 / 초록 / 노랑, 없음 = 회색). SIG_Y1 이 화면보다 작으면 보는 범위 아래 끝에 흰 점선
 const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF, GRAY = 0x8410, MAGENTA = 0xF81F;
+static int dw = W, dh = H;                // 지금 그리는 영상 크기 (makeJpeg 가 정함)
 inline void dot(int x, int y, uint16_t c) {
-  if (x < 0 || x >= W || y < 0 || y >= H) return;
-  view[(y * W + x) * 2] = c >> 8; view[(y * W + x) * 2 + 1] = c & 0xFF;
+  if (x < 0 || x >= dw || y < 0 || y >= dh) return;
+  view[(y * dw + x) * 2] = c >> 8; view[(y * dw + x) * 2 + 1] = c & 0xFF;
 }
 bool makeJpeg(uint8_t** jpg, size_t* len, int q) {   // q = 압축 품질
+  dw = viewW; dh = viewH;                 // 회전하면 120 x 160
   memcpy(view, color, W * H * 2);
   if (sigMode) {
     uint16_t c = sigState == 1 ? RED : sigState == 2 ? GREEN : sigState == 3 ? YELLOW : sigState == 4 ? MAGENTA : GRAY;   // 정지 표지판 = 자홍
     for (int k = 0; k < 3; k++) {
-      for (int x = 0; x < W; x++) { dot(x, k, c); dot(x, H - 1 - k, c); }
-      for (int y = 0; y < H; y++) { dot(k, y, c); dot(W - 1 - k, y, c); }
+      for (int x = 0; x < dw; x++) { dot(x, k, c); dot(x, dh - 1 - k, c); }
+      for (int y = 0; y < dh; y++) { dot(k, y, c); dot(dw - 1 - k, y, c); }
     }
-    if (SIG_Y1 < CH) for (int x = 0; x < W; x += 3) dot(x, SIG_Y1 / 2, WHITE);
+    if (SIG_Y1 < CH && camRot == 0) for (int x = 0; x < W; x += 3) dot(x, SIG_Y1 / 2, WHITE);
   }
-  return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, q, jpg, len);
+  return fmt2jpg(view, dw * dh * 2, dw, dh, PIXFORMAT_RGB565, q, jpg, len);
 }
 
 // 연속 영상 (MJPEG). 화면마다 따로 작업으로 보내서 신호 인식·조종을 막지 않는다
@@ -385,8 +391,8 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"sf\":%d,\"sw\":%d,\"stop\":%lu,\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
-           sigFill, sigWhite, stopLeft(), camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
+  snprintf(buf, n, "{\"sf\":%d,\"sw\":%d,\"stop\":%lu,\"rot\":%d,\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
+           sigFill, sigWhite, stopLeft(), camRot * 90, camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine, sdOk ? 1 : 0, recOn ? 1 : 0, recNo, (unsigned long)recFrames);
 }
 
@@ -453,6 +459,7 @@ void handleSet() {
   sensor_t* cam = esp_camera_sensor_get();
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
+  if (hasArg("rot")) { camRot = (arg("rot").toInt() / 90) & 3; prefs.putInt("rot", camRot); }   // 0 / 90 / 180 / 270
   if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0;
     if (!sigMode && btOn()) for (int i = 0; i < 3; i++) btSend('n'); }   // 인식을 끄면 차의 빨강 정지를 풀어 줌 (빨강은 시간으로 안 풀려서)
   if (hasArg("rec")) {                    // SD 기록 켬/끔. 켤 때마다 번호 +1 (rec_0001.mjpeg, log_0001.csv …)
@@ -577,7 +584,7 @@ void setup() {
   view = (uint8_t*)ps_malloc(W * H * 2);
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
-  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); sigMode = prefs.getBool("sig", false);
+  camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); sigMode = prefs.getBool("sig", false); camRot = prefs.getInt("rot", 0) & 3;
   if (!startCamera()) {
     while (true) { Serial.println("E,camera"); delay(1000); }   // 카메라 리본 케이블 확인
   }
@@ -592,13 +599,28 @@ void setup() {
 // 신호등 : SIG_Y1 위쪽(지금은 화면 전체)에서 2칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음, 노랑 = R·G 높고 B 낮음
 // (폰 화면 순수 빨강·초록·노랑 기준, 실제로 재서 맞추기). 가장 많은 색이 SIG_MIN 넘으면 그 신호
 // 카메라 사진(CW x CH) -> 웹 영상·기록용(W x H) : 짝수 줄·짝수 칸만 뽑음. 한 줄씩 내부 메모리로 옮겨서 (외부 메모리를 덜 읽게)
+// camRot 이 0 이 아니면 뽑으면서 돌림 (시계 방향 90 / 180 / 270 도)
 void shrinkView(const uint8_t* src) {
   uint8_t row[CW * 2], o[W * 2];
+  int r = camRot;
+  int ow = (r & 1) ? H : W, oh = (r & 1) ? W : H;   // 돌린 뒤 크기
   for (int y = 0; y < H; y++) {
     memcpy(row, src + (2 * y) * CW * 2, CW * 2);
-    for (int x = 0; x < W; x++) { o[2 * x] = row[4 * x]; o[2 * x + 1] = row[4 * x + 1]; }
-    memcpy(color + y * W * 2, o, W * 2);
+    if (r == 0) {
+      for (int x = 0; x < W; x++) { o[2 * x] = row[4 * x]; o[2 * x + 1] = row[4 * x + 1]; }
+      memcpy(color + y * W * 2, o, W * 2);
+      continue;
+    }
+    for (int x = 0; x < W; x++) {
+      int dx, dy;
+      if (r == 1)      { dx = H - 1 - y; dy = x; }           // 90 도
+      else if (r == 2) { dx = W - 1 - x; dy = H - 1 - y; }   // 180 도
+      else             { dx = y;         dy = W - 1 - x; }   // 270 도
+      uint8_t* d = color + (dy * ow + dx) * 2;
+      d[0] = row[4 * x]; d[1] = row[4 * x + 1];
+    }
   }
+  viewW = ow; viewH = oh;
 }
 
 void detectSignal(const uint8_t* b) {
