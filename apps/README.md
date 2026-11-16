@@ -14,6 +14,12 @@
 | 안드로이드·맥 | HM-10 | `web/index.html` | 크롬에서 BLE 연결 |
 | 아이폰 | HM-10 | `web/index.html` | 사파리는 안 됨. 무료 앱 Bluefy 로 열기 (https 주소 필요) |
 
+## 신호등 화면·카메라 화면 (아이폰·안드로이드)
+
+- **신호등 화면** : 폰을 신호등으로 (화면 전체 초록 → 노랑 → 빨강, 누르면 다음 색, 자동 n초) / **정지 표지판** (검은 바탕 + 흰 테두리 + 빨간 팔각형 + 흰 STOP). 밝기 최대, 화면 안 꺼짐. ESP32-CAM 신호등 인식 시험용 (브랜치 `extra/esp32cam` 의 `docs/CAMERA.md`)
+- **카메라 화면 (안드로이드)** : 같은 핫스팟에서 ESP32-CAM 을 스스로 찾아(mDNS `gulno-cam`) 웹 화면을 앱 안에서 엶. 못 찾으면 `gulno-cam.local`, 그다음 직접 연결 `192.168.4.1`. 아이폰은 사파리로 `gulno-cam.local`
+- 코드 : 아이폰 `ios_mac/MiniCar/LightView.swift`, 안드로이드 `android/.../LightActivity.kt`, `CamActivity.kt`
+
 ## 연결
 
 - **안드로이드**: 기기 찾기 → 주변 기기 목록(페어링 안 된 것도). `HC-` 기기는 ★ 로 맨 위, 신호 세기 표시. 누르면 연결, 처음이면 PIN 1234.

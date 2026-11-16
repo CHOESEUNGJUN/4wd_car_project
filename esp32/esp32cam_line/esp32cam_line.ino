@@ -18,6 +18,7 @@
 #include "BluetoothSerial.h"
 #include <atomic>
 #include "SD_MMC.h"
+#include "lwip/sockets.h"                // 접속한 폰의 주소 (직접 연결 와이파이인지)
 // 자주 도는 함수(사진마다)는 빠른 내부 코드 메모리(IRAM) 에 두고 -O2 로 : ESP32 는 플래시(코드)와 외부 메모리(PSRAM, 사진)가
 // 캐시 하나를 같이 써서, 사진을 읽는 동안 플래시에 있는 코드가 캐시에서 밀려나 느려짐
 #define HOT IRAM_ATTR __attribute__((optimize("O2")))
@@ -169,6 +170,10 @@ String btList = "[]";                     // 찾은 기기 목록 JSON [{"n":이
 DNSServer dns;                            // 설정 모드 : 어떤 주소를 쳐도 설정 화면으로 (공항 와이파이처럼)
 Preferences prefs;
 bool setupMode = false;
+// 어디서든 직접 연결 : 핫스팟에 붙은 뒤에도 ESP 자기 와이파이(설정용과 같은 이름·암호)를 켜 둠. 그 와이파이에 붙으면 어느 폰이든
+// 늘 http://192.168.4.1 (모르는 주소는 첫 화면으로 보내서 로그인 화면처럼 바로 뜸). 안드로이드 크롬이 .local 을 못 찾아도 됨
+const bool DIRECT_AP = true;
+bool apOn = false;
 String setupName, setupPass, ssidOptions, myIp, savedSsid, failWhy;
 unsigned long lastInfo = 0;
 String esc(String t);                     // 아래 와이파이 설정 부분에 있음
@@ -332,9 +337,25 @@ void pageList() {
 }
 
 // 설정 모드 : 폰이 여는 아무 주소나 설정 화면으로 (공항 와이파이처럼)
+// 이 요청을 보낸 폰이 ESP 자기 와이파이(192.168.4.x)에 붙어 있나 (핫스팟 쪽이면 false)
+bool fromAp(httpd_req_t* r) {
+  struct sockaddr_storage a; socklen_t l = sizeof a;
+  if (getpeername(httpd_req_to_sockfd(r), (struct sockaddr*)&a, &l) != 0) return false;
+  const uint8_t* ip = nullptr;
+  if (a.ss_family == AF_INET) ip = (const uint8_t*)&((struct sockaddr_in*)&a)->sin_addr.s_addr;
+  else if (a.ss_family == AF_INET6) {      // IPv6 소켓의 IPv4 주소 (::ffff:a.b.c.d)
+    const uint8_t* b6 = (const uint8_t*)&((struct sockaddr_in6*)&a)->sin6_addr;
+    if (b6[10] == 0xFF && b6[11] == 0xFF) ip = b6 + 12;
+  }
+  IPAddress ap = WiFi.softAPIP();
+  return ip && ip[0] == ap[0] && ip[1] == ap[1] && ip[2] == ap[2];
+}
+
 esp_err_t notFound(httpd_req_t* r, httpd_err_code_t) {
-  if (!setupMode) { httpd_resp_send_404(r); return ESP_OK; }
-  static String loc; loc = "http://" + myIp + "/";
+  if (!apOn) { httpd_resp_send_404(r); return ESP_OK; }
+  // 모르는 주소 -> 첫 화면으로 (폰이 직접 연결 와이파이에 붙을 때 확인하는 주소도 여기로 와서 화면이 바로 뜸)
+  static String loc;
+  loc = String("http://") + (setupMode || fromAp(r) ? WiFi.softAPIP().toString() : myIp) + "/";
   httpd_resp_set_status(r, "302 Found");
   httpd_resp_set_hdr(r, "Location", loc.c_str());
   httpd_resp_send(r, nullptr, 0);
@@ -428,8 +449,8 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"sf\":%d,\"sw\":%d,\"stop\":%lu,\"hsv\":%d,\"rot\":%d,\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
-           sigFill, sigWhite, stopLeft(), hsvView ? 1 : 0, camRot * 90, camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
+  snprintf(buf, n, "{\"ip\":\"%s\",\"apn\":\"%s\",\"apk\":\"%s\",\"sf\":%d,\"sw\":%d,\"stop\":%lu,\"hsv\":%d,\"rot\":%d,\"mir\":%d,\"flip\":%d,\"sigm\":%d,\"sig\":%d,\"rc\":%d,\"gc\":%d,\"yc\":%d,\"smin\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
+           myIp.c_str(), apOn ? setupName.c_str() : "", apOn ? setupPass.c_str() : "", sigFill, sigWhite, stopLeft(), hsvView ? 1 : 0, camRot * 90, camMirror ? 1 : 0, camFlip ? 1 : 0, sigMode ? 1 : 0, sigState, sigR, sigG, sigY, SIG_MIN, fps,
            btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine, sdOk ? 1 : 0, recOn ? 1 : 0, recNo, (unsigned long)recFrames);
 }
 
@@ -486,7 +507,7 @@ bool wsBroadcast(httpd_ws_type_t type, const uint8_t* data, size_t len) {
 }
 
 void pushStatus() {
-  static char buf[400];
+  static char buf[512];
   buildStatus(buf, sizeof buf);
   if (wsBroadcast(HTTPD_WS_TYPE_TEXT, (const uint8_t*)buf, strlen(buf))) lastViewer = millis();   // 화면이 열려 있음 -> 차에 연결 신호 h 계속
 }
@@ -552,6 +573,13 @@ String getSetupPass() {
   return pw;
 }
 
+void apName() {                           // 설정용·직접 연결 와이파이 이름 (칩 번호 4자리) 과 암호 (처음 켤 때 무작위, 저장)
+  char suffix[8];
+  snprintf(suffix, sizeof suffix, "-%04X", (unsigned)(ESP.getEfuseMac() >> 32) & 0xFFFF);
+  setupName = String(SETUP_SSID) + suffix;
+  setupPass = getSetupPass();
+}
+
 void startWifi() {
   btAddr = prefs.getString("bt_addr", ""); btName = prefs.getString("bt_name", ""); setBtLabel();
   WiFi.mode(WIFI_STA);
@@ -570,6 +598,12 @@ void startWifi() {
     myIp = WiFi.localIP().toString();
     MDNS.begin(HOSTNAME);
     MDNS.addService("http", "tcp", 80);
+    if (DIRECT_AP) {                       // 직접 연결 와이파이도 켬 (핫스팟과 같은 채널)
+      apName();
+      WiFi.mode(WIFI_AP_STA);
+      apOn = WiFi.softAP(setupName.c_str(), setupPass.c_str(), WiFi.channel());
+      if (apOn) dns.start(53, "*", WiFi.softAPIP());
+    }
     return;
   }
   // 설정 모드 : 주변 핫스팟 목록을 받아 두고 설정용 와이파이를 켬
@@ -582,15 +616,13 @@ void startWifi() {
   WiFi.disconnect();
   int n = WiFi.scanNetworks();
   for (int i = 0; i < n; i++) ssidOptions += "<option value=\"" + esc(WiFi.SSID(i)) + "\">";
-  char suffix[8];
-  snprintf(suffix, sizeof suffix, "-%04X", (unsigned)(ESP.getEfuseMac() >> 32) & 0xFFFF);
-  setupName = String(SETUP_SSID) + suffix;
-  setupPass = getSetupPass();
+  apName();
   WiFi.mode(ssid.length() ? WIFI_AP_STA : WIFI_AP);   // 저장된 핫스팟이 있으면 설정 모드에서도 계속 다시 찾음
   WiFi.softAP(setupName.c_str(), setupPass.c_str());
   if (ssid.length()) WiFi.begin(ssid.c_str(), prefs.getString("pass", "").c_str());
   myIp = WiFi.softAPIP().toString();
   dns.start(53, "*", WiFi.softAPIP());
+  apOn = true;
 }
 
 bool startCamera() {
@@ -799,8 +831,8 @@ void loop() {
   // 앞 플래시 LED : 연결 중(설정 모드, 핫스팟 연결 중, 블루투스 연결 중) = 깜빡, 다 연결되면 = 계속 켜짐 (폰 화면에 비치면 FLASH_DUTY 를 낮춤)
   bool connecting = setupMode || WiFi.status() != WL_CONNECTED || (btWant && !btOn());
   ledcWrite(FLASH_LED, connecting && (millis() / 400) % 2 ? 0 : FLASH_DUTY);
+  if (apOn) dns.processNextRequest();      // 직접 연결 와이파이 : 어떤 이름을 물어도 ESP 주소로
   if (setupMode) {
-    dns.processNextRequest();
     if (savedSsid.length() && WiFi.status() == WL_CONNECTED) {   // 핫스팟이 나타나서 붙음 -> 설정 모드 끝
       Serial.printf("I,joined,%s\n", savedSsid.c_str());
       delay(300);

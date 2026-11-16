@@ -178,6 +178,12 @@ class MainActivity : Activity() {
             })
             addView(grid)
             addView(distLabel)
+            // 폰을 신호등·정지 표지판으로 (ESP32-CAM 시험용) / ESP32-CAM 웹 화면 (같은 핫스팟에서 자동으로 찾음)
+            addView(LinearLayout(this@MainActivity).apply {
+                setPadding(0, pad, 0, 0)
+                addView(Button(this@MainActivity).apply { text = "신호등 화면"; setOnClickListener { startActivity(Intent(this@MainActivity, LightActivity::class.java)) } })
+                addView(Button(this@MainActivity).apply { text = "카메라 화면"; setOnClickListener { startActivity(Intent(this@MainActivity, CamActivity::class.java)) } })
+            })
         }) })
         updateLink()
         ui.post(repeat)

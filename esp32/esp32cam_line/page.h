@@ -20,7 +20,7 @@ main{display:grid;gap:14px;padding:14px 16px 28px;max-width:1200px;margin:0 auto
 button{font:inherit;color:var(--fg);background:#232a35;border:1px solid #303846;border-radius:12px;padding:10px 14px;cursor:pointer;touch-action:manipulation}
 button:active,button.on{background:var(--acc);border-color:var(--acc)}
 .pad button{aspect-ratio:1;font-size:28px;touch-action:none;user-select:none;-webkit-user-select:none}.pad .stop{background:#3a2328;border-color:#5a2f37}
-.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.row button{flex:1}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.row button{flex:1}.row .badge{align-self:center;white-space:normal;max-width:100%}
 #auto{background:#1f3a2e;border-color:#2b5a45}
 table{width:100%;border-collapse:collapse}td{padding:6px 0;border-bottom:1px solid var(--line)}td:first-child{color:var(--mut);width:42%}
 #raw{font:12px ui-monospace,Menlo,monospace;color:var(--mut);word-break:break-all;margin-top:8px}
@@ -39,6 +39,7 @@ label{display:block;margin:6px 0 2px}select{font:inherit;color:var(--fg);backgro
 <div class="row"><button id="sigBtn">신호등 인식 : 끔</button><span id="sigS" class="badge">-</span></div>
 <div class="row"><button id="recBtn">SD 기록 : 끔</button><span id="recS" class="badge">-</span></div>
 <div class="hint">라인은 차가 라인센서로 따라가고, 카메라는 신호등만 봅니다. 신호등 : 아이폰 앱 굴노의 <b>신호등 화면</b>을 카메라 앞에 두기. 빨강 = 정지, 초록 = 다시 주행, 노랑 = 서행, <b>정지 표지판</b> = 3초 서 있다가 출발</div><div id="cs" class="hint"></div></section>
+<section class="card"><h2>접속 주소 (다른 폰·PC 에서)</h2><div id="addr" class="hint" style="margin:0">-</div></section>
 <section class="card"><h2>차 상태</h2><table id="car"><tr><td>블루투스</td><td>연결 안 됨</td></tr></table><div id="raw"></div></section>
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
 <div class="row" style="margin:0"><button id="btScan">기기 찾기</button><button id="btOn">연결</button><button id="btOff">끊기</button></div><div id="btl"></div></section>
@@ -62,6 +63,7 @@ function connect(){
     $('s').textContent=s.sigm?`센 픽셀 : 빨강 ${s.rc} · 초록 ${s.gc} · 노랑 ${s.yc} (기준 ${s.smin} 넘고 가장 많은 색) · 빨강 덩어리 채움 ${s.sf}% 흰색 ${s.sw}% (채움 80% 아래 + 흰색 4% 넘으면 정지 표지판)`:'신호등 인식 꺼짐';
     $('recBtn').textContent='SD 기록 : '+(s.rec?'켬':'끔'); $('recBtn').classList.toggle('on',!!s.rec); $('recBtn').disabled=!s.sd;
     $('recS').textContent=!s.sd?'SD 카드 없음':s.rec?('rec_'+String(s.recn).padStart(4,'0')+' · '+s.recf+'장'):'-';
+    $('addr').innerHTML=(s.ip?`이 핫스팟에서 : <b>http://${s.ip}</b> (아이폰·맥·PC 는 <b>gulno-cam.local</b> 도 됨)`:'')+(s.apn?`<br>어디서든 (핫스팟 없이도, 삼성폰 등) : 와이파이 <b>${s.apn}</b> 암호 <b>${s.apk}</b> 에 붙고 <b>http://192.168.4.1</b> (화면이 바로 뜨기도 함)`:'');
     $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; if(document.activeElement!==$('rot'))$('rot').value=String(s.rot||0); $('hsv').checked=!!s.hsv; showCar(s);};
   ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
 }
