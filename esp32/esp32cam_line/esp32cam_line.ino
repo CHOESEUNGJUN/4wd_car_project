@@ -18,6 +18,9 @@
 #include "BluetoothSerial.h"
 #include <atomic>
 #include "SD_MMC.h"
+// 자주 도는 함수(사진마다)는 빠른 내부 코드 메모리(IRAM) 에 두고 -O2 로 : ESP32 는 플래시(코드)와 외부 메모리(PSRAM, 사진)가
+// 캐시 하나를 같이 써서, 사진을 읽는 동안 플래시에 있는 코드가 캐시에서 밀려나 느려짐
+#define HOT IRAM_ATTR __attribute__((optimize("O2")))
 
 // ============================================================
 // [설정]
@@ -601,11 +604,11 @@ void setup() {
   xTaskCreatePinnedToCore(btTask, "bt", 4096, nullptr, 1, nullptr, 0);
 }
 
-// 신호등 : SIG_Y1 위쪽(지금은 화면 전체)에서 2칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음, 노랑 = R·G 높고 B 낮음
+// 신호등 : SIG_Y1 위쪽(지금은 화면 전체)에서 SIG_STEP 칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음, 노랑 = R·G 높고 B 낮음
 // (폰 화면 순수 빨강·초록·노랑 기준, 실제로 재서 맞추기). 가장 많은 색이 SIG_MIN 넘으면 그 신호
 // 카메라 사진(CW x CH) -> 웹 영상·기록용(W x H) : 짝수 줄·짝수 칸만 뽑음. 한 줄씩 내부 메모리로 옮겨서 (외부 메모리를 덜 읽게)
 // camRot 이 0 이 아니면 뽑으면서 돌림 (시계 방향 90 / 180 / 270 도)
-void shrinkView(const uint8_t* src) {
+HOT void shrinkView(const uint8_t* src) {
   const int SX = CW / W;                   // 1 = 그대로, 2 = 한 칸 건너
   uint8_t row[CW * 2], o[W * 2];
   int r = camRot;
@@ -629,8 +632,11 @@ void shrinkView(const uint8_t* src) {
   viewW = ow; viewH = oh;
 }
 
-void detectSignal(const uint8_t* b) {
+// copyView = true 면 같은 줄을 읽는 김에 영상용 버퍼(color)에도 복사 (사진을 외부 메모리에서 한 번만 읽음).
+// 복사했으면 true (회전·크기가 달라 못 하면 false -> loop 가 shrinkView 로)
+HOT bool detectSignal(const uint8_t* b, bool copyView) {
   static uint8_t cand = 0, same = 0;
+  copyView = copyView && camRot == 0 && CW == W && SIG_STEP == 1 && SIG_Y1 == CH;
   // 한 줄씩 빠른 내부 메모리로 옮겨서 봄 (외부 메모리를 칸마다 읽으면 느림). 흰색 칸은 비트로 적어 둠 (내부 2.4KB) :
   // 빨강 덩어리 네모 칸이 정해진 뒤 그 안의 흰색을 외부 메모리를 다시 읽지 않고 셈
   static uint8_t row[CW * 2];
@@ -638,6 +644,7 @@ void detectSignal(const uint8_t* b) {
   int red = 0, grn = 0, yel = 0, x0 = CW, x1 = -1, y0 = CH, y1 = -1;   // x0~y1 = 빨강 덩어리를 감싼 네모 칸
   for (int y = 0; y < SIG_Y1; y += SIG_STEP) {
     memcpy(row, b + y * CW * 2, CW * 2);
+    if (copyView) memcpy(color + y * W * 2, row, W * 2);
     uint32_t* wb = whiteBits[y];
     memset(wb, 0, sizeof whiteBits[0]);
     for (int x = 0; x < CW; x += SIG_STEP) {
@@ -672,6 +679,8 @@ void detectSignal(const uint8_t* b) {
   if (yel > best) now = 3;
   if (now == cand) { if (same < 3) same++; } else { cand = now; same = 1; }
   if (same >= (cand == 1 ? 2 : 3)) sigState = cand;   // 빨강(정지)은 2장이면 바로 (서는 쪽은 빨라야 안전), 초록·노랑·없음은 3장 (잘못 출발하지 않게)
+  if (copyView) { viewW = W; viewH = H; }
+  return copyView;
 }
 
 void loop() {
@@ -684,11 +693,12 @@ void loop() {
   if (fb) {
     if (fb->len >= (size_t)(CW * CH * 2)) {
       const uint8_t* b = fb->buf;
+      bool wantView = viewers > 0 || recOn;  // 영상을 보거나 SD 기록 중일 때만 영상용 복사
       uint32_t ts = micros();
-      if (sigMode) detectSignal(b);         // 320x240 그대로 (풀 필요 없음)
+      bool copied = sigMode && detectSignal(b, wantView);   // 신호를 보면서 같은 줄을 영상용으로도 복사 (한 번만 읽음)
       uint32_t tc = micros();
       tSig += tc - ts;
-      if (viewers > 0 || recOn) { shrinkView(b); colorNo++; }   // 영상을 보거나 SD 기록 중일 때만 (회전 포함)
+      if (wantView) { if (!copied) shrinkView(b); colorNo++; }   // 신호를 안 보거나 회전 중이면 따로 복사
       tCopy += micros() - tc;
       frames++;
     }
