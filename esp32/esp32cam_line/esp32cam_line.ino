@@ -674,7 +674,7 @@ void detectSignal(const uint8_t* b) {
   if (grn > best) { now = 2; best = grn; }
   if (yel > best) now = 3;
   if (now == cand) { if (same < 3) same++; } else { cand = now; same = 1; }
-  if (same >= 3) sigState = cand;
+  if (same >= (cand == 1 ? 2 : 3)) sigState = cand;   // 빨강(정지)은 2장이면 바로 (서는 쪽은 빨라야 안전), 초록·노랑·없음은 3장 (잘못 출발하지 않게)
 }
 
 void loop() {
@@ -701,7 +701,8 @@ void loop() {
     tGrab += t1 - t0; tProc += micros() - t1; nT++;
   }
   static unsigned long lastPush = 0;
-  if (millis() - lastPush >= 200) { lastPush = millis(); pushStatus(); }
+  static uint8_t shownSig = 255;          // 신호가 바뀌면 화면에도 0.2초를 기다리지 않고 바로
+  if (millis() - lastPush >= 200 || sigState != shownSig) { lastPush = millis(); shownSig = sigState; pushStatus(); }
   static unsigned long lastMask = 0;      // 모폴로지 화면 : 초당 10번
   if (morphView && millis() - lastMask >= 100) { lastMask = millis(); pushMask(); }
   // 화면이 열려 있는 동안(웹소켓 연결) 차에 연결 신호 h 를 0.6초마다 대신 보냄.
