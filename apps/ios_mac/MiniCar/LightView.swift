@@ -10,7 +10,6 @@ struct LightView: View {
     @State private var k = 2   // 빨강부터
     @State private var secs = 5
     @State private var last = Date()
-    private let tick = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Color(red: lights[k].r, green: lights[k].g, blue: 0)
@@ -28,14 +27,19 @@ struct LightView: View {
                 .foregroundStyle(.white)
                 .padding()
             }
-            .onReceive(tick) { now in
-                if secs > 0 && now.timeIntervalSince(last) >= Double(secs) { flip() }
+            // 0.25초마다 자동 간격이 지났는지 확인 (화면이 닫히면 저절로 멈춤)
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(250))
+                    if secs > 0 && Date().timeIntervalSince(last) >= Double(secs) { flip() }
+                }
             }
             #if os(iOS)
             .statusBarHidden()
             .onAppear {
                 UIApplication.shared.isIdleTimerDisabled = true
-                UIScreen.main.brightness = 1
+                // 밝기 최대 (UIScreen.main 은 iOS 26 에서 안 쓰게 됨 -> 지금 창의 화면으로)
+                (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen.brightness = 1
             }
             .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
             #endif
