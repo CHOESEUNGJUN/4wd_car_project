@@ -55,7 +55,7 @@
     </div>
     <div class="card" style="margin-top:12px">
       <canvas id="plot"></canvas>
-      <div class="legend hint"><span style="color:#0a7cff">● 가까운 라인 위치</span><span style="color:#f59f00">● 먼 라인 위치</span><span style="color:#e03131">▮ 교차선</span><span style="color:#e03131">― 빨강 신호</span> (위치 −100 왼쪽 ~ +100 오른쪽)</div>
+      <div id="legend" class="legend hint">-</div>
     </div>
   </section>
   <section class="card">
@@ -93,7 +93,7 @@ function parseCsv(text) {
     const r = {};
     head.forEach((h, k) => r[h] = plain[k]);
     if (q >= 0) r.car = l.slice(q + 1, l.lastIndexOf('"'));
-    ['ms','frame','fps','heap','near_found','near_pos','far_found','far_pos','cross','cam_drive','sig_mode','sig','bt'].forEach(k => r[k] = +r[k]);
+    for (const k of head) if (k !== 'car' && k !== 'cam_cmd') r[k] = +r[k];   // 숫자 열
     return r;
   });
 }
@@ -120,19 +120,24 @@ function show(k) {
   const rs = rowsOf(idx), r = rs[rs.length - 1] || rows.find(x => x.frame >= idx + 1) || {};
   const t0 = rows.length ? rows[0].ms : 0;
   const car = (r.car || '').split(',');
+  const old = 'near_pos' in r;            // 예전 기록 (카메라가 라인도 보던 때)
   $('info').innerHTML = [
     ['파일', `${names.v || '-'} · ${names.l || '-'}`],
     ['시간', r.ms != null ? `${((r.ms - t0) / 1000).toFixed(1)}초 (켠 뒤 ${r.ms} ms)` : '-'],
-    ['가까운 라인', r.near_found ? `위치 ${r.near_pos}` : '<span class="warn">못 찾음</span>'],
-    ['먼 라인', r.far_found ? `위치 ${r.far_pos}` : '없음'],
-    ['교차선', r.cross ? '<span class="warn">교차선으로 봄</span>' : '아님'],
-    ['카메라 주행', r.cam_drive ? `<span class="ok">켬</span> · ${CMD[r.cam_cmd] || r.cam_cmd}` : '끔'],
     ['신호등', r.sig_mode ? SIG[r.sig] || r.sig : '인식 끔'],
+    ...('red' in r ? [['센 픽셀', `빨강 ${r.red} · 초록 ${r.green} · 노랑 ${r.yellow}`]] : []),
+    ...(old ? [['가까운 라인 (예전)', r.near_found ? `위치 ${r.near_pos}` : '<span class="warn">못 찾음</span>'],
+               ['먼 라인 (예전)', r.far_found ? `위치 ${r.far_pos}` : '없음'],
+               ['교차선 (예전)', r.cross ? '<span class="warn">교차선으로 봄</span>' : '아님'],
+               ['카메라 주행 (예전)', r.cam_drive ? `<span class="ok">켬</span> · ${CMD[r.cam_cmd] || r.cam_cmd}` : '끔']] : []),
     ['차 블루투스', r.bt ? '<span class="ok">연결</span>' : '안 됨'],
     ['차 상태 줄', r.car ? `<span class="mono">${r.car}</span> (모드·동작 ${car[0]}, 거리 ${car[1]}cm, 센서 ${car[2]}, 단계 ${car[3]}, 오차 ${car[4]}, 보정 ${car[5]})` : '-'],
     ['ESP', r.fps != null ? `${r.fps} fps · 내부 메모리 ${Math.round(r.heap / 1024)}KB` : '-'],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
-  $('rows').innerHTML = rs.length ? rs.map(x => `${((x.ms - t0) / 1000).toFixed(1)}s 가까이 ${x.near_found ? x.near_pos : '✕'} 멀리 ${x.far_found ? x.far_pos : '✕'}${x.cross ? ' 교차' : ''} ${x.cam_drive ? x.cam_cmd : ''} ${x.car ? '| ' + x.car : ''}`).join('<br>') : '-';
+  $('rows').innerHTML = rs.length ? rs.map(x => `${((x.ms - t0) / 1000).toFixed(1)}s ` +
+    (old ? `가까이 ${x.near_found ? x.near_pos : '✕'} 멀리 ${x.far_found ? x.far_pos : '✕'}${x.cross ? ' 교차' : ''} ${x.cam_drive ? x.cam_cmd : ''}`
+         : `신호 ${x.sig_mode ? ['-', '빨강', '초록', '노랑'][x.sig] : '끔'}${'red' in x ? ` (R ${x.red} G ${x.green} Y ${x.yellow})` : ''}`) +
+    ` ${x.car ? '| ' + x.car : ''}`).join('<br>') : '-';
   drawPlot();
 }
 
@@ -148,10 +153,23 @@ function drawPlot() {
     if (r.cross) { g.fillStyle = 'rgba(224,49,49,.18)'; g.fillRect(X(i) - 1, 0, Math.max(2, w / n), h); }
     if (r.sig_mode && r.sig === 1) { g.fillStyle = '#e03131'; g.fillRect(X(i), h - 3, Math.max(2, w / n), 3); }
   });
-  for (const [key, ok, col] of [['near_pos', 'near_found', '#0a7cff'], ['far_pos', 'far_found', '#f59f00']]) {
-    g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); let on = false;
-    rows.forEach((r, i) => { if (!r[ok]) { on = false; return; } on ? g.lineTo(X(i), Y(r[key])) : g.moveTo(X(i), Y(r[key])); on = true; });
-    g.stroke();
+  if ('near_pos' in rows[0]) {            // 예전 기록 : 라인 위치 (−100 ~ +100)
+    $('legend').innerHTML = '<span style="color:#0a7cff">● 가까운 라인 위치</span><span style="color:#f59f00">● 먼 라인 위치</span><span style="color:#e03131">▮ 교차선</span> (−100 왼쪽 ~ +100 오른쪽)';
+    for (const [key, ok, col] of [['near_pos', 'near_found', '#0a7cff'], ['far_pos', 'far_found', '#f59f00']]) {
+      g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath(); let on = false;
+      rows.forEach((r, i) => { if (!r[ok]) { on = false; return; } on ? g.lineTo(X(i), Y(r[key])) : g.moveTo(X(i), Y(r[key])); on = true; });
+      g.stroke();
+    }
+  } else if ('red' in rows[0]) {          // 신호등 기록 : 색마다 센 픽셀 수 (아래 0 ~ 위 가장 큰 값)
+    const top = Math.max(1, ...rows.map(r => Math.max(r.red, r.green, r.yellow)));
+    const P = v => h - 4 - v / top * (h - 10);
+    $('legend').innerHTML = '<span style="color:#e03131">● 빨강</span><span style="color:#2b8a3e">● 초록</span><span style="color:#f59f00">● 노랑</span> 픽셀 수 (가장 위 = ' + top + ') · 아래 띠 = 그때 판단한 신호';
+    for (const [key, col] of [['red', '#e03131'], ['green', '#2b8a3e'], ['yellow', '#f59f00']]) {
+      g.strokeStyle = col; g.lineWidth = 1.5; g.beginPath();
+      rows.forEach((r, i) => i ? g.lineTo(X(i), P(r[key])) : g.moveTo(X(i), P(r[key])));
+      g.stroke();
+    }
+    rows.forEach((r, i) => { if (r.sig_mode && r.sig) { g.fillStyle = ['', '#e03131', '#2b8a3e', '#f59f00'][r.sig]; g.fillRect(X(i), h - 3, Math.max(2, w / n), 3); } });
   }
   const at = rows.findIndex(r => r.frame >= idx + 1);
   if (at >= 0) { g.strokeStyle = css.getPropertyValue('--ink'); g.lineWidth = 1; g.beginPath(); g.moveTo(X(at), 0); g.lineTo(X(at), h); g.stroke(); }

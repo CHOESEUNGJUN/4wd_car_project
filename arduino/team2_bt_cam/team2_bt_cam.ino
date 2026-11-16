@@ -1,6 +1,7 @@
-/* 2팀 블루투스 수동/자동 + PID 라인트레이서 + 카메라 주행 (버전 D = 버전 C + ESP32-CAM 카메라 주행)
- *  - 버전 C (team2_bt_pid) 와 버전 D 둘 다 제출용. 버전 D 는 버전 C 에 ESP32-CAM 카메라 주행을 더한 것 (브랜치 extra/esp32cam)
- *  - 버전 C 와 다른 곳 : 카메라 주행 글자 G L R Q W, 신호등 글자 x v n 을 받음 (serviceBT, loop, driveManual, pidLine). 나머지는 버전 C 와 같음
+/* 2팀 블루투스 수동/자동 + PID 라인트레이서 + 신호등 (버전 D = 버전 C + ESP32-CAM 신호등)
+ *  - 버전 C (team2_bt_pid) 와 버전 D 둘 다 제출용. 버전 D 는 버전 C 에 ESP32-CAM 신호등을 더한 것 (브랜치 extra/esp32cam)
+ *  - 원칙 : 카메라로 라인 주행은 하지 않는다. 라인은 이 아두이노가 라인센서 3개 + PID 로, 카메라는 신호등만 보고 신호 글자를 보냄
+ *  - 버전 C 와 다른 곳 : 신호등 글자 x v n 을 받음 (serviceBT, loop, pidLine). 나머지는 버전 C 와 같음
  *  - 자동 모드 주행 : 라인센서 3개(0/1)로 오차를 만들고 PID 로 좌우 속도를 정함. 밝은 바탕 + 검은 선
  *  - Kp, Ki, Kd, 기본 속도는 아래 [설정] 숫자를 고쳐서 업로드 (앱 PID 슬라이더는 쓰지 않음)
  *  - 블루투스/모드 전환/안전장치/상태 줄 : PROTOCOL.md (앱 굴노)
@@ -17,15 +18,11 @@
  *    가운데 센서가 선을 다시 보면 PID 로 돌아감
  *  자세한 설명 : docs/PID.md
  *
- *  주행은 두 가지 (폰 앱 또는 ESP32-CAM 웹 화면의 버튼으로 고름)
- *    라인센서 주행 : 'a' -> 자동 모드. 위의 라인센서 3개 + PID 로 이 아두이노가 스스로 달림 (0.02초마다 판단)
- *    카메라 주행   : ESP32-CAM 이 카메라로 라인을 보고 대문자 G L R Q W 를 0.15초마다 보냄 (브랜치 extra/esp32cam).
- *                    이 아두이노는 수동 모드에서 조종 글자처럼 받지만 속도는 자동 주행과 같음 :
- *                    G = BASE/BASE, L·R = BASE∓KP (PID ±1 정도), Q·W = CORNER_OUT/CORNER_IN (코너와 같음).
- *                    수동과 같은 안전장치 : LINK_MS 동안 명령이 없으면 정지, 앞 장애물이면 G L R 막음
+ *  주행 : 라인센서 주행 'a' -> 자동 모드. 위의 라인센서 3개 + PID 로 이 아두이노가 스스로 달림 (0.02초마다 판단).
+ *         폰 앱 또는 ESP32-CAM 웹 화면의 "라인센서 주행" 버튼
  *  신호등 (ESP32-CAM 이 카메라로 보고 0.2초마다 계속 보냄) : 모드는 안 바뀌고 라인센서로 보면서 그대로 달림
- *    'x' 빨강 = 정지 (자동 모드 그대로 서 있다가 신호가 바뀌면 그 자리에서 다시 라인 추종. 카메라 주행 글자도 멈춤)
- *    'v' 노랑 = 서행 (기본 속도 BASE 대신 SLOW_BASE. PID 와 카메라 G L R. 코너 CORNER_OUT/IN 은 힘이 필요해서 그대로)
+ *    'x' 빨강 = 정지 (자동 모드 그대로 서 있다가 신호가 바뀌면 그 자리에서 다시 라인 추종)
+ *    'v' 노랑 = 서행 (기본 속도 BASE 대신 SLOW_BASE. 코너 CORNER_OUT/IN 은 힘이 필요해서 그대로)
  *    'n' 초록 / 신호 없음 = 보통
  *    같은 글자가 계속 오는 동안 유지 (몇 개 놓쳐도 그대로). 노랑은 SIG_HOLD_MS(1초) 넘게 안 오면 보통으로 봄.
  *    빨강은 시간이 지나도 풀리지 않음 : 다른 신호 글자(v, n)가 오거나 사람이 a / m 을 보낼 때까지 서 있음 (ESP 가 꺼져도 안 달림)
@@ -75,7 +72,7 @@ const unsigned long PING_MS = 60;     // 초음파 쏘는 간격
 const int MIN_VALID_MM = 20;          // 이보다 작으면 잡음으로 버림
 
 // --- 블루투스 / 모드 ---
-const unsigned long LINK_MS = 450;         // 수동·카메라 주행: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다, 카메라 주행은 0.15초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
+const unsigned long LINK_MS = 450;         // 수동: 이 시간 무명령이면 정지 (앱은 누르는 동안 0.2초마다 보냄. 한 번 놓쳐도 안 멈추게 450)
 // --- 수동 조종 힘 (바닥에서 4륜은 바퀴가 미끄러지며 돌아서 힘이 많이 듦. 차에 맞게 조정) ---
 const int MAN_FWD = 100;            // 전진·후진 (새 배터리에서 130 은 빠름. MIN_PWM 90 보다 작으면 출발 못 함)
 const int MAN_CURVE_OUT = 100;      // 곡선 회전 바깥 바퀴 (255 -> 100, 차에서 맞춤)
@@ -146,7 +143,7 @@ void setup() {
   Serial.begin(115200);  // 시리얼 모니터도 115200
   BT.begin(9600);        // 블루투스 모듈은 9600
   stopCar();
-  Serial.print(F("=== 버전 D (PID + 카메라 주행) 시작 === Kp ")); Serial.print(KP);
+  Serial.print(F("=== 버전 D (PID + 신호등) 시작 === Kp ")); Serial.print(KP);
   Serial.print(F(" Ki ")); Serial.print(KI);
   Serial.print(F(" Kd ")); Serial.print(KD);
   Serial.print(F(" 기본 속도 ")); Serial.println(BASE);
@@ -173,10 +170,8 @@ void loop() {
   stage = "MAN";
   pidErr = 0; pidOut = 0;
   if (millis() - lastRx > LINK_MS) cmd = 's';
-  bool blocked = obstacleStopped && strchr("glrGLR", cmd);   // 앞에 장애물 : 앞으로 가는 명령만 막음 (카메라 주행 글자 포함)
-  bool red = signalNow() == 'x' && strchr("GLRQW", cmd);    // 신호등 빨강 : 카메라 주행 글자는 멈춤 (사람 조종은 그대로)
-  if (red) stage = "RED";
-  driveManual(blocked || red ? 's' : cmd);
+  bool blocked = obstacleStopped && strchr("glr", cmd);   // 앞에 장애물 : 앞으로 가는 명령만 막음
+  driveManual(blocked ? 's' : cmd);
   if (blocked) act = 'o';
 }
 
@@ -285,7 +280,7 @@ void serviceBT() {
   while (BT.available()) {
     char c = BT.read();
     // 명령표에 없는 글자(터미널 앱의 \r \n, 앱이 보내는 #P60 같은 설정 글자 등)는 무시
-    if (c == 0 || !strchr("gblrsqwamhGLRQWxvn", c)) continue;   // 대문자 G L R Q W = 카메라 주행, x v n = 신호등 (ESP32-CAM 이 보냄)
+    if (c == 0 || !strchr("gblrsqwamhxvn", c)) continue;   // x v n = 신호등 (ESP32-CAM 이 보냄)
     lastLink = millis();
     if (strchr("xvn", c)) { sigCmd = c; sigAt = millis(); continue; }   // 신호등 : 기억만 (모드는 그대로, 주행 명령도 아님)
     // 'h'는 앱이 살아 있다는 신호일 뿐. lastRx(주행 명령 시각)는 건드리지 않는다.
@@ -355,15 +350,9 @@ void driveManual(char c) {
     case 'r': driveManualLR( MAN_CURVE_OUT, MAN_CURVE_IN); break;    // 우회전(곡선)
     case 'q': driveManualLR(-MAN_SPIN,  MAN_SPIN); break;            // 제자리 좌회전
     case 'w': driveManualLR( MAN_SPIN, -MAN_SPIN); break;            // 제자리 우회전
-    // 카메라 주행 (ESP32-CAM 이 카메라로 보고 0.15초마다 보냄) : 수동 조종처럼 받지만 속도는 자동 주행과 같게
-    case 'G': driveManualLR(baseSpeed(), baseSpeed()); break;                                        // 직진
-    case 'L': driveManualLR(baseSpeed() - (int)KP, baseSpeed() + (int)KP); break;                    // 살짝 왼쪽 (PID ±1 보정 정도)
-    case 'R': driveManualLR(baseSpeed() + (int)KP, baseSpeed() - (int)KP); break;                    // 살짝 오른쪽
-    case 'Q': driveManualLR(CORNER_IN, CORNER_OUT); break;                             // 크게 왼쪽 (코너와 같음)
-    case 'W': driveManualLR(CORNER_OUT, CORNER_IN); break;                             // 크게 오른쪽
     default:  brakeCar(); act = 's'; return;              // 's' 포함 : 브레이크로 바로 섬
   }
-  act = tolower(c);                                       // 앱에는 소문자로 (g l r q w 와 같은 동작 이름)
+  act = c;
 }
 
 // 수동 조종용 모터 힘 다듬기

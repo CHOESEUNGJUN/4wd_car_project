@@ -1,19 +1,19 @@
 # 굴노 카메라 (ESP32-CAM) : 추가 프로젝트 브랜치 `extra/esp32cam`
 
-> 이 브랜치는 버전 C(PID, `main`)에 **ESP32-CAM 카메라**를 더한 **버전 D** 입니다 (버전 C·D 둘 다 제출용). 교안 2팀 **심화 B "1인칭 시점(카메라 화면) 조종"** (47쪽)을 넘어서, 카메라로 라인과 신호등을 인식하고 **ESP32 가 직접 판단해서** 블루투스로 차를 몹니다 (교안 4팀은 PC 파이썬이 판단, 우리는 PC 없이 ESP32 안에서).
+> 이 브랜치는 버전 C(PID, `main`)에 **ESP32-CAM 카메라**를 더한 **버전 D** 입니다 (버전 C·D 둘 다 제출용). 교안 2팀 **심화 B "1인칭 시점(카메라 화면) 조종"** (47쪽)을 넘어서, 카메라로 **신호등**을 인식하고 **ESP32 가 직접 판단해서** 블루투스로 차에 신호를 보냅니다 (교안 4팀은 PC 파이썬이 판단, 우리는 PC 없이 ESP32 안에서).
+> **원칙 : 카메라로 라인 주행은 하지 않는다.** 라인은 차가 라인센서 3개 + PID 로 따라가고, 카메라는 신호등(표지판)만 봅니다.
 > 버전 C 만의 설명은 [`main` 브랜치](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/main)를 보세요.
 
 ```
  5V 외부 전원 ──▶ ESP32-CAM ── 와이파이 (내 핫스팟) ──▶ 폰·노트북 브라우저 http://gulno-cam.local
-                      │         컬러 영상 / 모폴로지 화면, 선 판단, 신호등, 차 상태, 주행 버튼, 조종
-                      └──── 블루투스 ──▶ HC-06 ──▶ 아두이노 (버전 D)
+                      │         컬러 영상(테두리 = 지금 신호), 색 픽셀 수, 차 상태, 주행 버튼, 조종, SD 기록
+                      └──── 블루투스 ──▶ HC-06 ──▶ 아두이노 (버전 D, 라인센서 + PID 로 라인 주행)
  아이폰 앱 굴노 "신호등 화면" (초록 → 노랑 → 빨강) ──▶ 카메라 앞에 들고 있으면 신호등
 ```
 
 | 주행 (웹 화면 버튼) | 하는 일 |
 |---|---|
 | 라인센서 주행 | `a` → 차가 라인센서 3개 + PID 로 스스로 (버전 C 와 같음) |
-| 카메라 주행 | ESP32 가 카메라로 라인 위치를 보고 0.15초마다 `G L R Q W` (속도는 자동 주행과 같음) |
 | 신호등 인식 (켬/끔) | 라인은 차가 계속 보고, 카메라는 신호만 0.2초마다 계속 보냄 : 🔴 `x` 정지, 🟡 `v` 서행 (기본 속도 120 → 100), 🟢 `n` 보통. 모드는 그대로 |
 
 **ESP32-CAM 다루기 (매번)** — 자세히는 [`docs/CAMERA.md` 0장](docs/CAMERA.md)
@@ -21,19 +21,19 @@
 1. 아이폰 핫스팟 켜기 (호환성 최대화) → 노트북·폰도 연결
 2. 차(버전 D) 켜기 → ESP32-CAM 5V 켜기 → 앞 흰 LED 가 깜빡이다 **계속 켜지면** 준비
 3. 브라우저 **http://gulno-cam.local** → 블루투스 **연결** (처음은 기기 찾기 → HC-06, PIN 1234. 켤 때마다 한 번)
-4. **라인센서 주행** 또는 (모폴로지 켜고) **카메라 주행**, 멈출 때 **정지 · 수동**. 신호등은 **신호등 인식** + 아이폰 신호등 화면
-5. 끝: 정지 · 수동 → 블루투스 끊기 → 전원 끄기. 처음 한 번은 업로드(PlatformIO)·와이파이 넣기 (`CAMERA.md` 4·5장), 안 되면 10장 문제 해결
+4. **신호등 인식 : 켬** + 아이폰 신호등 화면 → **라인센서 주행**, 멈출 때 **정지 · 수동**
+5. 끝: 정지 · 수동 → 블루투스 끊기 → 전원 끄기. 처음 한 번은 업로드(PlatformIO)·와이파이 넣기 (`CAMERA.md` 4·5장), 안 되면 9장 문제 해결
 
 | | |
 |---|---|
 | 폴더 | **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 것 (버전 C `team2_bt_pid`, 버전 D `team2_bt_cam`, 버전 E `motor_control_low_frequency`·카메라용 `motor_control_low_frequency_cam` 저주파 PWM 시험용, 진단 `diag`) · **`esp32/`** = PlatformIO 로 ESP32-CAM 에 올리는 것 · **`apps/`** = 굴노 앱 (아이폰 앱에 신호등 화면) |
 | 카메라 코드 | [`esp32/esp32cam_line/`](esp32/esp32cam_line) (`esp32cam_line.ino`, 웹 화면 `page.h`, 빌드 설정 `platformio.ini`) |
-| 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 구조, 주행 모드, 신호등, 배선(5V 외부 전원), 올리기, 와이파이(프린터처럼), 웹 화면, 영상 처리, 메모리, 맞추기 |
-| 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`G L R Q W`, `x v n` 은 버전 D 만) |
+| 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 다루기, 구조, 신호등, 배선(5V 외부 전원), 올리기, 와이파이(프린터처럼), 웹 화면, 속도·메모리, 카메라 달기, 문제 해결, SD 기록 |
+| 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`x v n` 은 버전 D 만) |
 | 작업 보고 | [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) : 잘된 점, 안된 점, 앞으로 할 것 |
 | 다음에 할 일 | `main` 의 [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) (체크리스트) |
 | 업로드 | ESP32-CAM 은 **PlatformIO 로만** : `cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨). 차는 Arduino IDE 로 버전 D |
-| 지금 상태 (2026-11-12) | 확인됨 (11-11) : 블루투스 + 와이파이 + 카메라 동시 동작, 라인 인식 표시, 웹 조종. 만들어 둠 (컴파일·가짜 사진 시험만) : 모폴로지 화면, 카메라 주행, 신호등 3색과 서행, 아이폰 신호등 화면(시뮬레이터 확인). 실제 차에서는 다음 실험 |
+| 지금 상태 (2026-11-16) | 확인됨 : 블루투스 + 와이파이 + 카메라 동시 동작, 웹 조종, 신호 반응 약 0.1~0.15초(초당 약 20장), SD 기록·보기 페이지, 저주파 PWM(더 부드러움). 원칙 변경으로 카메라 라인 인식·카메라 주행은 뺌. 다음 : 카메라를 차에 달고 라인센서 주행 + 신호등 시험 |
 
 아래는 `main` 과 같은 차량(버전 C) 설명입니다.
 
@@ -208,8 +208,8 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **버전 C** 차량 스케치 (**팀 차량 코드, 이것 하나로 감**) | PID 라인 추종 + 코너는 바깥·안쪽 바퀴 힘 따로. 설명은 `docs/PID.md` |
 | `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **버전 E** (시험용) = 버전 C + 저주파 PWM | 저속 힘 부족·"삐-" 소리·툭툭 튀는 것 시험. **배선 4개 맞바꿈** (ENA 9, IN2 5, ENB 10, IN3 6). 안 좋으면 선 되돌리고 버전 C. `docs/PID.md` 끝 |
-| `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (제출용, 카메라 주행) | 버전 C + 카메라 주행 글자 `G L R Q W` + 신호등 `x v n` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
-| `esp32/esp32cam_line/` (PlatformIO → ESP32-CAM) | ESP32-CAM 펌웨어 | 카메라로 라인·신호등 인식, 와이파이 웹 화면, 블루투스로 차 조종·카메라 주행·서행 |
+| `arduino/team2_bt_cam/` (Arduino IDE → UNO) | **버전 D** 차량 스케치 (제출용, 신호등) | 버전 C + 신호등 `x v n` (ESP32-CAM 이 블루투스로 보냄). 설명은 `docs/CAMERA.md` |
+| `esp32/esp32cam_line/` (PlatformIO → ESP32-CAM) | ESP32-CAM 펌웨어 | 카메라로 신호등 인식, 와이파이 웹 화면, 블루투스로 차 조종·서행 |
 | `arduino/diag/` | 진단 스케치 | 블루투스 글자가 들어오는지, 센서 값이 나오는지만 볼 때 |
 | `apps/ios_mac/` | 아이폰·맥 앱 (Xcode) | 아이폰 + **HM-10**. **신호등 화면** (카메라 신호등 시험용) |
 | `apps/android/` | 안드로이드 앱 | 안드로이드 + **HC-06** |
@@ -297,7 +297,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 | `s` | 정지 |
 | `a` `m` | 자동 모드로, 수동 모드로 |
 | `h` | 연결 신호 (0.6초마다, 주행에는 영향 없음) |
-| `G` `L` `R` `Q` `W` · `x` `v` `n` | **버전 D 만** : ESP32-CAM 카메라 주행 (직진, 살짝 좌·우, 크게 좌·우) · 신호등 (빨강 정지, 노랑 서행, 보통). `docs/CAMERA.md` |
+| `x` `v` `n` | **버전 D 만** : ESP32-CAM 신호등 (빨강 정지, 노랑 서행, 보통). `docs/CAMERA.md` |
 
 교재 앱(Eduino_RC_Car_Controller)의 `g l r b s q w` 와 같고, `a m h` 를 새로 추가했다. 명령표에 없는 글자(터미널 앱이 붙이는 줄바꿈 등)는 무시한다.
 
