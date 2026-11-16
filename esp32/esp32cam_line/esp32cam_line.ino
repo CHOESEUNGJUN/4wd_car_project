@@ -48,6 +48,31 @@ volatile uint8_t sigState = 0;            // 0 = 없음, 1 = 빨강(정지), 2 =
 const int SIG_Y1 = CH;                    // 이 줄 위쪽만 봄 (카메라 크기 기준). CH = 화면 전체 (카메라가 라인을 안 보니 바닥 테이프와 섞일 일이 없음). 바닥 색이 걸리면 줄임
 const int SIG_MIN = 160;                  // 본 픽셀 중 이만큼 넘게 그 색이면 신호 (160x120 모든 칸이면 19200개 중 0.8%)
 volatile int sigR = 0, sigG = 0, sigY = 0; // 마지막 사진에서 센 빨강·초록·노랑 픽셀 수 (웹 화면·로그로 기준 맞추기)
+// 색 판단은 HSV (교안 3팀처럼) : H 색상(0~359) S 채도(0~255) V 밝기(0~255). 색상으로 보니 어둡거나 밝아도, 빨리 달려 노출이 바뀌어도 같은 색으로 잡힘.
+// 켤 때 한 번 4096 색(R·G·B 각 4비트)의 종류를 표(colorLut, 내부 4KB)로 만들어 두고, 사진에서는 칸마다 표를 한 번 보기만 함 (계산·비교 없음)
+enum { C_NONE = 0, C_RED, C_GREEN, C_YELLOW, C_WHITE };
+const int RED_H1 = 20, RED_H2 = 330;      // 빨강 : 색상 < 20 또는 >= 330 (주황빛 빨강까지)
+const int YEL_H1 = 35, YEL_H2 = 75;       // 노랑 : 35 ~ 75
+const int GRN_H1 = 85, GRN_H2 = 170;      // 초록 : 85 ~ 170
+const int COLOR_S_MIN = 110;              // 이보다 채도가 높아야 색 (낮으면 회색·흰색·검정)
+const int COLOR_V_MIN = 60;               // 이보다 밝아야 색 (너무 어두우면 색상을 믿을 수 없음)
+const int WHITE_S_MAX = 50, WHITE_V_MIN = 170;   // 흰색 : 채도 낮고 밝음 (정지 표지판 글자·테두리)
+uint8_t colorLut[4096];
+uint8_t colorClass(int r, int g, int b) {  // 0~255 RGB -> 종류 (표 만들 때만 씀)
+  int mx = max(r, max(g, b)), mn = min(r, min(g, b)), d = mx - mn;
+  int v = mx, sat = mx ? d * 255 / mx : 0;
+  if (sat <= WHITE_S_MAX && v >= WHITE_V_MIN) return C_WHITE;
+  if (sat < COLOR_S_MIN || v < COLOR_V_MIN || d == 0) return C_NONE;
+  int h = mx == r ? 60 * (g - b) / d : mx == g ? 120 + 60 * (b - r) / d : 240 + 60 * (r - g) / d;
+  if (h < 0) h += 360;
+  if (h < RED_H1 || h >= RED_H2) return C_RED;
+  if (h >= YEL_H1 && h < YEL_H2) return C_YELLOW;
+  if (h >= GRN_H1 && h < GRN_H2) return C_GREEN;
+  return C_NONE;
+}
+void buildColorLut() {                    // 칸 (r4, g4, b4) 의 가운데 색으로 종류를 정함
+  for (int i = 0; i < 4096; i++) colorLut[i] = colorClass(((i >> 8) & 15) * 17, ((i >> 4) & 15) * 17, (i & 15) * 17);
+}
 // 정지 표지판 = 빨간 팔각형 + 흰 테두리·글자. 신호등(폰 화면 빨강)과 같은 빨강이라 모양으로 가름 :
 //   빨강 덩어리를 감싼 네모 칸에서 빨강이 차지하는 비율(채움)이 SIGN_FILL_MAX% 보다 작고 (팔각형은 모서리가 비고 글자가 있음)
 //   그 칸 안에 흰색이 SIGN_WHITE_MIN% 넘게 있으면 표지판. 폰 빨간 화면은 채움 90% 넘고 흰색이 거의 없음
@@ -593,6 +618,7 @@ void setup() {
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
   camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); sigMode = prefs.getBool("sig", false); camRot = prefs.getInt("rot", 0) & 3;
+  buildColorLut();
   if (!startCamera()) {
     while (true) { Serial.println("E,camera"); delay(1000); }   // 카메라 리본 케이블 확인
   }
@@ -649,17 +675,17 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
     memset(wb, 0, sizeof whiteBits[0]);
     for (int x = 0; x < CW; x += SIG_STEP) {
       uint16_t p = (row[2 * x] << 8) | row[2 * x + 1];
-      int r = (p >> 11) << 3, g = ((p >> 5) & 63) << 2, bl = (p & 31) << 3;
-      if (r >= 160 && g <= 80 && bl <= 80) {
+      uint8_t c = colorLut[((p >> 4) & 0xF00) | ((p >> 3) & 0x0F0) | ((p >> 1) & 0x00F)];   // RGB565 -> R4 G4 B4 -> 종류
+      if (c == C_RED) {
         red++;
         if (x < x0) x0 = x;
         if (x > x1) x1 = x;
         if (y < y0) y0 = y;
         if (y > y1) y1 = y;
       }
-      else if (g >= 150 && r <= 110 && bl <= 150) grn++;
-      else if (r >= 160 && g >= 150 && bl <= 100) yel++;
-      else if (r >= 180 && g >= 180 && bl >= 180) wb[x >> 5] |= 1u << (x & 31);   // 흰색
+      else if (c == C_GREEN) grn++;
+      else if (c == C_YELLOW) yel++;
+      else if (c == C_WHITE) wb[x >> 5] |= 1u << (x & 31);
     }
   }
   sigR = red; sigG = grn; sigY = yel;
