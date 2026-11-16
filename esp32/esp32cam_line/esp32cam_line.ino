@@ -135,14 +135,18 @@ String setupName, setupPass, ssidOptions, myIp, savedSsid, failWhy;
 unsigned long lastInfo = 0;
 String esc(String t);                     // 아래 와이파이 설정 부분에 있음
 // 사진은 판단하고 버림. 화면용 버퍼는 전부 외부 메모리(PSRAM) : 내부 메모리는 와이파이·블루투스가 써야 해서
-uint8_t* gray;                            // 밝기 (W x H)
-uint8_t* mask;                            // 라인 마스크 1 = 라인(검정 테이프), 0 = 바닥. 모폴로지로 정리한 것 (W x H)
-uint8_t* tmp;                             // 모폴로지 중간 단계
+// 라인 마스크 1 = 라인(검정 테이프), 0 = 바닥. 모폴로지로 정리한 것. 한 줄 160칸을 32비트 숫자 5개에 비트로 (x 는 [x/32] 의 x%32 번째 비트)
+// -> 19KB 가 2.4KB 로 줄어 빠른 내부 메모리에 두고, 모폴로지를 32칸씩 한 번에 계산
+const int WW = W / 32;
+uint32_t mask[H][WW];
+uint32_t tmp[H][WW];                      // 모폴로지 중간 단계
 uint8_t* color;                           // 화면용 컬러 RGB565 (W x H x 2)
 uint8_t* view;                            // 띠·선을 그린 화면 복사본 (RGB565)
 Band lastNear, lastFar;
 unsigned long frames = 0, lastFpsAt = 0, lastViewer = 0, lastHb = 0;
 float fps = 0;
+volatile uint32_t tSig = 0, tMaskS = 0, tTrack = 0, tCopy = 0, tJpeg = 0, nJ = 0;   // 단계별 시간 (µs 합, 시리얼 I,step_us)
+volatile uint32_t colorNo = 0;            // 컬러 버퍼가 새 사진으로 바뀔 때마다 +1 (영상은 새 사진일 때만 JPEG 로)
 
 // 라인 따라가기 : 화면 맨 아래(차 바로 앞)부터 한 줄씩 위로, 바로 아래 줄의 라인과 이어지는 검은 덩어리만 고른다
 //   (바닥 얼룩·그림자처럼 떨어져 있는 검정은 무시). 줄마다 라인의 왼쪽 끝·오른쪽 끝·가운데를 저장해서 화면에 칠한다
@@ -161,41 +165,52 @@ Band summary(int y0, int y1) {            // y0~y1 줄의 라인 가운데 평�
 
 // 이진화 + 모폴로지 열림 : 줄마다 평균보다 DARK_OFFSET 어두우면 라인 후보(1) -> 침식(3x3 모두 1 이어야 1 : 작은 점·가는 잡음 지움)
 // -> 팽창(3x3 중 하나라도 1 이면 1 : 라인 굵기 되돌림). 정리된 mask 를 라인 추적과 모폴로지 화면에 같이 쓴다
+// 마스크 한 줄을 0/1 바이트로 풀기 (라인 추적, 모폴로지 화면 보내기용)
+inline void maskRow(int y, uint8_t* out) {
+  for (int x = 0; x < W; x++) out[x] = (mask[y][x >> 5] >> (x & 31)) & 1;
+}
+
 // 3x3 침식(dil=false, 9칸 모두 1) / 팽창(dil=true, 9칸 중 하나라도 1). 밖은 0.
-// 가로 3칸을 먼저 묶고 세로 3줄을 묶음 (9칸을 하나씩 보는 것과 결과는 같고, 느린 외부 메모리를 픽셀당 한 번만 읽음)
-static void hrow3(const uint8_t* in, int y, bool dil, uint8_t* d) {
-  if (y < 0 || y >= H) { memset(d, 0, W); return; }
-  const uint8_t* r = in + y * W;
-  uint8_t a = 0, b = r[0];
-  for (int x = 0; x < W; x++) {
-    uint8_t c = x + 1 < W ? r[x + 1] : 0;
-    d[x] = dil ? (a | b | c) : (a & b & c);
-    a = b; b = c;
+// 비트로 32칸씩 : 왼쪽 이웃 = 한 칸 밀기(<<1), 오른쪽 이웃 = (>>1), 옆 숫자의 끝 비트를 넘겨받음. 가로 3칸을 묶고 세로 3줄을 묶음
+static void hrow3(const uint32_t (*in)[WW], int y, bool dil, uint32_t* d) {
+  if (y < 0 || y >= H) { memset(d, 0, sizeof(uint32_t) * WW); return; }
+  const uint32_t* r = in[y];
+  for (int k = 0; k < WW; k++) {
+    uint32_t L = (r[k] << 1) | (k ? r[k - 1] >> 31 : 0);            // 칸 x 자리에 x-1
+    uint32_t R = (r[k] >> 1) | (k + 1 < WW ? r[k + 1] << 31 : 0);   // 칸 x 자리에 x+1
+    d[k] = dil ? (r[k] | L | R) : (r[k] & L & R);
   }
 }
-static void morph3(const uint8_t* in, uint8_t* out, bool dil) {
-  uint8_t h[3][W];                        // 가로로 묶은 세 줄 (내부 메모리, 줄 y 는 h[(y + 1) % 3])
+static void morph3(const uint32_t (*in)[WW], uint32_t (*out)[WW], bool dil) {
+  uint32_t h[3][WW];                      // 가로로 묶은 세 줄 (줄 y 는 h[(y + 1) % 3])
   hrow3(in, -1, dil, h[0]);
   hrow3(in, 0, dil, h[1]);
   for (int y = 0; y < H; y++) {
-    const uint8_t* up = h[y % 3];
-    const uint8_t* mid = h[(y + 1) % 3];
-    uint8_t* dn = h[(y + 2) % 3];
+    const uint32_t* up = h[y % 3];
+    const uint32_t* mid = h[(y + 1) % 3];
+    uint32_t* dn = h[(y + 2) % 3];
     hrow3(in, y + 1, dil, dn);
-    uint8_t* o = out + y * W;
-    for (int x = 0; x < W; x++) o[x] = dil ? (up[x] | mid[x] | dn[x]) : (up[x] & mid[x] & dn[x]);
+    for (int k = 0; k < WW; k++) out[y][k] = dil ? (up[k] | mid[k] | dn[k]) : (up[k] & mid[k] & dn[k]);
   }
 }
 
+// 컬러 사진(RGB565) -> 줄마다 밝기 -> 그 줄 평균보다 DARK_OFFSET 어두우면 1 -> 모폴로지 열림. 한 줄씩 내부 메모리로 옮겨서 계산
 void buildMask(const uint8_t* img) {
-  uint8_t row[W];                         // 한 줄을 내부 메모리로 옮겨서 계산
+  uint8_t px[W * 2], g[W];
   for (int y = 0; y < H; y++) {
-    memcpy(row, img + y * W, W);
+    memcpy(px, img + y * W * 2, W * 2);
     long sum = 0;
-    for (int x = 0; x < W; x++) sum += row[x];
+    for (int x = 0; x < W; x++) {         // 밝기 (빨강 30% 초록 59% 파랑 11%)
+      uint16_t p = (px[2 * x] << 8) | px[2 * x + 1];
+      g[x] = (((p >> 11) & 31) * 79 + ((p >> 5) & 63) * 76 + (p & 31) * 29) >> 4;
+      sum += g[x];
+    }
     int th = sum / W - DARK_OFFSET;       // 바닥이 완전히 흰색이 아니어도, 그 줄 평균보다 어두우면 라인 (조명 따라감)
-    for (int x = 0; x < W; x++) row[x] = row[x] < th;
-    memcpy(mask + y * W, row, W);
+    for (int k = 0; k < WW; k++) {
+      uint32_t w = 0;
+      for (int i = 0; i < 32; i++) if (g[k * 32 + i] < th) w |= 1u << i;
+      mask[y][k] = w;
+    }
   }
   morph3(mask, tmp, false);               // 침식 : 작은 점·가는 잡음 지움
   morph3(tmp, mask, true);                // 팽창 : 라인 굵기 되돌림 (= 모폴로지 열림)
@@ -206,7 +221,7 @@ void trackLine() {                        // mask 에서 라인 따라가기
   int prev = -1, miss = 0; bool cross = false;
   trTop = H;
   for (int y = H - 1; y >= 0; y--) {
-    const uint8_t* r = mask + y * W;
+    uint8_t r[W]; maskRow(y, r);
     int best = -1, bl = 0, br = 0, bestD = 9999, darkAll = 0;
     for (int x = 0; x < W;) {
       if (!r[x]) { x++; continue; }
@@ -284,10 +299,17 @@ void streamLoop(httpd_req_t* req) {
   httpd_resp_set_type(req, "multipart/x-mixed-replace;boundary=f");
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   char head[64];
+  uint32_t sentNo = 0;
+  unsigned long sentAt = 0;
   while (true) {
+    // 새 사진이 없으면 같은 그림을 다시 압축하지 않음. 단 1초에 한 번은 보냄 (모폴로지 화면처럼 사진이 안 바뀌어도 브라우저가 닫혔는지 알아야 작업이 끝남)
+    if (colorNo == sentNo && millis() - sentAt < 1000) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
+    sentNo = colorNo; sentAt = millis();
     uint8_t* jpg = nullptr; size_t len = 0;
     xSemaphoreTake(jpgLock, portMAX_DELAY);
+    uint32_t tj = micros();
     bool ok = makeJpeg(&jpg, &len);
+    tJpeg += micros() - tj; nJ++;
     xSemaphoreGive(jpgLock);
     if (!ok) return;
     int n = snprintf(head, sizeof head, "\r\n--f\r\nContent-Type: image/jpeg\r\nContent-Length: %u\r\n\r\n", (unsigned)len);
@@ -312,7 +334,8 @@ esp_err_t streamHandler(httpd_req_t* req) {
   httpd_req_t* copy = nullptr;
   if (httpd_req_async_handler_begin(req, &copy) != ESP_OK) return ESP_FAIL;
   viewers++;
-  if (xTaskCreate(streamTask, "view", 4096, copy, 1, nullptr) != pdPASS) {
+  // 코어 0 에서 (JPEG 압축이 무거워서, 카메라·라인 처리를 하는 코어 1 을 뺏지 않게)
+  if (xTaskCreatePinnedToCore(streamTask, "view", 4096, copy, 1, nullptr, 0) != pdPASS) {
     viewers--; httpd_req_async_handler_complete(copy); return ESP_FAIL;
   }
   return ESP_OK;
@@ -508,7 +531,7 @@ void pushMask() {
   size_t k = 0;
   b[k++] = 'M'; b[k++] = tgtX < 0 ? 255 : tgtX; b[k++] = tgtY < 0 ? 255 : tgtY;
   for (int y = 0; y < H; y++) {
-    const uint8_t* r = mask + y * W;
+    uint8_t r[W]; maskRow(y, r);
     b[k++] = trC[y] < 0 ? 255 : trC[y];
     size_t nAt = k++; uint8_t n = 0;
     for (int x = 0; x < W && n < MAX_RUNS;) {
@@ -578,6 +601,7 @@ void startWifi() {
   WiFi.mode(WIFI_STA);
   WiFi.enableIPv6();                       // 아이폰 핫스팟은 맥에 IPv6 만 주기도 해서, IPv6 로도 접속되게
   WiFi.setHostname(HOSTNAME);
+  WiFi.setSleep(false);                   // 와이파이 절전 끔 : 켜 두면 영상·웹소켓이 가끔 멈추거나 끊김 (전기는 조금 더 씀)
   String ssid = prefs.getString("ssid", "");
   savedSsid = ssid;
   if (ssid.length()) {                     // 저장된 핫스팟에 붙어 보기
@@ -638,9 +662,6 @@ void setup() {
   Serial.begin(9600);                      // U0T(GPIO1) -> 아두이노 D0(RX)
   pinMode(FLASH_LED, OUTPUT); digitalWrite(FLASH_LED, LOW);
   pinMode(STATUS_LED, OUTPUT); digitalWrite(STATUS_LED, HIGH);
-  gray = (uint8_t*)ps_calloc(W * H, 1);
-  mask = (uint8_t*)ps_calloc(W * H, 1);
-  tmp = (uint8_t*)ps_calloc(W * H, 1);
   color = (uint8_t*)ps_calloc(W * H * 2, 1);
   view = (uint8_t*)ps_malloc(W * H * 2);
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
@@ -687,14 +708,16 @@ void loop() {
   if (fb) {
     if (fb->len >= (size_t)(W * H * 2)) {
       const uint8_t* b = fb->buf;
+      uint32_t ts = micros();
       if (sigMode) detectSignal(b);        // 신호등을 먼저 (라인 처리를 기다리지 않게)
-      for (int i = 0; i < W * H; i++) {    // RGB565 -> 밝기 (빨강 30% 초록 59% 파랑 11%)
-        uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
-        gray[i] = (((p >> 11) & 31) * 79 + ((p >> 5) & 63) * 76 + (p & 31) * 29) >> 4;
-      }
-      buildMask(gray);
+      tSig += micros() - ts;
+      uint32_t ta = micros();
+      buildMask(b);
+      uint32_t tb = micros();
       trackLine();
-      if (!morphView) memcpy(color, b, W * H * 2);   // 컬러 화면일 때만 (모폴로지 화면은 영상을 안 보냄)
+      uint32_t tc = micros();
+      if (!morphView) { memcpy(color, b, W * H * 2); colorNo++; }   // 컬러 화면일 때만 (모폴로지 화면은 영상을 안 보냄)
+      tMaskS += tb - ta; tTrack += tc - tb; tCopy += micros() - tc;
       frames++;
     }
     esp_camera_fb_return(fb);
@@ -754,7 +777,8 @@ void loop() {
     }
     else Serial.printf("I,ip,%s,%s.local\n", myIp.c_str(), HOSTNAME);
     if (nT) Serial.printf("I,time,grab_ms,%lu,proc_ms,%lu,loop_ms,%lu\n", (unsigned long)(tGrab / nT / 1000), (unsigned long)(tProc / nT / 1000), (unsigned long)(tLoop / nT / 1000));
-    tGrab = tProc = tLoop = nT = 0;
+    if (nT) Serial.printf("I,step_us,sig,%lu,mask,%lu,track,%lu,copy,%lu,jpeg,%lu\n", (unsigned long)(tSig/nT), (unsigned long)(tMaskS/nT), (unsigned long)(tTrack/nT), (unsigned long)(tCopy/nT), (unsigned long)(nJ ? tJpeg/nJ : 0));
+    tGrab = tProc = tLoop = nT = 0; tSig = tMaskS = tTrack = tCopy = tJpeg = nJ = 0;
     Serial.printf("I,heap,%u,%u,psram,%u,%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                   (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
   }
