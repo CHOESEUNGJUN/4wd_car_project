@@ -24,6 +24,7 @@
 #include "esp_http_server.h"
 #include "BluetoothSerial.h"
 #include <atomic>
+#include "SD_MMC.h"
 
 // ============================================================
 // [설정]
@@ -252,6 +253,63 @@ void trackLine() {                        // mask 에서 라인 따라가기
 }
 
 // ---- 웹 화면 ----
+// ---- SD 카드 기록 (주행을 다시 보면서 값 맞추기) ----
+// 영상 : 라인 표시를 그린 컬러 JPEG 을 0.2초마다 이어 붙인 rec_NNNN.mjpeg (VLC 로 바로, 또는 ffmpeg -i rec_0001.mjpeg rec.mp4)
+// 로그 : 0.1초마다 한 줄 log_NNNN.csv. frame 열 = 그때까지 저장한 영상 장 수 (영상과 맞춰 보기)
+// SD 는 1비트 모드 (4비트는 앞 LED GPIO4 와 겹침). FAT32. 작업은 코어 0 에서 (라인·신호 처리를 안 막음)
+const int REC_Q = 85;                     // 기록 JPEG 품질 (웹 영상 40 보다 선명)
+const unsigned long REC_FRAME_MS = 200, REC_LOG_MS = 100, REC_FLUSH_MS = 2000;
+volatile bool sdOk = false, recOn = false, recRunning = false;   // recRunning = 기록 작업이 떠 있음 (기록할 때만 띄우고 끝나면 지움 : 메모리)
+volatile int recNo = 0;
+volatile uint32_t recFrames = 0;
+volatile char camCmdNow = '-';            // 카메라 주행이 마지막으로 보낸 글자 (로그용)
+bool makeJpeg(uint8_t** jpg, size_t* len, int q);
+extern SemaphoreHandle_t jpgLock;
+extern volatile bool camDrive;
+
+void recTask(void*) {                     // 기록 하나 : 붙이고 -> 파일 열고 -> recOn 이 꺼질 때까지 쓰고 -> 닫고 떼고 -> 작업 끝 (메모리 돌려줌)
+  char p1[24], p2[24], line[200];
+  snprintf(p1, sizeof p1, "/rec_%04d.mjpeg", recNo);
+  snprintf(p2, sizeof p2, "/log_%04d.csv", recNo);
+  File vid, lg;
+  if (SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT, 2)) {   // 1비트 모드, 포맷 안 함, 파일 2개까지
+    vid = SD_MMC.open(p1, FILE_WRITE);
+    lg = SD_MMC.open(p2, FILE_WRITE);
+  }
+  if (vid && lg) {
+    lg.print("ms,frame,fps,heap,near_found,near_pos,far_found,far_pos,cross,cam_drive,cam_cmd,sig_mode,sig,bt,car\n");
+    recFrames = 0;
+    unsigned long lastFrame = 0, lastLog = 0, lastFlush = millis();
+    while (recOn) {
+      unsigned long now = millis();
+      if (now - lastFrame >= REC_FRAME_MS) {
+        lastFrame = now;
+        uint8_t* jpg = nullptr; size_t len = 0;
+        xSemaphoreTake(jpgLock, portMAX_DELAY);
+        bool ok = makeJpeg(&jpg, &len, REC_Q);
+        xSemaphoreGive(jpgLock);
+        if (ok) { if (vid.write(jpg, len) != len) recOn = false; else recFrames++; free(jpg); }
+      }
+      if (now - lastLog >= REC_LOG_MS) {
+        lastLog = now;
+        int n = snprintf(line, sizeof line, "%lu,%lu,%.1f,%u,%d,%d,%d,%d,%d,%d,%c,%d,%d,%d,\"%s\"\n",
+                         now, (unsigned long)recFrames, fps, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                         lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross,
+                         camDrive ? 1 : 0, camDrive ? camCmdNow : '-', sigMode ? 1 : 0, sigState, btOn() ? 1 : 0, carLine);
+        if (n > 0 && lg.write((const uint8_t*)line, min(n, (int)sizeof line - 1)) == 0) recOn = false;
+      }
+      if (now - lastFlush >= REC_FLUSH_MS) { lastFlush = now; vid.flush(); lg.flush(); }   // 2초마다 실제로 씀 (전원이 꺼져도 거기까지는 남음)
+      vTaskDelay(pdMS_TO_TICKS(20));
+    }
+  }
+  recOn = false;
+  if (vid) vid.close();
+  if (lg) lg.close();
+  SD_MMC.end();
+  recRunning = false;
+  vTaskDelete(nullptr);
+}
+
 #include "page.h"                         // 웹 화면 (HTML·자바스크립트는 따로 둬야 PlatformIO 가 함수로 잘못 읽지 않음)
 
 // 지금 프레임 + 띠·선 표시를 JPEG 로 (화면 한 장, 스트림 공용)
@@ -263,7 +321,7 @@ inline void dot(int x, int y, uint16_t c) {
 }
 
 // 화면 : 인식한 라인 = 초록 칠, 라인 가운데 경로 = 노란 점, 차 -> 향할 곳 = 빨간 선과 점, 차 가운데 = 흰 점선 (아래쪽)
-bool makeJpeg(uint8_t** jpg, size_t* len) {   // 컬러 화면 전용 (모폴로지 화면은 영상 대신 RLE)
+bool makeJpeg(uint8_t** jpg, size_t* len, int q) {   // 컬러 화면·SD 기록용 (모폴로지 화면은 영상 대신 RLE). q = 압축 품질
   memcpy(view, color, W * H * 2);
   for (int y = 0; y < H; y++) if (trC[y] >= 0) {
     for (int x = trL[y]; x <= trR[y]; x++) dot(x, y, GREEN);          // 인식한 라인을 초록으로
@@ -281,7 +339,7 @@ bool makeJpeg(uint8_t** jpg, size_t* len) {   // 컬러 화면 전용 (모폴로
     }
     for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) dot(tgtX + i, tgtY + j, RED);
   }
-  return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, btOn() ? JPEG_Q_BT : JPEG_Q, jpg, len);
+  return fmt2jpg(view, W * H * 2, W, H, PIXFORMAT_RGB565, q, jpg, len);
 }
 
 // 연속 영상 (MJPEG). 따로 도는 서버(포트 81)라 라인 인식·조종을 막지 않는다
@@ -308,7 +366,7 @@ void streamLoop(httpd_req_t* req) {
     uint8_t* jpg = nullptr; size_t len = 0;
     xSemaphoreTake(jpgLock, portMAX_DELAY);
     uint32_t tj = micros();
-    bool ok = makeJpeg(&jpg, &len);
+    bool ok = makeJpeg(&jpg, &len, btOn() ? JPEG_Q_BT : JPEG_Q);
     tJpeg += micros() - tj; nJ++;
     xSemaphoreGive(jpgLock);
     if (!ok) return;
@@ -458,9 +516,9 @@ void handleBt() {
 
 // 화면으로 보내는 상태 한 덩어리 (웹소켓으로 0.2초마다 밀어 줌)
 void buildStatus(char* buf, size_t n) {
-  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"morph\":%d,\"cam\":%d,\"sigm\":%d,\"sig\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\"}",
+  snprintf(buf, n, "{\"nf\":%d,\"np\":%d,\"ff\":%d,\"fp\":%d,\"cross\":%d,\"mir\":%d,\"flip\":%d,\"morph\":%d,\"cam\":%d,\"sigm\":%d,\"sig\":%d,\"fps\":%.1f,\"bt\":%d,\"btw\":%d,\"scan\":%d,\"btfail\":%d,\"btn\":\"%s\",\"car\":\"%s\",\"sd\":%d,\"rec\":%d,\"recn\":%d,\"recf\":%lu}",
            lastNear.found, lastNear.pos, lastFar.found, lastFar.pos, lastNear.cross, camMirror ? 1 : 0, camFlip ? 1 : 0, morphView ? 1 : 0, camDrive ? 1 : 0, sigMode ? 1 : 0, sigState, fps,
-           btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine);
+           btOn() ? 1 : 0, btWant ? 1 : 0, btScanning || btScanReq ? 1 : 0, btFail ? 1 : 0, btLabel, carLine, sdOk ? 1 : 0, recOn ? 1 : 0, recNo, (unsigned long)recFrames);
 }
 
 // ---- 웹소켓 /ws : 연결 하나를 열어 두고 조종 글자는 받고(화면 -> 차), 상태는 밀어 줌(차·카메라 -> 화면) ----
@@ -518,7 +576,7 @@ bool wsBroadcast(httpd_ws_type_t type, const uint8_t* data, size_t len) {
 }
 
 void pushStatus() {
-  static char buf[320];
+  static char buf[400];
   buildStatus(buf, sizeof buf);
   if (wsBroadcast(HTTPD_WS_TYPE_TEXT, (const uint8_t*)buf, strlen(buf))) lastViewer = millis();   // 화면이 열려 있음 -> 차에 연결 신호 h 계속
 }
@@ -552,6 +610,14 @@ void handleSet() {
   if (hasArg("morph")) { morphView = arg("morph") == "1"; prefs.putBool("morph", morphView); }   // 화면 모드 (바로 바뀜)
   if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0;
     if (!sigMode && btOn()) for (int i = 0; i < 3; i++) btSend('n'); }   // 인식을 끄면 차의 빨강 정지를 풀어 줌 (빨강은 시간으로 안 풀려서)
+  if (hasArg("rec")) {                    // SD 기록 켬/끔. 켤 때마다 번호 +1 (rec_0001.mjpeg, log_0001.csv …)
+    bool on = arg("rec") == "1" && sdOk;
+    if (on && !recOn && !recRunning) {
+      recNo = prefs.getInt("recn", 0) + 1; prefs.putInt("recn", recNo);
+      recOn = recRunning = true;
+      if (xTaskCreatePinnedToCore(recTask, "rec", 6144, nullptr, 1, nullptr, 0) != pdPASS) recOn = recRunning = false;   // 코어 0 (라인·신호 처리를 안 막음)
+    } else if (!on) recOn = false;        // 작업이 파일을 닫고 스스로 끝남
+  }
   send(200, "text/plain", "ok");
 }
 
@@ -672,6 +738,9 @@ void setup() {
   }
   startWifi();
   startServer();
+  sdOk = SD_MMC.begin("/sdcard", true, false, SDMMC_FREQ_DEFAULT, 2);   // 1비트 모드, 포맷 안 함, 파일 2개까지. 카드가 있는지만 보고
+  if (sdOk) SD_MMC.end();                                                  // 바로 뗌 (기록할 때만 다시 붙임)
+  Serial.printf("I,sd,%d\n", sdOk ? 1 : 0);
   xTaskCreatePinnedToCore(btTask, "bt", 4096, nullptr, 1, nullptr, 0);
 }
 
@@ -716,7 +785,7 @@ void loop() {
       uint32_t tb = micros();
       trackLine();
       uint32_t tc = micros();
-      if (!morphView) { memcpy(color, b, W * H * 2); colorNo++; }   // 컬러 화면일 때만 (모폴로지 화면은 영상을 안 보냄)
+      if (!morphView || recOn) { memcpy(color, b, W * H * 2); colorNo++; }   // 컬러 화면이나 SD 기록 중일 때만 (모폴로지 화면은 영상을 안 보냄)
       tMaskS += tb - ta; tTrack += tc - tb; tCopy += micros() - tc;
       frames++;
     }
@@ -755,7 +824,7 @@ void loop() {
       c = abs(p) <= CAM_SOFT ? 'G' : abs(p) <= CAM_HARD ? (p > 0 ? 'R' : 'L') : (p > 0 ? 'W' : 'Q');
     } else if (millis() - lineAt < CAM_LOST_MS) c = lastCamCmd;   // 잠깐 놓침 : 직전 명령을 다시 보냄
     // (안 보내면 아두이노 버전 D 가 LINK_MS(0.45초) 뒤 수동 무명령으로 멈춰서 잠깐씩 섬)
-    lastCamCmd = c;
+    lastCamCmd = c; camCmdNow = c;
     btSend(c == 'S' ? 's' : c);
   }
   if (millis() - lastFpsAt >= 1000) { fps = frames * 1000.0 / (millis() - lastFpsAt); frames = 0; lastFpsAt = millis(); }

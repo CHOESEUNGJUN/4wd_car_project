@@ -39,6 +39,7 @@ label{display:block;margin:6px 0 2px}input[type=range]{width:100%;accent-color:v
 <span></span><button data-c="b">▼</button><span></span></div>
 <div class="row"><button id="auto">라인센서 주행</button><button id="camGo">카메라 주행</button><button id="man">정지 · 수동</button></div>
 <div class="row"><button id="sigBtn">신호등 인식 : 끔</button><span id="sigS" class="badge">-</span></div>
+<div class="row"><button id="recBtn">SD 기록 : 끔</button><span id="recS" class="badge">-</span></div>
 <div class="hint">신호등 : 아이폰 앱 굴노의 <b>신호등 화면</b>을 카메라 앞(위쪽)에 두기. 빨강 = 정지, 초록 = 다시 주행, 노랑 = 서행</div><div id="cs" class="hint"></div></section>
 <section class="card"><h2>차 상태</h2><table id="car"><tr><td>블루투스</td><td>연결 안 됨</td></tr></table><div id="raw"></div></section>
 <section class="card"><h2>블루투스</h2><div id="bts" class="hint" style="margin:0 0 8px"></div>
@@ -63,6 +64,8 @@ function connect(){
     $('sigBtn').textContent='신호등 인식 : '+(s.sigm?'켬':'끔'); $('sigBtn').classList.toggle('on',!!s.sigm);
     $('sigS').textContent=!s.sigm?'-':s.sig==1?'🔴 빨강 : 정지':s.sig==2?'🟢 초록 : 주행':s.sig==3?'🟡 노랑 : 서행':'신호 없음';
     $('camGo').title=!s.morph?'카메라 설정에서 모폴로지로 바꾼 뒤 쓸 수 있습니다':!s.bt?'차 블루투스 연결이 필요합니다':'';
+    $('recBtn').textContent='SD 기록 : '+(s.rec?'켬':'끔'); $('recBtn').classList.toggle('on',!!s.rec); $('recBtn').disabled=!s.sd;
+    $('recS').textContent=!s.sd?'SD 카드 없음':s.rec?('rec_'+String(s.recn).padStart(4,'0')+' · '+s.recf+'장'):'-';
     $('mir').checked=!!s.mir; $('flip').checked=!!s.flip; $('morph').checked=!!s.morph; showDir(s); showCar(s);};
   ws.onclose=()=>{badge('bCam','카메라 끊김','bad'); setTimeout(connect,1000);};
 }
@@ -147,6 +150,7 @@ addEventListener('keyup',e=>{if(KEY[e.key])release();});
 $('auto').onclick=()=>{if(confirm('라인센서 자동 주행을 시작할까요?')){send('X');send('a');}};
 $('camGo').onclick=()=>{if(confirm('카메라 주행을 시작할까요? (ESP32 가 카메라로 보고 조종합니다)'))send('C');};
 $('man').onclick=()=>{send('X');send('m');};
+$('recBtn').onclick=()=>fetch('/set?rec='+($('recBtn').classList.contains('on')?0:1));
 $('sigBtn').onclick=()=>fetch('/set?sig='+($('sigBtn').classList.contains('on')?0:1));
 document.addEventListener('visibilitychange',()=>{if(document.hidden)release();});
 </script></body></html>)HTML";
