@@ -107,7 +107,7 @@ async function load(fileList) {
   show(0); drawPlot();
 }
 
-const SIG = ['없음', '🔴 빨강 (정지)', '🟢 초록', '🟡 노랑 (서행)'];
+const SIG = ['없음', '🔴 빨강 (정지)', '🟢 초록', '🟡 노랑 (서행)', '🛑 정지 표지판'];
 const CMD = { G: 'G 직진', L: 'L 살짝 왼쪽', R: 'R 살짝 오른쪽', Q: 'Q 크게 왼쪽', W: 'W 크게 오른쪽', S: 'S 정지', '-': '-' };
 function rowsOf(k) { return rows.filter(r => r.frame === k + 1); }   // frame 열 = 그때까지 저장한 장 수 -> k 번째 장(0부터)은 frame == k+1 인 줄들
 
@@ -126,6 +126,7 @@ function show(k) {
     ['시간', r.ms != null ? `${((r.ms - t0) / 1000).toFixed(1)}초 (켠 뒤 ${r.ms} ms)` : '-'],
     ['신호등', r.sig_mode ? SIG[r.sig] || r.sig : '인식 끔'],
     ...('red' in r ? [['센 픽셀', `빨강 ${r.red} · 초록 ${r.green} · 노랑 ${r.yellow}`]] : []),
+    ...('fill' in r ? [['빨강 덩어리', `채움 ${r.fill}% · 흰색 ${r.white}% (채움 80% 아래 + 흰색 4% 넘으면 표지판)${r.stop_ms > 0 ? ` · 표지판 정지 ${(r.stop_ms / 1000).toFixed(1)}초 남음` : ''}`]] : []),
     ...(old ? [['가까운 라인 (예전)', r.near_found ? `위치 ${r.near_pos}` : '<span class="warn">못 찾음</span>'],
                ['먼 라인 (예전)', r.far_found ? `위치 ${r.far_pos}` : '없음'],
                ['교차선 (예전)', r.cross ? '<span class="warn">교차선으로 봄</span>' : '아님'],
@@ -136,7 +137,7 @@ function show(k) {
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   $('rows').innerHTML = rs.length ? rs.map(x => `${((x.ms - t0) / 1000).toFixed(1)}s ` +
     (old ? `가까이 ${x.near_found ? x.near_pos : '✕'} 멀리 ${x.far_found ? x.far_pos : '✕'}${x.cross ? ' 교차' : ''} ${x.cam_drive ? x.cam_cmd : ''}`
-         : `신호 ${x.sig_mode ? ['-', '빨강', '초록', '노랑'][x.sig] : '끔'}${'red' in x ? ` (R ${x.red} G ${x.green} Y ${x.yellow})` : ''}`) +
+         : `신호 ${x.sig_mode ? ['-', '빨강', '초록', '노랑', '표지판'][x.sig] : '끔'}${'red' in x ? ` (R ${x.red} G ${x.green} Y ${x.yellow})` : ''}`) +
     ` ${x.car ? '| ' + x.car : ''}`).join('<br>') : '-';
   drawPlot();
 }
@@ -169,7 +170,7 @@ function drawPlot() {
       rows.forEach((r, i) => i ? g.lineTo(X(i), P(r[key])) : g.moveTo(X(i), P(r[key])));
       g.stroke();
     }
-    rows.forEach((r, i) => { if (r.sig_mode && r.sig) { g.fillStyle = ['', '#e03131', '#2b8a3e', '#f59f00'][r.sig]; g.fillRect(X(i), h - 3, Math.max(2, w / n), 3); } });
+    rows.forEach((r, i) => { if (r.sig_mode && r.sig) { g.fillStyle = ['', '#e03131', '#2b8a3e', '#f59f00', '#c2255c'][r.sig]; g.fillRect(X(i), h - 3, Math.max(2, w / n), 3); } });
   }
   const at = rows.findIndex(r => r.frame >= idx + 1);
   if (at >= 0) { g.strokeStyle = css.getPropertyValue('--ink'); g.lineWidth = 1; g.beginPath(); g.moveTo(X(at), 0); g.lineTo(X(at), h); g.stroke(); }
