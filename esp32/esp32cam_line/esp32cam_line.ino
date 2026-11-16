@@ -161,29 +161,44 @@ Band summary(int y0, int y1) {            // y0~y1 줄의 라인 가운데 평�
 
 // 이진화 + 모폴로지 열림 : 줄마다 평균보다 DARK_OFFSET 어두우면 라인 후보(1) -> 침식(3x3 모두 1 이어야 1 : 작은 점·가는 잡음 지움)
 // -> 팽창(3x3 중 하나라도 1 이면 1 : 라인 굵기 되돌림). 정리된 mask 를 라인 추적과 모폴로지 화면에 같이 쓴다
-void buildMask(const uint8_t* img) {
+// 3x3 침식(dil=false, 9칸 모두 1) / 팽창(dil=true, 9칸 중 하나라도 1). 밖은 0.
+// 가로 3칸을 먼저 묶고 세로 3줄을 묶음 (9칸을 하나씩 보는 것과 결과는 같고, 느린 외부 메모리를 픽셀당 한 번만 읽음)
+static void hrow3(const uint8_t* in, int y, bool dil, uint8_t* d) {
+  if (y < 0 || y >= H) { memset(d, 0, W); return; }
+  const uint8_t* r = in + y * W;
+  uint8_t a = 0, b = r[0];
+  for (int x = 0; x < W; x++) {
+    uint8_t c = x + 1 < W ? r[x + 1] : 0;
+    d[x] = dil ? (a | b | c) : (a & b & c);
+    a = b; b = c;
+  }
+}
+static void morph3(const uint8_t* in, uint8_t* out, bool dil) {
+  uint8_t h[3][W];                        // 가로로 묶은 세 줄 (내부 메모리, 줄 y 는 h[(y + 1) % 3])
+  hrow3(in, -1, dil, h[0]);
+  hrow3(in, 0, dil, h[1]);
   for (int y = 0; y < H; y++) {
-    const uint8_t* r = img + y * W;
+    const uint8_t* up = h[y % 3];
+    const uint8_t* mid = h[(y + 1) % 3];
+    uint8_t* dn = h[(y + 2) % 3];
+    hrow3(in, y + 1, dil, dn);
+    uint8_t* o = out + y * W;
+    for (int x = 0; x < W; x++) o[x] = dil ? (up[x] | mid[x] | dn[x]) : (up[x] & mid[x] & dn[x]);
+  }
+}
+
+void buildMask(const uint8_t* img) {
+  uint8_t row[W];                         // 한 줄을 내부 메모리로 옮겨서 계산
+  for (int y = 0; y < H; y++) {
+    memcpy(row, img + y * W, W);
     long sum = 0;
-    for (int x = 0; x < W; x++) sum += r[x];
+    for (int x = 0; x < W; x++) sum += row[x];
     int th = sum / W - DARK_OFFSET;       // 바닥이 완전히 흰색이 아니어도, 그 줄 평균보다 어두우면 라인 (조명 따라감)
-    for (int x = 0; x < W; x++) mask[y * W + x] = r[x] < th;
+    for (int x = 0; x < W; x++) row[x] = row[x] < th;
+    memcpy(mask + y * W, row, W);
   }
-  for (int pass = 0; pass < 2; pass++) {  // 0 = 침식 mask -> tmp, 1 = 팽창 tmp -> mask
-    const uint8_t* in = pass ? tmp : mask;
-    uint8_t* out = pass ? mask : tmp;
-    for (int y = 0; y < H; y++)
-      for (int x = 0; x < W; x++) {
-        int all = 1, any = 0;
-        for (int dy = -1; dy <= 1; dy++)
-          for (int dx = -1; dx <= 1; dx++) {
-            int yy = y + dy, xx = x + dx;
-            uint8_t v = (yy < 0 || yy >= H || xx < 0 || xx >= W) ? 0 : in[yy * W + xx];
-            all &= v; any |= v;
-          }
-        out[y * W + x] = pass ? any : all;
-      }
-  }
+  morph3(mask, tmp, false);               // 침식 : 작은 점·가는 잡음 지움
+  morph3(tmp, mask, true);                // 팽창 : 라인 굵기 되돌림 (= 모폴로지 열림)
 }
 
 void trackLine() {                        // mask 에서 라인 따라가기
@@ -609,7 +624,7 @@ bool startCamera() {
   c.xclk_freq_hz = 20000000;
   c.pixel_format = PIXFORMAT_RGB565;       // 늘 컬러 : 라인은 밝기만 뽑아서, 신호등은 색으로
   c.frame_size = FRAMESIZE_QQVGA;          // 160 x 120
-  c.fb_count = 1;                          // 1장 : 판단하고 바로 버림 (메모리 아낌)
+  c.fb_count = 2;                          // 2장 : 한 장을 처리하는 동안 다음 장을 미리 찍음 (외부 메모리 38KB 더, 처리와 촬영이 겹쳐서 빨라짐)
   c.fb_location = CAMERA_FB_IN_PSRAM;
   c.grab_mode = CAMERA_GRAB_LATEST;        // 항상 가장 최근 프레임
   if (esp_camera_init(&c) != ESP_OK) return false;
@@ -663,21 +678,27 @@ void detectSignal(const uint8_t* b) {
 }
 
 void loop() {
+  static uint32_t tGrab = 0, tProc = 0, tLoop = 0, nT = 0, loopAt = 0;   // 시간 재기 (시리얼 I,time)
+  uint32_t t0 = micros();
+  if (loopAt) tLoop += t0 - loopAt;
+  loopAt = t0;
   camera_fb_t* fb = esp_camera_fb_get();
+  uint32_t t1 = micros();
   if (fb) {
     if (fb->len >= (size_t)(W * H * 2)) {
       const uint8_t* b = fb->buf;
+      if (sigMode) detectSignal(b);        // 신호등을 먼저 (라인 처리를 기다리지 않게)
       for (int i = 0; i < W * H; i++) {    // RGB565 -> 밝기 (빨강 30% 초록 59% 파랑 11%)
         uint16_t p = (b[2 * i] << 8) | b[2 * i + 1];
         gray[i] = (((p >> 11) & 31) * 79 + ((p >> 5) & 63) * 76 + (p & 31) * 29) >> 4;
       }
       buildMask(gray);
       trackLine();
-      if (sigMode) detectSignal(b);
       if (!morphView) memcpy(color, b, W * H * 2);   // 컬러 화면일 때만 (모폴로지 화면은 영상을 안 보냄)
       frames++;
     }
     esp_camera_fb_return(fb);
+    tGrab += t1 - t0; tProc += micros() - t1; nT++;
   }
   static unsigned long lastPush = 0;
   if (millis() - lastPush >= 200) { lastPush = millis(); pushStatus(); }
@@ -689,8 +710,14 @@ void loop() {
   // 신호등 : 지금 신호를 차(버전 D)에 0.2초마다 계속 보냄 (2초면 10번. 교안 4팀처럼 한 번이 아니라 계속 보내서 몇 개 놓쳐도 유지).
   // x 빨강 = 정지, v 노랑 = 서행, n 초록·신호 없음 = 보통. 차는 모드를 안 바꾸고 라인센서(또는 카메라 주행)로 계속 보면서 따름.
   // 인식을 끄면 n 을 3번 보내고 그만 보냄 (빨강은 차에서 시간으로 안 풀림, 노랑은 1초 뒤 풀림)
+  // 색이 바뀌면 0.2초를 기다리지 않고 바로 보냄
   static unsigned long lastSig = 0;
-  if (sigMode && btOn() && millis() - lastSig >= 200) { lastSig = millis(); btSend(sigState == 1 ? 'x' : sigState == 3 ? 'v' : 'n'); }
+  static uint8_t sentSig = 255;
+  if (sigMode && btOn() && (sigState != sentSig || millis() - lastSig >= 200)) {
+    lastSig = millis(); sentSig = sigState;
+    btSend(sigState == 1 ? 'x' : sigState == 3 ? 'v' : 'n');
+  }
+  if (!sigMode) sentSig = 255;
   static unsigned long lastCam = 0, lineAt = 0;
   static char lastCamCmd = 'S';
   // 카메라 주행 : 화면이 닫혔거나 블루투스·모폴로지가 꺼지면 바로 멈춤 (사람이 안 보고 있으면 안 움직임)
@@ -725,6 +752,8 @@ void loop() {
       }
     }
     else Serial.printf("I,ip,%s,%s.local\n", myIp.c_str(), HOSTNAME);
+    if (nT) Serial.printf("I,time,grab_ms,%lu,proc_ms,%lu,loop_ms,%lu\n", (unsigned long)(tGrab / nT / 1000), (unsigned long)(tProc / nT / 1000), (unsigned long)(tLoop / nT / 1000));
+    tGrab = tProc = tLoop = nT = 0;
     Serial.printf("I,heap,%u,%u,psram,%u,%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                   (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreePsram());
   }
