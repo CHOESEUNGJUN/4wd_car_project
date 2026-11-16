@@ -65,8 +65,8 @@ const int MAN_CURVE_OUT = 100;      // 곡선 회전 바깥 바퀴 (255 -> 100, 
 const int MAN_CURVE_IN = 80;       // 곡선 회전 안쪽 바퀴
 const int MAN_SPIN = 130;           // 제자리 회전 (230 -> 130, 차에서 맞춤)
 const int MIN_PWM = 90;             // 0 이 아니면 최소 이만큼 (작으면 바닥에서 모터가 안 돎)
-const int KICK_PWM = 255;           // 출발하거나 방향이 바뀌는 순간 주는 힘 (툭툭 튀어나가면 낮춤. 저주파면 180 정도로도 출발할 것)
-const unsigned long KICK_MS = 120;  // 그 시간 (배터리가 약해도 출발하게 0.08 -> 0.12초)
+const int KICK_PWM = 170;           // 출발하거나 방향이 바뀌는 순간 주는 힘. 저주파는 저속 힘이 좋아서 255 -> 170 (2026-11-16, 툭툭 튀는 것 줄임). 출발을 못 하면 200 쪽으로
+const unsigned long KICK_MS = 60;   // 그 시간 0.12 -> 0.06초 (저주파). 0 이면 킥 끔
 const float TRIM_L = 1.0, TRIM_R = 1.0;   // 한쪽이 빠르면 빠른 쪽을 0.9 처럼 낮춰 맞춤
 const unsigned long SWITCH_HOLD_MS = 500;  // 자동 모드로 전환할 때 무조건 정지하는 안전 지연 (수동 전환은 즉시)
 const unsigned long AUTO_LINK_MS = 5000;   // 자동 중 폰 신호가 5초 없으면 정지하고 수동으로 (앱은 0.6초마다 'h')
