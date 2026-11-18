@@ -8,6 +8,7 @@
  *  보드 : "AI Thinker ESP32-CAM". 올리기는 PlatformIO (docs/CAMERA.md)
  */
 
+#include <esp_wifi.h>
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <DNSServer.h>
@@ -185,6 +186,15 @@ uint8_t* vbuf[2];
 volatile int vFront = 0, vBusy = -1;
 portMUX_TYPE vMux = portMUX_INITIALIZER_UNLOCKED;
 unsigned long frames = 0, lastFpsAt = 0, lastViewer = 0, lastHb = 0;
+// HSV 영상 (JPEG 없이) : HSV 보기를 켜면 칸마다 색 종류(0~4)를 "종류 3비트 + 이어진 칸 수 5비트" 한 바이트씩 묶어(RLE) 웹소켓으로 보내고
+// 브라우저가 칠함. 신호를 세면서 같이 만들어서 계산이 거의 없음 (JPEG 압축 한 장 55ms 가 없어짐 -> 카메라가 주는 대로 초당 약 20장).
+// 내용 앞 2바이트 = 가로, 세로. 보내기는 코어 0 작업(hsvTask)이 함 : 와이파이가 막혀도 신호 판단(loop)이 안 멈춤. 보내는 중이면 그 사진은 건너뜀
+const int RLE_MAX = 5000;                 // 이보다 길어지는 (아주 얼룩덜룩한) 사진은 안 보냄 (소켓 보내기 칸 5.7KB 에 한 번에 들어가게)
+uint8_t* rleBuf;                          // 외부 메모리 RLE_MAX + 여유
+volatile int rleN = 0;                    // 보낼 길이 (0 = 없음)
+bool rleOn = false;                       // 이번 사진을 RLE 로 만들지 (loop 가 정함)
+SemaphoreHandle_t rleLock, wsLock;
+TaskHandle_t hsvTaskH = nullptr;
 float fps = 0;
 volatile uint32_t tSig = 0, tCopy = 0, tJpeg = 0, nJ = 0;   // 단계별 시간 (µs 합, 시리얼 I,step_us)
 volatile uint32_t colorNo = 0;            // 컬러 버퍼가 새 사진으로 바뀔 때마다 +1 (영상은 새 사진일 때만 JPEG 로)
@@ -372,6 +382,8 @@ esp_err_t notFound(httpd_req_t* r, httpd_err_code_t) {
 
 void startServer() {
   jpgLock = xSemaphoreCreateMutex();
+  rleLock = xSemaphoreCreateMutex();
+  wsLock = xSemaphoreCreateMutex();
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
   cfg.max_uri_handlers = 12;
   cfg.stack_size = 6144;
@@ -465,6 +477,7 @@ void buildStatus(char* buf, size_t n) {
 // ---- 웹소켓 /ws : 연결 하나를 열어 두고 조종 글자는 받고(화면 -> 차), 상태는 밀어 줌(차·카메라 -> 화면) ----
 const int MAX_WS = 2;
 int wsFd[MAX_WS] = {-1, -1};
+struct { int fd; uint8_t* buf; int len, off; unsigned long at; } pend[MAX_WS];   // 화면별로 다 못 보낸 프레임의 남은 부분 (wsSendAll)
 
 unsigned long wsAt[MAX_WS];
 
@@ -476,6 +489,8 @@ void wsAdd(int fd) {                      // 화면 하나 등록 (이미 있으
     if (wsAt[i] < wsAt[k]) k = i;
   }
   wsFd[k] = fd; wsAt[k] = millis();
+  pend[k].fd = fd; pend[k].len = pend[k].off = 0; pend[k].at = millis();   // 새 화면 : 같은 번호를 쓰던 지난 화면의 남은 조각을 버림 (안 버리면 새 화면에 섞여 깨짐)
+  int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);   // 작은 조각을 모았다 보내지 않게 (안 하면 웹소켓 한 장마다 0.2초씩 기다림 : 머리 4바이트 + 내용을 따로 보내서)
 }
 
 void onClose(httpd_handle_t, int fd) {    // 연결이 닫히면 그 자리를 비움 (번호가 다른 요청에 다시 쓰여도 헷갈리지 않게)
@@ -499,25 +514,64 @@ esp_err_t wsHandler(httpd_req_t* r) {
 }
 
 // 열려 있는 화면 모두에게 보냄. 보낸 화면이 있으면 true
-bool wsBroadcast(httpd_ws_type_t type, const uint8_t* data, size_t len) {
+// 웹소켓 보내기 (상태 줄, HSV 영상 공용). 모두 **기다리지 않는 방식** : 느리거나 끊긴 화면 때문에 신호 판단(loop)·다른 화면이 멈추지 않게.
+//   wsLock : 상태 줄(loop, 코어 1)과 HSV 영상(hsvTask, 코어 0)이 같은 소켓에 동시에 쓰면 섞임 -> 한 번에 하나만
+//   소켓이 한 프레임을 다 못 받으면 남은 부분을 화면별 칸(pend)에 두고 다음 번에 이어 보냄. 남은 게 있는 화면에는 새 프레임을 안 보냄 (끼어들면 깨짐)
+//   = 느린 연결(아이폰 핫스팟은 응답이 0.05~0.3초씩 밀림)에서는 저절로 영상 장수가 줄고, 밀리지 않음
+//   3초 동안 조금도 못 보내면 그 화면을 끊음 (화면은 1초 뒤 스스로 다시 붙음)
+bool wsSendAll(const uint8_t* frame, int n) {   // frame = 웹소켓 머리까지 든 한 프레임. wsLock 을 잡고 부름. 열린 화면이 있으면 true
   bool any = false;
   for (int i = 0; i < MAX_WS; i++) {
-    if (wsFd[i] < 0) continue;
-    httpd_ws_client_info_t info = httpd_ws_get_fd_info(web, wsFd[i]);
+    int fd = wsFd[i];
+    if (fd < 0) continue;
+    httpd_ws_client_info_t info = httpd_ws_get_fd_info(web, fd);
     if (info == HTTPD_WS_CLIENT_INVALID) { wsFd[i] = -1; continue; }   // 닫힘
     if (info != HTTPD_WS_CLIENT_WEBSOCKET) { if (millis() - wsAt[i] > 2000) wsFd[i] = -1; continue; }   // 연결 중이거나 다른 요청
-    httpd_ws_frame_t f = {};
-    f.type = type; f.payload = (uint8_t*)data; f.len = len;
-    httpd_ws_send_frame_async(web, wsFd[i], &f);
     any = true;
+    if (pend[i].fd != fd) { pend[i].fd = fd; pend[i].len = pend[i].off = 0; pend[i].at = millis(); }
+    if (!pend[i].buf) pend[i].buf = (uint8_t*)ps_malloc(RLE_MAX + CW + 8);
+    if (!pend[i].buf) continue;
+    if (pend[i].off < pend[i].len) {               // 지난 프레임의 남은 부분부터
+      int r = send(fd, pend[i].buf + pend[i].off, pend[i].len - pend[i].off, MSG_DONTWAIT);
+      if (r > 0) { pend[i].off += r; pend[i].at = millis(); }
+      else if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK) { httpd_sess_trigger_close(web, fd); wsFd[i] = -1; continue; }
+    }
+    if (pend[i].off >= pend[i].len && n <= RLE_MAX + CW + 8) {   // 남은 게 없으면 새 프레임
+      int r = send(fd, frame, n, MSG_DONTWAIT);
+      if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK) { httpd_sess_trigger_close(web, fd); wsFd[i] = -1; continue; }
+      if (r > 0) pend[i].at = millis();
+      if (r > 0 && r < n) { memcpy(pend[i].buf, frame + r, n - r); pend[i].len = n - r; pend[i].off = 0; }   // 반만 들어감 : 나머지는 다음에
+      else pend[i].len = pend[i].off = 0;          // 다 들어갔거나, 한 글자도 안 들어가서 이 프레임은 건너뜀
+    }
+    if (millis() - pend[i].at > 3000) { httpd_sess_trigger_close(web, fd); wsFd[i] = -1; }
   }
   return any;
+}
+// 글자 프레임(상태 줄)을 열려 있는 화면 모두에게. 보낼 화면이 있으면 true. waitMs 안에 wsLock 을 못 잡으면 안 보내고 false
+bool wsBroadcast(const uint8_t* data, size_t len, uint32_t waitMs) {
+  static uint8_t f[4 + 512];
+  if (len > 512 || xSemaphoreTake(wsLock, pdMS_TO_TICKS(waitMs)) != pdTRUE) return false;
+  int h = 2; f[0] = 0x81;                          // 글자 프레임 머리
+  if (len < 126) f[1] = len; else { f[1] = 126; f[2] = len >> 8; f[3] = len & 0xFF; h = 4; }
+  memcpy(f + h, data, len);
+  bool any = wsSendAll(f, h + len);
+  xSemaphoreGive(wsLock);
+  return any;
+}
+void hsvTask(void*) {                     // 코어 0 : loop 가 만든 HSV 영상 한 장을 화면들에 보냄
+  while (true) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    xSemaphoreTake(rleLock, portMAX_DELAY);
+    if (rleN >= 130 && xSemaphoreTake(wsLock, pdMS_TO_TICKS(100)) == pdTRUE) { wsSendAll(rleBuf, rleN); xSemaphoreGive(wsLock); }
+    rleN = 0;
+    xSemaphoreGive(rleLock);
+  }
 }
 
 void pushStatus() {
   static char buf[512];
   buildStatus(buf, sizeof buf);
-  if (wsBroadcast(HTTPD_WS_TYPE_TEXT, (const uint8_t*)buf, strlen(buf))) lastViewer = millis();   // 화면이 열려 있음 -> 차에 연결 신호 h 계속
+  if (wsBroadcast((const uint8_t*)buf, strlen(buf), 5)) lastViewer = millis();   // 화면이 열려 있음 -> 차에 연결 신호 h 계속
 }
 
 
@@ -612,6 +666,7 @@ void startWifi() {
       apOn = WiFi.softAP(setupName.c_str(), setupPass.c_str(), WiFi.channel());
       if (apOn) dns.start(53, "*", WiFi.softAPIP());
     }
+    esp_wifi_set_ps(WIFI_PS_NONE);         // 모드를 바꾼 뒤 한 번 더 : 절전이 켜져 있으면 받는 쪽이 0.1~0.8초씩 밀림 (핑 평균 0.37초였음, 2026-11-18)
     return;
   }
   // 설정 모드 : 주변 핫스팟 목록을 받아 두고 설정용 와이파이를 켬
@@ -660,6 +715,7 @@ void setup() {
   pinMode(STATUS_LED, OUTPUT); digitalWrite(STATUS_LED, HIGH);
   vbuf[0] = (uint8_t*)ps_calloc(W * H * 2, 1);
   vbuf[1] = (uint8_t*)ps_calloc(W * H * 2, 1);
+  rleBuf = (uint8_t*)ps_malloc(RLE_MAX + CW + 4);
   color = vbuf[1];
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
@@ -674,6 +730,7 @@ void setup() {
   if (sdOk) SD_MMC.end();                                                  // 바로 뗌 (기록할 때만 다시 붙임)
   Serial.printf("I,sd,%d\n", sdOk ? 1 : 0);
   xTaskCreatePinnedToCore(btTask, "bt", 4096, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(hsvTask, "hsv", 3072, nullptr, 1, &hsvTaskH, 0);
 }
 
 // 신호등 : SIG_Y1 위쪽(지금은 화면 전체)에서 SIG_STEP 칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음, 노랑 = R·G 높고 B 낮음
@@ -718,40 +775,74 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
   // 한 줄씩 빠른 내부 메모리로 옮겨서 봄 (외부 메모리를 칸마다 읽으면 느림). 흰색 칸은 비트로 적어 둠 (내부 2.4KB) :
   // 빨강 덩어리 네모 칸이 정해진 뒤 그 안의 흰색을 외부 메모리를 다시 읽지 않고 셈
   static uint8_t row[CW * 2];
-  static uint32_t whiteBits[CH][(CW + 31) / 32];
+  static uint32_t whiteBits[CH][(CW + 31) / 32], redBits[CH][(CW + 31) / 32];
+  static uint16_t rowRed[CH], colRed[CW];   // 줄마다 / 칸마다 빨강 수 (빨강 덩어리 네모 칸 찾기)
   static uint8_t vrow[CW * 2];             // HSV 보기 : 이 줄을 색 종류로 칠한 것
   const bool hsvOut = copyView && hsvView && camRot == 0 && CW == W && SIG_STEP == 1 && SIG_Y1 == CH;
-  int red = 0, grn = 0, yel = 0, x0 = CW, x1 = -1, y0 = CH, y1 = -1;   // x0~y1 = 빨강 덩어리를 감싼 네모 칸
+  int red = 0, grn = 0, yel = 0;
+  const bool rle = rleOn && SIG_STEP == 1 && SIG_Y1 == CH;
+  uint8_t rr[CW]; int rn = 0, ro = 6; uint8_t rc = 255, rl = 0;   // 이 줄의 묶음들, 줄 안 개수, rleBuf 에 쓴 길이, 지금 묶음의 종류·길이
   for (int y = 0; y < SIG_Y1; y += SIG_STEP) {
     memcpy(row, b + y * CW * 2, CW * 2);
     if (copyView && !hsvOut) memcpy(color + y * W * 2, row, W * 2);
-    uint32_t* wb = whiteBits[y];
-    memset(wb, 0, sizeof whiteBits[0]);
+    uint32_t *wb = whiteBits[y], *rb = redBits[y];
+    memset(wb, 0, sizeof whiteBits[0]); memset(rb, 0, sizeof redBits[0]);
+    int rowN = 0;
     for (int x = 0; x < CW; x += SIG_STEP) {
       uint16_t p = (row[2 * x] << 8) | row[2 * x + 1];
       uint8_t c = colorLut[lutIndex(p)];   // RGB565 -> R4 G4 B4 -> 종류
       if (hsvOut) { vrow[2 * x] = HSV_PAL[c] >> 8; vrow[2 * x + 1] = HSV_PAL[c] & 0xFF; }
-      if (c == C_RED) {
-        red++;
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
+      if (rle) {
+        if (c == rc && rl < 32) rl++;
+        else { if (rl) rr[rn++] = (rc << 5) | (rl - 1); rc = c; rl = 1; }
       }
+      if (c == C_RED) { rowN++; rb[x >> 5] |= 1u << (x & 31); }
       else if (c == C_GREEN) grn++;
       else if (c == C_YELLOW) yel++;
       else if (c == C_WHITE) wb[x >> 5] |= 1u << (x & 31);
     }
+    rowRed[y] = rowN; red += rowN;
     if (hsvOut) memcpy(color + y * W * 2, vrow, W * 2);
+    if (rle && ro >= 0) {                  // 이 줄에서 끝난 묶음들을 외부 메모리로 (한 줄에 최대 CW 개)
+      if (ro + rn > RLE_MAX) ro = -1;      // 너무 길면 이 사진은 안 보냄
+      else { memcpy(rleBuf + ro, rr, rn); ro += rn; }
+    }
+    rn = 0;
+  }
+  if (rle) {
+    if (ro >= 0 && rl) rleBuf[ro++] = (rc << 5) | (rl - 1);   // 마지막 묶음
+    // 앞 4바이트 = 웹소켓 이진 프레임 머리 (한 번에 보내려고 같은 버퍼에), 그다음 가로·세로, 그다음 묶음들
+    if (ro > 6) { int n = ro - 4; rleBuf[0] = 0x82; rleBuf[1] = 126; rleBuf[2] = n >> 8; rleBuf[3] = n & 0xFF; rleBuf[4] = CW; rleBuf[5] = CH; rleN = ro; } else rleN = 0;
   }
   sigR = red; sigG = grn; sigY = yel;
-  // 빨강 덩어리 모양 : 네모 칸을 얼마나 채웠나(%), 칸 안에 흰색이 얼마나(%) -> 정지 표지판인지 신호등(폰 화면)인지
+  // 빨강 덩어리 모양 -> 정지 표지판인지 신호등(폰 빨간 화면)인지.
+  // 네모 칸 : 빨강이 3칸 넘게 있는 줄들만 보고, 위아래 끝에서 빨강의 3% 씩을 잘라 낸 범위 -> 그 줄들 안에서 칸(세로줄)도 같은 식으로.
+  //   (예전에는 화면의 모든 빨강 칸을 감싸서, 떨어진 빨강 점 몇 개가 네모를 키우고 그 안에 흰 벽이 들어가 빨간불을 표지판으로 봤음 : 2026-11-18)
+  // 채움 = 네모 안 빨강 %. 흰색 = 네모 **가운데 60%** 안의 흰색 % (표지판 글자는 가운데, 모서리 밖 배경은 안 셈)
   int fill = 0, white = 0;
   if (red > SIG_MIN) {
-    int area = ((x1 - x0) / SIG_STEP + 1) * ((y1 - y0) / SIG_STEP + 1), wc = 0;
+    const int SPECK = 3, TRIM = 3;         // 한 줄에 이보다 적은 빨강은 점으로 보고 뺌 / 양 끝에서 잘라 내는 %
+    int tot = 0, acc = 0, y0 = 0, y1 = SIG_Y1 - SIG_STEP, x0 = 0, x1 = CW - SIG_STEP;
+    for (int y = 0; y < SIG_Y1; y += SIG_STEP) if (rowRed[y] >= SPECK) tot += rowRed[y];
+    for (int y = 0; y < SIG_Y1; y += SIG_STEP) if (rowRed[y] >= SPECK) { acc += rowRed[y]; if (acc * 100 > tot * TRIM) { y0 = y; break; } }
+    acc = 0;
+    for (int y = SIG_Y1 - SIG_STEP; y >= 0; y -= SIG_STEP) if (rowRed[y] >= SPECK) { acc += rowRed[y]; if (acc * 100 > tot * TRIM) { y1 = y; break; } }
+    memset(colRed, 0, sizeof colRed);
     for (int y = y0; y <= y1; y += SIG_STEP)
-      for (int x = x0; x <= x1; x += SIG_STEP) wc += (whiteBits[y][x >> 5] >> (x & 31)) & 1;
-    fill = red * 100 / area; white = wc * 100 / area;
+      for (int x = 0; x < CW; x += SIG_STEP) colRed[x] += (redBits[y][x >> 5] >> (x & 31)) & 1;
+    tot = 0; acc = 0;
+    for (int x = 0; x < CW; x += SIG_STEP) if (colRed[x] >= SPECK) tot += colRed[x];
+    for (int x = 0; x < CW; x += SIG_STEP) if (colRed[x] >= SPECK) { acc += colRed[x]; if (acc * 100 > tot * TRIM) { x0 = x; break; } }
+    acc = 0;
+    for (int x = CW - SIG_STEP; x >= 0; x -= SIG_STEP) if (colRed[x] >= SPECK) { acc += colRed[x]; if (acc * 100 > tot * TRIM) { x1 = x; break; } }
+    if (x1 < x0) x1 = x0;
+    if (y1 < y0) y1 = y0;
+    int area = ((x1 - x0) / SIG_STEP + 1) * ((y1 - y0) / SIG_STEP + 1), rc2 = 0;
+    for (int x = x0; x <= x1; x += SIG_STEP) rc2 += colRed[x];
+    int mx = (x1 - x0) / 5, my = (y1 - y0) / 5, wc = 0, wa = 0;   // 가운데 60%
+    for (int y = y0 + my; y <= y1 - my; y += SIG_STEP)
+      for (int x = x0 + mx; x <= x1 - mx; x += SIG_STEP) { wc += (whiteBits[y][x >> 5] >> (x & 31)) & 1; wa++; }
+    fill = rc2 * 100 / area; white = wa ? wc * 100 / wa : 0;
   }
   sigFill = fill; sigWhite = white;
   uint8_t now = 0;
@@ -781,8 +872,11 @@ void loop() {
         portENTER_CRITICAL(&vMux); back = 1 - vFront; if (vBusy == back) wantView = false; portEXIT_CRITICAL(&vMux);
         if (wantView) color = vbuf[back];
       }
+      // HSV 영상 : HSV 보기가 켜져 있고 화면이 열려 있으면 (보내는 작업이 지난 장을 다 보냈을 때만) 색 종류를 묶어서 만듦
+      rleOn = hsvView && hsvTaskH && millis() - lastViewer < 2500 && xSemaphoreTake(rleLock, 0) == pdTRUE;
       uint32_t ts = micros();
-      bool copied = sigMode && detectSignal(b, wantView);   // 신호를 보면서 같은 줄을 영상용으로도 복사 (한 번만 읽음)
+      bool copied = (sigMode || rleOn) && detectSignal(b, wantView);   // 신호를 보면서 같은 줄을 영상용으로도 복사 (한 번만 읽음)
+      if (rleOn) { bool go = rleN > 0; xSemaphoreGive(rleLock); rleOn = false; if (go) xTaskNotifyGive(hsvTaskH); }
       uint32_t tc = micros();
       tSig += tc - ts;
       if (wantView) { if (!copied) shrinkView(b); drawBorder(); vFront = back; colorNo++; }   // 신호를 안 보거나 회전 중이면 따로 복사. 테두리를 그리고 앞으로
@@ -832,6 +926,7 @@ void loop() {
       }
     }
     else Serial.printf("I,ip,%s,%s.local\n", myIp.c_str(), HOSTNAME);
+    { wifi_ps_type_t ps; esp_wifi_get_ps(&ps); Serial.printf("I,wifi,ps,%d,rssi,%d,ch,%d\n", (int)ps, WiFi.RSSI(), WiFi.channel()); }   // ps 0 = 절전 끔
     if (nT) Serial.printf("I,time,grab_ms,%lu,proc_ms,%lu,loop_ms,%lu\n", (unsigned long)(tGrab / nT / 1000), (unsigned long)(tProc / nT / 1000), (unsigned long)(tLoop / nT / 1000));
     if (nT) Serial.printf("I,step_us,sig,%lu,copy,%lu,jpeg,%lu\n", (unsigned long)(tSig/nT), (unsigned long)(tCopy/nT), (unsigned long)(nJ ? tJpeg/nJ : 0));
     tGrab = tProc = tLoop = nT = 0; tSig = tCopy = tJpeg = nJ = 0;

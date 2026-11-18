@@ -13,7 +13,7 @@ main{display:grid;gap:14px;padding:14px 16px 28px;max-width:1200px;margin:0 auto
 .side{display:grid;gap:14px}.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
 .card h2{font-size:14px;color:var(--mut);font-weight:600;margin:0 0 10px;letter-spacing:.02em}
 .video{position:relative;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden}
-.video img{width:100%;height:100%;object-fit:contain;display:block}
+.video img,.video canvas{width:100%;height:100%;object-fit:contain;display:block}.video canvas{image-rendering:pixelated;display:none}
 .video .ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut)}
 #s{color:var(--mut);font-size:13px;margin-top:8px}
 .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto}
@@ -29,7 +29,7 @@ label{display:block;margin:6px 0 2px}select{font:inherit;color:var(--fg);backgro
 </style></head><body>
 <header><h1>굴노 카메라</h1><span id="bCam" class="badge">카메라</span><span id="bCar" class="badge">차 블루투스</span><span id="bFps" class="badge">- fps</span></header>
 <main>
-<section class="card"><div class="video"><div class="ph" id="ph">영상 연결 중…</div><img id="f" alt=""></div><div id="s"></div></section>
+<section class="card"><div class="video"><div class="ph" id="ph">영상 연결 중…</div><img id="f" alt=""><canvas id="hc"></canvas></div><div id="s"></div></section>
 <div class="side">
 <section class="card"><h2>조종 (와이파이 → 블루투스)</h2>
 <div class="pad"><button data-c="q">↺</button><button data-c="g">▲</button><button data-c="w">↻</button>
@@ -53,14 +53,15 @@ const badge=(id,t,c)=>{$(id).textContent=t;$(id).className='badge '+(c||'');};
 // 웹소켓 하나로 주고받기 : 상태는 ESP32 가 0.2초마다 밀어 주고, 조종 글자는 바로 보냄. 끊기면 1초 뒤 다시
 let ws=null;
 function connect(){
-  ws=new WebSocket('ws://'+location.host+'/ws');
+  ws=new WebSocket('ws://'+location.host+'/ws'); ws.binaryType='arraybuffer';
   ws.onopen=()=>{badge('bCam','카메라 연결','ok'); ws.send('h');};   // 첫 글자를 보내야 ESP32 가 이 화면을 등록함
   ws.onmessage=e=>{
-    const s=JSON.parse(e.data); badge('bFps',s.fps+' fps');
+    if(typeof e.data!=='string'){drawHsv(new Uint8Array(e.data));return;}   // HSV 영상 (색 종류 묶음)
+    const s=JSON.parse(e.data); badge('bFps',s.fps+' fps'); cur=s; setHsv(!!s.hsv);
     $('sigBtn').textContent='신호등 인식 : '+(s.sigm?'켬':'끔'); $('sigBtn').classList.toggle('on',!!s.sigm);
     $('sigS').textContent=!s.sigm?'-':s.sig==1?'🔴 빨강 : 정지':s.sig==2?'🟢 초록 : 주행':s.sig==3?'🟡 노랑 : 서행':s.sig==4?'🛑 정지 표지판':'신호 없음';
     if(s.sigm&&s.stop>0)$('sigS').textContent='🛑 정지 표지판 : '+(s.stop/1000).toFixed(1)+'초 뒤 출발';
-    $('s').textContent=s.sigm?`센 픽셀 : 빨강 ${s.rc} · 초록 ${s.gc} · 노랑 ${s.yc} (기준 ${s.smin} 넘고 가장 많은 색) · 빨강 덩어리 채움 ${s.sf}% 흰색 ${s.sw}% (채움 80% 아래 + 흰색 4% 넘으면 정지 표지판)`:'신호등 인식 꺼짐';
+    $('s').textContent=s.sigm?`센 픽셀 : 빨강 ${s.rc} · 초록 ${s.gc} · 노랑 ${s.yc} (기준 ${s.smin} 넘고 가장 많은 색) · 빨강 덩어리 채움 ${s.sf}% 흰색 ${s.sw}% (채움 80% 아래 + 가운데 흰색 4% 넘으면 정지 표지판)`:'신호등 인식 꺼짐';
     $('recBtn').textContent='SD 기록 : '+(s.rec?'켬':'끔'); $('recBtn').classList.toggle('on',!!s.rec); $('recBtn').disabled=!s.sd;
     $('recS').textContent=!s.sd?'SD 카드 없음':s.rec?('rec_'+String(s.recn).padStart(4,'0')+' · '+s.recf+'장'):'-';
     $('addr').innerHTML=(s.ip?`이 핫스팟에서 : <b>http://${s.ip}</b> (아이폰·맥·PC 는 <b>gulno-cam.local</b> 도 됨)`:'')+(s.apn?`<br>어디서든 (핫스팟 없이도, 삼성폰 등) : 와이파이 <b>${s.apn}</b> 암호 <b>${s.apk}</b> 에 붙고 <b>http://192.168.4.1</b> (화면이 바로 뜨기도 함)`:'');
@@ -94,9 +95,23 @@ $('btScan').onclick=()=>{if(!confirm('기기를 찾는 동안 차와의 블루�
 $('btOn').onclick=()=>fetch('/bt?on=1');
 $('btOff').onclick=()=>fetch('/bt?on=0');
 // 화면 : /stream 연속 영상(MJPEG). 끊기면 2초 뒤 다시
-const stream=()=>{$('f').src='/stream?'+Date.now();};
+const stream=()=>{if(!hsvOn)$('f').src='/stream?'+Date.now();};
+// HSV 보기 : JPEG 영상을 끊고, 웹소켓으로 오는 색 종류 묶음(종류 3비트 + 칸 수 5비트)을 캔버스에 칠함 (ESP 가 압축을 안 해서 빠름)
+let hsvOn=false,cur={};
+const PAL=[[41,40,41],[255,36,0],[41,227,90],[255,215,0],[255,255,255]],SIGC=['#808080','#ff0000','#00ff00','#ffff00','#ff00ff'];
+function setHsv(on){ if(on===hsvOn)return; hsvOn=on; $('hc').style.display=on?'block':'none'; $('f').style.display=on?'none':'block';
+  if(on){$('f').removeAttribute('src');}else{$('ph').style.display='grid';stream();} }
+function drawHsv(a){ if(!hsvOn||a.length<3)return; const w=a[0],h=a[1],r=cur.rot|0,ow=r&1?h:w,oh=r&1?w:h,cv=$('hc');
+  if(cv.width!==ow||cv.height!==oh){cv.width=ow;cv.height=oh;}
+  const ctx=cv.getContext('2d'),im=ctx.createImageData(ow,oh),d=im.data; let i=0;
+  for(let k=2;k<a.length;k++){ const p=PAL[a[k]>>5]||PAL[0];
+    for(let n=(a[k]&31)+1;n>0&&i<w*h;n--,i++){ const x=i%w,y=(i/w)|0,dx=r==1?h-1-y:r==2?w-1-x:r==3?y:x,dy=r==1?x:r==2?h-1-y:r==3?w-1-x:y,o=(dy*ow+dx)*4;
+      d[o]=p[0];d[o+1]=p[1];d[o+2]=p[2];d[o+3]=255; } }
+  ctx.putImageData(im,0,0);
+  if(cur.sigm){ctx.strokeStyle=SIGC[cur.sig]||SIGC[0];ctx.lineWidth=6;ctx.strokeRect(0,0,ow,oh);}
+  $('ph').style.display='none'; }
 $('f').onload=()=>{$('ph').style.display='none';};
-$('f').onerror=()=>{$('ph').style.display='grid';setTimeout(stream,2000);};
+$('f').onerror=()=>{if(hsvOn)return;$('ph').style.display='grid';setTimeout(stream,2000);};
 stream();
 $('mir').onchange=()=>fetch('/set?mir='+($('mir').checked?1:0));
 $('flip').onchange=()=>fetch('/set?flip='+($('flip').checked?1:0));

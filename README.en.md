@@ -476,6 +476,7 @@ At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is 
 (Figure labels in Korean: 빨강 red, 노랑 yellow, 초록 green, 흰색 white, 아님 not a signal; columns = bright, a bit dark, dark, faded, faded and dark, very dark.)
 
 - **Why**: when the car drove fast, recognition often failed because colours got darker or washed out → HSV separates brightness from hue. HSV is normally slower to compute, but the precomputed table makes it lighter than the RGB comparisons.
+- **HSV view is the fastest video**: no JPEG encoding; only colour classes are packed and sent, and the browser paints them (~1.4 KB per frame; on the same hotspot link JPEG 3–4 fps → HSV 5–11 fps, measured).
 - Turn on **HSV view** in the web camera settings to paint the video with the colour class the ESP32 sees (red, green, yellow, white; grey = not a signal) — useful for tuning under real lighting.
 
 ### 9-4. Speed: recognition speed over resolution
