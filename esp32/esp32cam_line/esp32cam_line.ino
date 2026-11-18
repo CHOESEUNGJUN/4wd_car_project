@@ -41,7 +41,7 @@ const int CAM_XCLK = 20000000;            // 카메라 클럭 (Hz). 24MHz 는 �
 const int W = 160, H = 120;               // 웹 영상·SD 기록 크기 (카메라가 더 크면 건너 뽑음)
 const int FLASH_DUTY = 30;                // 앞 플래시 LED 밝기 (0~255). 최대로 오래 켜면 뜨겁고 전원이 약하면 재부팅
 const int JPEG_Q = 40, JPEG_Q_BT = 25;     // 화면 영상 압축 (낮을수록 많이 압축 = 작고 흐림). _BT = 차와 블루투스로 연결됐을 때
-const int STREAM_MS = 100, STREAM_MS_BT = 200;   // 영상 한 장 간격 (초당 10장 / 블루투스 연결 중 5장)
+const int STREAM_MS = 0, STREAM_MS_BT = 50;   // 영상 한 장 보낸 뒤 쉬는 시간. 0 = 새 사진마다 바로 (초당 약 20장). 블루투스 연결 중에는 안테나를 같이 써서 조금 쉼 (초당 약 12장). 조종이 느려지면 _BT 를 100~200 으로 (2026-11-18 : 100/200 -> 0/50, 영상이 초당 8장/4장으로 끊겨 보여서)
 // 안테나 하나를 와이파이·블루투스가 나눠 써서, 영상이 무거우면 조종 글자(블루투스)가 늦어진다 -> 차와 연결되면 영상을 가볍게
 // 신호등 인식 : 사진에서 빨강·초록·노랑 덩어리를 찾음 (교안 3·4팀처럼 색 범위로). 아이폰 앱 굴노의 "신호등 화면"을 신호등으로 씀
 volatile bool sigMode = false;            // 웹 화면 "신호등 인식" 버튼으로 켬 (저장)
@@ -178,8 +178,12 @@ String setupName, setupPass, ssidOptions, myIp, savedSsid, failWhy;
 unsigned long lastInfo = 0;
 String esc(String t);                     // 아래 와이파이 설정 부분에 있음
 // 사진은 판단하고 버림. 화면용 버퍼는 전부 외부 메모리(PSRAM) : 내부 메모리는 와이파이·블루투스가 써야 해서
-uint8_t* color;                           // 화면용 컬러 RGB565 (W x H x 2)
-uint8_t* view;                            // 신호 표시를 그린 화면 복사본 (RGB565)
+uint8_t* color;                           // 지금 쓰는 중인 화면용 컬러 RGB565 (W x H x 2) = vbuf 둘 중 하나
+// 영상 버퍼 2장을 번갈아 씀 : loop 는 뒤쪽 장에 쓰고 다 쓰면 앞으로 바꿈, JPEG 는 앞쪽 장을 그대로 압축 (예전처럼 한 번 더 복사하지 않음 :
+// 외부 메모리 38KB 복사가 압축 시간의 큰 부분이었음). JPEG 가 압축 중인 장(vBusy)에는 쓰지 않고 그 사진은 영상에서 건너뜀
+uint8_t* vbuf[2];
+volatile int vFront = 0, vBusy = -1;
+portMUX_TYPE vMux = portMUX_INITIALIZER_UNLOCKED;
 unsigned long frames = 0, lastFpsAt = 0, lastViewer = 0, lastHb = 0;
 float fps = 0;
 volatile uint32_t tSig = 0, tCopy = 0, tJpeg = 0, nJ = 0;   // 단계별 시간 (µs 합, 시리얼 I,step_us)
@@ -248,11 +252,10 @@ const uint16_t GREEN = 0x07E0, YELLOW = 0xFFE0, RED = 0xF800, WHITE = 0xFFFF, GR
 static int dw = W, dh = H;                // 지금 그리는 영상 크기 (makeJpeg 가 정함)
 inline void dot(int x, int y, uint16_t c) {
   if (x < 0 || x >= dw || y < 0 || y >= dh) return;
-  view[(y * dw + x) * 2] = c >> 8; view[(y * dw + x) * 2 + 1] = c & 0xFF;
+  color[(y * dw + x) * 2] = c >> 8; color[(y * dw + x) * 2 + 1] = c & 0xFF;
 }
-bool makeJpeg(uint8_t** jpg, size_t* len, int q) {   // q = 압축 품질
+void drawBorder() {                       // loop 가 방금 쓴 장(color)에 그림
   dw = viewW; dh = viewH;                 // 회전하면 120 x 160
-  memcpy(view, color, W * H * 2);
   if (sigMode) {
     uint16_t c = sigState == 1 ? RED : sigState == 2 ? GREEN : sigState == 3 ? YELLOW : sigState == 4 ? MAGENTA : GRAY;   // 정지 표지판 = 자홍
     for (int k = 0; k < 3; k++) {
@@ -261,14 +264,19 @@ bool makeJpeg(uint8_t** jpg, size_t* len, int q) {   // q = 압축 품질
     }
     if (SIG_Y1 < CH && camRot == 0) for (int x = 0; x < W; x += 3) dot(x, SIG_Y1 * H / CH, WHITE);
   }
-  return fmt2jpg(view, dw * dh * 2, dw, dh, PIXFORMAT_RGB565, q, jpg, len);
+}
+bool makeJpeg(uint8_t** jpg, size_t* len, int q) {   // q = 압축 품질. 앞쪽 장을 그대로 압축 (jpgLock 을 잡고 부름)
+  portENTER_CRITICAL(&vMux); int f = vFront; vBusy = f; portEXIT_CRITICAL(&vMux);
+  bool ok = fmt2jpg(vbuf[f], viewW * viewH * 2, viewW, viewH, PIXFORMAT_RGB565, q, jpg, len);
+  vBusy = -1;
+  return ok;
 }
 
 // 연속 영상 (MJPEG). 화면마다 따로 작업으로 보내서 신호 인식·조종을 막지 않는다
 // 화면마다 따로 작업을 띄워서 보냄 -> 노트북·폰 2개까지 동시에 영상 (하나가 붙잡고 있어도 다른 화면이 기다리지 않음)
 const int MAX_VIEWERS = 2;                // 화면 하나당 내부 메모리 약 4KB
 std::atomic<int> viewers{0};
-SemaphoreHandle_t jpgLock;                // makeJpeg 의 view 버퍼를 여러 화면이 같이 쓰지 않게
+SemaphoreHandle_t jpgLock;                // makeJpeg 를 한 번에 하나만 (vBusy 가 하나)
 
 void streamLoop(httpd_req_t* req) {
   httpd_resp_set_type(req, "multipart/x-mixed-replace;boundary=f");
@@ -278,7 +286,7 @@ void streamLoop(httpd_req_t* req) {
   unsigned long sentAt = 0;
   while (true) {
     // 새 사진이 없으면 같은 그림을 다시 압축하지 않음. 단 1초에 한 번은 보냄 (사진이 안 바뀌어도 브라우저가 닫혔는지 알아야 작업이 끝남)
-    if (colorNo == sentNo && millis() - sentAt < 1000) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
+    if (colorNo == sentNo && millis() - sentAt < 1000) { vTaskDelay(pdMS_TO_TICKS(2)); continue; }
     sentNo = colorNo; sentAt = millis();
     uint8_t* jpg = nullptr; size_t len = 0;
     xSemaphoreTake(jpgLock, portMAX_DELAY);
@@ -292,7 +300,7 @@ void streamLoop(httpd_req_t* req) {
     if (r == ESP_OK) r = httpd_resp_send_chunk(req, (const char*)jpg, len);
     free(jpg);
     if (r != ESP_OK) return;               // 브라우저가 닫음
-    vTaskDelay(pdMS_TO_TICKS(btOn() ? STREAM_MS_BT : STREAM_MS));
+    vTaskDelay(pdMS_TO_TICKS(max(1, btOn() ? STREAM_MS_BT : STREAM_MS)));   // 최소 1ms : 다른 작업(와이파이·블루투스)에 차례를 줌
   }
 }
 
@@ -650,8 +658,9 @@ void setup() {
   Serial.begin(9600);                      // 안내 줄 (I, / E, 로 시작) 을 USB 시리얼로. 9600
   pinMode(FLASH_LED, OUTPUT); digitalWrite(FLASH_LED, LOW);
   pinMode(STATUS_LED, OUTPUT); digitalWrite(STATUS_LED, HIGH);
-  color = (uint8_t*)ps_calloc(W * H * 2, 1);
-  view = (uint8_t*)ps_malloc(W * H * 2);
+  vbuf[0] = (uint8_t*)ps_calloc(W * H * 2, 1);
+  vbuf[1] = (uint8_t*)ps_calloc(W * H * 2, 1);
+  color = vbuf[1];
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
   camMirror = prefs.getBool("mir", true); camFlip = prefs.getBool("flip", false); sigMode = prefs.getBool("sig", false); camRot = prefs.getInt("rot", 0) & 3;
@@ -767,11 +776,16 @@ void loop() {
     if (fb->len >= (size_t)(CW * CH * 2)) {
       const uint8_t* b = fb->buf;
       bool wantView = viewers > 0 || recOn;  // 영상을 보거나 SD 기록 중일 때만 영상용 복사
+      int back = 0;
+      if (wantView) {                        // 뒤쪽 장에 씀. 그 장을 JPEG 가 압축 중이면 이 사진은 영상에서 건너뜀 (신호 판단은 그대로)
+        portENTER_CRITICAL(&vMux); back = 1 - vFront; if (vBusy == back) wantView = false; portEXIT_CRITICAL(&vMux);
+        if (wantView) color = vbuf[back];
+      }
       uint32_t ts = micros();
       bool copied = sigMode && detectSignal(b, wantView);   // 신호를 보면서 같은 줄을 영상용으로도 복사 (한 번만 읽음)
       uint32_t tc = micros();
       tSig += tc - ts;
-      if (wantView) { if (!copied) shrinkView(b); colorNo++; }   // 신호를 안 보거나 회전 중이면 따로 복사
+      if (wantView) { if (!copied) shrinkView(b); drawBorder(); vFront = back; colorNo++; }   // 신호를 안 보거나 회전 중이면 따로 복사. 테두리를 그리고 앞으로
       tCopy += micros() - tc;
       frames++;
     }
