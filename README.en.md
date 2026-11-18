@@ -469,5 +469,5 @@ Red light and stop sign are both red, so they are told apart by **shape**: how m
 |---|---|
 | Get it | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (or `git switch extra/esp32cam`) |
 | Docs | `docs/CAMERA.md` on the branch (handling, signals and signs, wiring, upload, Wi-Fi, web page, speed and memory, SD recording; Korean), report `docs/REPORT_20261111.md` |
-| Upload | **PlatformIO only** (`cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload`). Uploading from the Arduino IDE runs out of memory and Bluetooth fails |
+| Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/ESP32_UPLOAD.en.md)** |
 | Status (2026-11-16) | Bluetooth + Wi-Fi + camera together, signal response ~0.1–0.15 s (~20 fps), SD recording and viewer confirmed. HSV, HSV view and direct access (192.168.4.1) are coded and tested offline, not yet measured on the board |
