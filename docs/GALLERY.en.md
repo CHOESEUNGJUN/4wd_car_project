@@ -68,3 +68,5 @@ Left: the HSV video the ESP32 sees (border = current signal). Right: drive butto
 |---|---|
 | ![Low-frequency PWM](img/pwm_high_vs_low.en.png) | ![HSV colour ranges](img/hsv_ranges.en.png) |
 | Coil current at high vs low frequency PWM (README 5-1) | Colour ranges the ESP32 uses (README 5-3) |
+| ![How the HSV decision works](img/hsv_pipeline.en.png) | ![Red light vs stop sign](img/sign_vs_red.en.png) |
+| How the HSV decision works (README 5-3) | Red light vs stop sign by shape (README 5-3) |

@@ -68,3 +68,5 @@ ESP32-CAM 이 달리면서 스스로 찍어 SD 카드에 남긴 영상 (초당 5
 |---|---|
 | ![저주파 PWM](img/pwm_high_vs_low.png) | ![HSV 색 범위](img/hsv_ranges.png) |
 | 고주파·저주파 PWM 의 코일 전류 (README 5-1) | ESP32 가 보는 색 범위 (README 5-3) |
+| ![HSV 판단 흐름](img/hsv_pipeline.png) | ![빨간불 vs 정지 표지판](img/sign_vs_red.png) |
+| HSV 판단 흐름 (README 5-3) | 빨간불과 정지 표지판을 모양으로 가르기 (README 5-3) |

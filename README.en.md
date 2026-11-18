@@ -8,7 +8,7 @@
 > For version C alone, see the [`main` branch](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/main).
 
 ```
- 5V external power ──▶ ESP32-CAM ── Wi-Fi (your hotspot) ──▶ any phone/laptop: http://gulno-cam.local (or 192.168.4.1)
+ 5V external power ──▶ ESP32-CAM ── Wi-Fi (your hotspot) ──▶ any phone/laptop: http://gulno-cam.local (or the numeric address shown on the page)
                          │          colour video (border = current signal), pixel counts, car status, drive buttons, control, SD recording
                          └──── Bluetooth ──▶ HC-06 ──▶ Arduino (version D, line following with line sensors + PID)
  Phone app Gulno (iPhone / Android) "traffic light screen" (green → yellow → red) / "stop sign" ──▶ hold it in front of the camera
@@ -25,6 +25,17 @@
 |---|---|
 | Line-sensor drive (라인센서 주행) | `a` → the car drives itself with 3 line sensors + PID (same as version C) |
 | Traffic light recognition on/off (신호등 인식) | The car keeps following the line; the camera keeps sending only signals every 0.2 s: 🔴 `x` stop, 🟡 `v` slow (base speed 120 → 100), 🟢 `n` normal, 🛑 stop sign = stop 3 s then go. Mode is unchanged |
+
+**Who does what in version D** — the app does not drive the car
+
+| | Does | Bluetooth |
+|---|---|---|
+| **ESP32-CAM web page** (phone or laptop browser) | **All car control**: start/stop line-sensor driving, manual control, traffic-light recognition on, SD recording, car status | the ESP32 holds the HC-06 link |
+| **Gulno phone app** | **Only the traffic-light and stop-sign screens** (hold them in front of the camera). The Android app's "Camera" button just opens the web page above inside the app | not used |
+| Arduino (car) | follows the line with line sensors + PID, obeys `x` / `v` / `n` from the ESP32 | HC-06 |
+
+- The HC-06 accepts **one device at a time**. While the ESP32 is connected, the phone app can't drive over Bluetooth → driving from the app (chapter 0 steps 5–6 and chapter 6 below) is for **versions C and E without the ESP32**.
+- With only one phone: show the traffic-light screen on another phone or tablet, and drive from a laptop browser.
 
 **Handling the ESP32-CAM (every time)** — details in [`docs/CAMERA.md` chapter 0](docs/CAMERA.md) (Korean)
 
@@ -84,6 +95,8 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 ---
 
 ## 0. Getting started (for newcomers)
+
+> This chapter is for driving the car without the ESP32 (versions C and E, controlled from the phone app). For version D with the camera, follow "Handling the ESP32-CAM" at the top (control from the web page).
 
 How someone who downloads this repository can build the same car and make it drive. Details are in each chapter.
 
@@ -344,7 +357,16 @@ At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is 
 | Test (17 synthetic scenes) | 12 correct (missed dark red, green, yellow, faded red, dark sign) | **All 17 correct**; floor (beige, wood) and white walls are not signals |
 | Speed | Comparisons for every pixel | A 4096-colour (4 bits per R, G, B) class table (4 KB) built once at boot; per pixel just **one table lookup** → no math |
 
+
+**How it decides**: one camera pixel → colour index (12 bits) → precomputed class table → count per class → decide → Bluetooth letter. The HSV math runs only 4096 times when the table is built at boot; while driving each pixel is a single table lookup, so a frame (19,200 pixels) takes about 7 ms.
+
+![How the HSV decision works: from one camera pixel to the signal letter sent to the car](docs/img/hsv_pipeline.en.png)
+
 ![Colour ranges the ESP32 uses, and its decision when brightness or saturation changes](docs/img/hsv_ranges.en.png)
+
+**Red light vs stop sign**: both are red, so colour alone can't tell them apart → the ESP32 looks at the red blob's **shape**. The phone's red screen almost fills its box (99 %) with no white; the octagon leaves the corners empty (73 %) and has white text in the middle (15 %). Below: the boxes the firmware's rule finds on real frames from the drive.
+
+![Red light vs stop sign](docs/img/sign_vs_red.en.png)
 
 ![HSV view: left = camera video, right = colour class the ESP32 sees (dark red and faded colours become the same red)](docs/hsv_view.png)
 
@@ -369,6 +391,8 @@ At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is 
 ---
 
 ## 6. Apps
+
+> On the **ESP32 branch (version D)** the car is driven from the ESP32 web page and the app is only used for the traffic-light and stop-sign screens (see "Who does what in version D" at the top). Below is for **versions C and E**, where the phone connects to the HC-06 directly without the ESP32.
 
 ### Android (HC-06)
 - Install: download `gulno.apk` from the [release](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) on the phone and install (allow "unknown sources"). To build yourself, open `apps/android` in Android Studio and press ▶.
