@@ -482,7 +482,7 @@ void buildStatus(char* buf, size_t n) {
 // ---- 웹소켓 /ws : 연결 하나를 열어 두고 조종 글자는 받고(화면 -> 차), 상태는 밀어 줌(차·카메라 -> 화면) ----
 const int MAX_WS = 2;
 int wsFd[MAX_WS] = {-1, -1};
-struct { int fd; uint8_t* buf; int len, off; unsigned long at; } pend[MAX_WS];   // 화면별로 다 못 보낸 프레임의 남은 부분 (wsSendAll)
+struct { int fd; uint8_t* buf; int len, off; unsigned long at, vidAt; volatile bool vidWait; } pend[MAX_WS];   // 화면별로 다 못 보낸 프레임의 남은 부분 (wsSendAll)
 
 unsigned long wsAt[MAX_WS];
 
@@ -494,7 +494,7 @@ void wsAdd(int fd) {                      // 화면 하나 등록 (이미 있으
     if (wsAt[i] < wsAt[k]) k = i;
   }
   wsFd[k] = fd; wsAt[k] = millis();
-  pend[k].fd = fd; pend[k].len = pend[k].off = 0; pend[k].at = millis();   // 새 화면 : 같은 번호를 쓰던 지난 화면의 남은 조각을 버림 (안 버리면 새 화면에 섞여 깨짐)
+  pend[k].fd = fd; pend[k].len = pend[k].off = 0; pend[k].at = millis(); pend[k].vidWait = false;   // 새 화면 : 같은 번호를 쓰던 지난 화면의 남은 조각을 버림 (안 버리면 새 화면에 섞여 깨짐)
   int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);   // 작은 조각을 모았다 보내지 않게 (안 하면 웹소켓 한 장마다 0.2초씩 기다림 : 머리 4바이트 + 내용을 따로 보내서)
 }
 
@@ -513,6 +513,11 @@ esp_err_t wsHandler(httpd_req_t* r) {
   if (httpd_ws_recv_frame(r, &f, sizeof b) != ESP_OK) return ESP_FAIL;
   if (f.type != HTTPD_WS_TYPE_TEXT || f.len != 1 || setupMode) return ESP_OK;
   char c = b[0];
+  if (c == 'k') {                          // 화면이 HSV 영상 한 장을 받았다는 답 -> 다음 장을 보내도 됨 (wsSendAll)
+    int fd = httpd_req_to_sockfd(r);
+    for (int i = 0; i < MAX_WS; i++) if (pend[i].fd == fd) pend[i].vidWait = false;
+    return ESP_OK;
+  }
   // 조종 글자 하나 : 앱과 똑같이 그대로 차에 (a = 라인센서 자동 주행, m = 수동)
   if (strchr("gblrsqwam", c) && btOn()) btSend(c);
   return ESP_OK;
@@ -524,7 +529,9 @@ esp_err_t wsHandler(httpd_req_t* r) {
 //   소켓이 한 프레임을 다 못 받으면 남은 부분을 화면별 칸(pend)에 두고 다음 번에 이어 보냄. 남은 게 있는 화면에는 새 프레임을 안 보냄 (끼어들면 깨짐)
 //   = 느린 연결(아이폰 핫스팟은 응답이 0.05~0.3초씩 밀림)에서는 저절로 영상 장수가 줄고, 밀리지 않음
 //   3초 동안 조금도 못 보내면 그 화면을 끊음 (화면은 1초 뒤 스스로 다시 붙음)
-bool wsSendAll(const uint8_t* frame, int n) {   // frame = 웹소켓 머리까지 든 한 프레임. loop 에서만 부름. 열린 화면이 있으면 true
+// video = HSV 영상 : 화면이 지난 장을 받았다고 답('k')하기 전에는 다음 장을 안 보냄 (1초 넘게 답이 없으면 다시 보냄).
+//   안 하면 영상이 연결(핫스팟)을 가득 채워 상태 줄(차 상태)이 뒤로 밀리고 건너뛰어짐 : 0.2초마다 가야 하는데 평균 0.9초, 최대 1.6초 (2026-11-18 실측)
+bool wsSendAll(const uint8_t* frame, int n, bool video) {   // frame = 웹소켓 머리까지 든 한 프레임. loop 에서만 부름. 열린 화면이 있으면 true
   bool any = false;
   for (int i = 0; i < MAX_WS; i++) {
     int fd = wsFd[i];
@@ -541,10 +548,11 @@ bool wsSendAll(const uint8_t* frame, int n) {   // frame = 웹소켓 머리까�
       if (r > 0) { pend[i].off += r; pend[i].at = millis(); }
       else if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK) { httpd_sess_trigger_close(web, fd); wsFd[i] = -1; continue; }
     }
+    if (video && pend[i].vidWait && millis() - pend[i].vidAt < 1000) continue;   // 지난 장의 답을 기다리는 중
     if (pend[i].off >= pend[i].len && n <= RLE_MAX + CW + 8) {   // 남은 게 없으면 새 프레임
       int r = send(fd, frame, n, MSG_DONTWAIT);
       if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK) { httpd_sess_trigger_close(web, fd); wsFd[i] = -1; continue; }
-      if (r > 0) pend[i].at = millis();
+      if (r > 0) { pend[i].at = millis(); if (video) { pend[i].vidWait = true; pend[i].vidAt = millis(); } }
       if (r > 0 && r < n) { memcpy(pend[i].buf, frame + r, n - r); pend[i].len = n - r; pend[i].off = 0; }   // 반만 들어감 : 나머지는 다음에
       else pend[i].len = pend[i].off = 0;          // 다 들어갔거나, 한 글자도 안 들어가서 이 프레임은 건너뜀
     }
@@ -559,7 +567,7 @@ bool wsBroadcast(const uint8_t* data, size_t len) {
   int h = 2; f[0] = 0x81;                          // 글자 프레임 머리
   if (len < 126) f[1] = len; else { f[1] = 126; f[2] = len >> 8; f[3] = len & 0xFF; h = 4; }
   memcpy(f + h, data, len);
-  return wsSendAll(f, h + len);
+  return wsSendAll(f, h + len, false);
 }
 
 void pushStatus() {
@@ -870,7 +878,7 @@ void loop() {
       rleOn = hsvView && millis() - lastViewer < 2500;
       uint32_t ts = micros();
       bool copied = (sigMode || rleOn) && detectSignal(b, wantView);   // 신호를 보면서 같은 줄을 영상용으로도 복사 (한 번만 읽음)
-      if (rleOn) { rleOn = false; if (rleN >= 130) wsSendAll(rleBuf, rleN); rleN = 0; }
+      if (rleOn) { rleOn = false; if (rleN >= 130) wsSendAll(rleBuf, rleN, true); rleN = 0; }
       uint32_t tc = micros();
       tSig += tc - ts;
       if (wantView) { if (!copied) shrinkView(b); drawBorder(); vFront = back; colorNo++; }   // 신호를 안 보거나 회전 중이면 따로 복사. 테두리를 그리고 앞으로

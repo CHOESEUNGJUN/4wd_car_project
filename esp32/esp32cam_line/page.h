@@ -56,7 +56,7 @@ function connect(){
   ws=new WebSocket('ws://'+location.host+'/ws'); ws.binaryType='arraybuffer';
   ws.onopen=()=>{badge('bCam','카메라 연결','ok'); ws.send('h');};   // 첫 글자를 보내야 ESP32 가 이 화면을 등록함
   ws.onmessage=e=>{
-    if(typeof e.data!=='string'){drawHsv(new Uint8Array(e.data));return;}   // HSV 영상 (색 종류 묶음)
+    if(typeof e.data!=='string'){drawHsv(new Uint8Array(e.data));ws.send('k');return;}   // k = 받았음 : 다음 장을 보내도 됨 (영상이 차 상태를 밀어내지 않게)   // HSV 영상 (색 종류 묶음)
     const s=JSON.parse(e.data); badge('bFps',s.fps+' fps'); cur=s; setHsv(!!s.hsv);
     $('sigBtn').textContent='신호등 인식 : '+(s.sigm?'켬':'끔'); $('sigBtn').classList.toggle('on',!!s.sigm);
     $('sigS').textContent=!s.sigm?'-':s.sig==1?'🔴 빨강 : 정지':s.sig==2?'🟢 초록 : 주행':s.sig==3?'🟡 노랑 : 서행':s.sig==4?'🛑 정지 표지판':'신호 없음';
