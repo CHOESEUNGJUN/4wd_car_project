@@ -50,13 +50,13 @@ int main(){ buildColorLut(); const uint16_t RD=rgb(255,0,0), WH=rgb(255,255,255)
  bg(255,255,255); stopSign(60,70,20,255,0,0,255,false); noise(25,RD,3); run("stop sign on white wall + red specks",4);
  bg(); stopSign(110,40,16,200,30,30,230); rect(10,90,30,110,rgb(255,255,0)); run("stop sign + small yellow thing",4);
  printf("\n%d/%d\n",ok,tot);
- // SD 기록 중에는 HSV 보기를 켜도 영상 버퍼(color)가 실제 컬러여야 함 (기록이 같은 버퍼를 씀)
+ // SD 기록은 HSV 보기를 따라감 : 켜면 ESP 가 본 색 종류, 끄면 실제 컬러 (기록이 같은 버퍼를 씀)
  bg(); stopSign(80,60,30,255,0,0,255);
- hsvView=true; recOn=true;  detectSignal(img,true); bool realRec = memcmp(color,img,W*H*2)==0;
- hsvView=true; recOn=false; detectSignal(img,true); bool hsvLive = memcmp(color,img,W*H*2)!=0;
- hsvView=false;
- printf("recording keeps real colour : %s, HSV view paints when not recording : %s\n",realRec?"ok":"FAIL",hsvLive?"ok":"FAIL");
- if(!realRec||!hsvLive) return 1;
+ hsvView=true;  recOn=true; detectSignal(img,true); bool recHsv  = memcmp(color,img,W*H*2)!=0;
+ hsvView=false; recOn=true; detectSignal(img,true); bool recReal = memcmp(color,img,W*H*2)==0;
+ recOn=false;
+ printf("recording follows HSV view : on = HSV %s, off = real colour %s\n",recHsv?"ok":"FAIL",recReal?"ok":"FAIL");
+ if(!recHsv||!recReal) return 1;
  bg(); stopSign(80,60,30,255,0,0,255); noise(300,rgb(0,255,0),5); bool r1=rleCheck(); int n1=rleN;
  bg(255,255,255); rect(50,70,95,110,RD); bool r2=rleCheck(); int n2=rleN;
  printf("RLE roundtrip : sign+noise %s (%d bytes), red on white %s (%d bytes)\n",r1?"ok":"FAIL",n1,r2?"ok":"FAIL",n2);

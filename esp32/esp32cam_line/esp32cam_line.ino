@@ -744,7 +744,7 @@ HOT void shrinkView(const uint8_t* src) {
   const int SX = CW / W;                   // 1 = 그대로, 2 = 한 칸 건너
   uint8_t row[CW * 2], o[W * 2];
   int r = camRot;
-  bool hv = hsvView && !recOn;             // SD 기록 중에는 실제 컬러 (위 detectSignal 과 같은 이유)
+  bool hv = hsvView;
   int ow = (r & 1) ? H : W, oh = (r & 1) ? W : H;   // 돌린 뒤 크기
   for (int y = 0; y < H; y++) {
     memcpy(row, src + (SX * y) * CW * 2, CW * 2);
@@ -780,8 +780,8 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
   static uint8_t row[CW * 2];
   static uint16_t rowRed[CH], colRed[CW];   // 줄마다 / 칸마다 빨강 수 (빨강 덩어리 네모 칸 찾기)
   static uint8_t vrow[CW * 2];             // HSV 보기 : 이 줄을 색 종류로 칠한 것
-  // SD 기록 중에는 영상 버퍼를 늘 실제 컬러로 (기록이 같은 버퍼를 씀. HSV 보기를 켜도 웹 HSV 영상은 따로 묶어 보내서 상관없음, 2026-11-18)
-  const bool hsvOut = copyView && hsvView && !recOn && camRot == 0 && CW == W && SIG_STEP == 1 && SIG_Y1 == CH;
+  // SD 기록도 이 버퍼를 씀 : HSV 보기를 켜 두면 기록도 ESP 가 본 색 종류(HSV)로, 끄면 실제 컬러로 (2026-11-18 결정 : 보는 대로 기록)
+  const bool hsvOut = copyView && hsvView && camRot == 0 && CW == W && SIG_STEP == 1 && SIG_Y1 == CH;
   int red = 0, grn = 0, yel = 0;
   const bool rle = rleOn && SIG_STEP == 1 && SIG_Y1 == CH;
   uint8_t rr[CW]; int rn = 0, ro = 6; uint8_t rc = 255, rl = 0;   // 이 줄의 묶음들, 줄 안 개수, rleBuf 에 쓴 길이, 지금 묶음의 종류·길이
