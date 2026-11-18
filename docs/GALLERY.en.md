@@ -35,7 +35,26 @@
 - The border colour is the ESP32's decision (red / green / magenta = stop sign). The sign's text is mirrored because horizontal mirroring was off (it doesn't affect the decision).
 - A red light and a stop sign are both red, so they are told apart by **shape**: the phone's red screen almost fills its box (99 %) with no white, while the octagon leaves the corners empty (72 %) and has white text in the middle (15 %).
 
-## 3. The web page while driving (on a phone or laptop)
+## 3. What the car recorded itself (ESP32-CAM SD recordings)
+
+Video the ESP32-CAM recorded to its SD card while driving (5 frames per second, HSV view). The bottom line shows the time, the ESP's decision and the car's state (`LINE` line following, `CORNER`, `RED` stopped, …).
+
+| 🔴 Waiting at a red light, 🟢 going on green | 🛑 Stop sign → stop 3 s → go |
+|---|---|
+| ![Red to green](img/gallery/drive_0012_red_to_green.gif) | ![Stop sign](img/gallery/drive_0012_stop_sign.gif) |
+| log_0012, 850–859 s: stays stopped (`RED`) while red, back to `LINE` 0.3 s after green | log_0012, 724–731 s: stop sign (magenta border) → `RED` for ~3 s → drives on |
+
+**One whole run (log_0011, 55 s at 2× speed)**: manual → auto start → stop on red for 18 s → go on green → obstacle stop → go → stop on red
+
+![The whole run](img/gallery/drive_0011_full.gif)
+
+**The 4 min 26 s run, one frame every 6 s (log_0012)**: red, green and magenta borders are the ESP's decision at that moment
+
+![Frames from the run](img/gallery/drive_0012_sheet.png)
+
+Original videos (1,544 frames in all) and logs: `drive_rec_0011/0012.mjpeg` and `drive_log_0011/0012.csv` in the release (play with VLC or `esp32/rec_viewer.html`).
+
+## 4. The web page while driving (on a phone or laptop)
 
 | Red light | Green light | Stop sign |
 |---|---|---|
@@ -43,7 +62,7 @@
 
 Left: the HSV video the ESP32 sees (border = current signal). Right: drive buttons, traffic-light recognition and SD recording, car status (mode, action, distance ahead, line sensors, stage). The page UI is in Korean. Full videos: `screen_web_drive_1~3.mp4` in the release.
 
-## 4. Figures (README)
+## 5. Figures (README)
 
 | | |
 |---|---|

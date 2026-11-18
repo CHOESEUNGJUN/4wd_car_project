@@ -17,6 +17,8 @@
 <p align="center"><img src="docs/img/web_phone.png" width="320" alt="ESP32-CAM web page on a phone: red light detected, controls, signal recognition, SD recording, address, car status"><br><sub>The ESP32-CAM web page on a phone (sample state: red light detected → red border, car stopped in RED). UI is in Korean.</sub></p>
 
 ![What the ESP32-CAM saw: red light → green light → stop sign](docs/img/gallery/esp_strip.png)
+
+<img src="docs/img/gallery/drive_0012_red_to_green.gif" width="320" alt="Recorded by the car: waiting at a red light, going on green">
 <sub>What the ESP32-CAM actually saw (SD recording, HSV view): 🔴 red → stop, 🟢 green → go, 🛑 stop sign → stop 3 s. **More photos: [`docs/GALLERY.en.md`](docs/GALLERY.en.md)** (the car, what the ESP saw, the web page while driving)</sub>
 
 | Drive (web page button) | What it does |

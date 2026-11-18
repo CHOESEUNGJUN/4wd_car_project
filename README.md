@@ -22,6 +22,8 @@
 <p align="center"><img src="docs/img/web_phone.png" width="320" alt="ESP32-CAM 웹 화면 (폰) : 빨간불 인식, 조종, 신호등 인식, SD 기록, 접속 주소, 차 상태"><br><sub>폰으로 본 ESP32-CAM 웹 화면 (예시 화면 : 빨간불 인식 → 테두리 빨강, 차는 RED 로 정지)</sub></p>
 
 ![ESP32-CAM 이 본 장면 : 빨간불 → 초록불 → 정지 표지판](docs/img/gallery/esp_strip.png)
+
+<img src="docs/img/gallery/drive_0012_red_to_green.gif" width="320" alt="차가 직접 찍은 영상 : 빨간불에 서 있다가 초록불에 출발">
 <sub>ESP32-CAM 이 실제로 본 장면 (SD 기록, HSV 보기) : 🔴 빨간불 → 정지, 🟢 초록불 → 출발, 🛑 정지 표지판 → 3초 정지. **사진 더 보기 : [`docs/GALLERY.md`](docs/GALLERY.md)** (차량 사진, ESP 가 본 장면, 주행 중 웹 화면)</sub>
 
 **ESP32-CAM 다루기 (매번)** — 자세히는 [`docs/CAMERA.md` 0장](docs/CAMERA.md)
