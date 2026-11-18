@@ -37,6 +37,12 @@
 - The HC-06 accepts **one device at a time**. While the ESP32 is connected, the phone app can't drive over Bluetooth → driving from the app (chapter 0 steps 5–6 and chapter 6 below) is for **versions C and E without the ESP32**.
 - With only one phone: show the traffic-light screen on another phone or tablet, and drive from a laptop browser.
 
+**Design note: why Bluetooth and a separate power supply**
+- This project follows the **course guidance (lecture deck, team 2 assignment: talk to the car over HC-06 Bluetooth, power the camera module separately)**. So the ESP32-CAM runs from its own 5 V power bank and talks to the car (Arduino) **only over Bluetooth (HC-06)**.
+- **Had we designed it ourselves**, the ESP32-CAM would **take power from the car's battery through pins** (battery → 5 V buck module, 2 A or more → ESP32-CAM 5 V pin, common GND) and connect to the Arduino **directly by wire (UART)** (ESP32 TX → Arduino RX, Arduino TX → resistor divider → ESP32 RX, 9600).
+  - Gains: no Bluetooth, so ~45 KB of ESP32 internal memory comes back; no antenna sharing, so no 1–3 s Wi-Fi stalls; less delay for signals to reach the car; one power source.
+  - The memory and antenna problems in these docs come from keeping the wireless setup, and the numbers show how far we reduced them within it.
+
 **Handling the ESP32-CAM (every time)** — details in [`docs/CAMERA.md` chapter 0](docs/CAMERA.md) (Korean)
 
 1. Turn on the iPhone hotspot (Maximize Compatibility) → connect the laptop / phone too
