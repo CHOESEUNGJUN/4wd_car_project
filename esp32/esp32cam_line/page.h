@@ -97,7 +97,7 @@ $('btOff').onclick=()=>fetch('/bt?on=0');
 // 화면 : /stream 연속 영상(MJPEG). 끊기면 2초 뒤 다시
 const stream=()=>{if(!hsvOn)$('f').src='/stream?'+Date.now();};
 // HSV 보기 : JPEG 영상을 끊고, 웹소켓으로 오는 색 종류 묶음(종류 3비트 + 칸 수 5비트)을 캔버스에 칠함 (ESP 가 압축을 안 해서 빠름)
-let hsvOn=false,cur={};
+let hsvOn=null,cur={};   // null = 아직 모름 : 첫 상태 줄을 보고 HSV 영상 / 실제 영상(JPEG) 중 하나만 엶
 const PAL=[[41,40,41],[255,36,0],[41,227,90],[255,215,0],[255,255,255]],SIGC=['#808080','#ff0000','#00ff00','#ffff00','#ff00ff'];
 function setHsv(on){ if(on===hsvOn)return; hsvOn=on; $('hc').style.display=on?'block':'none'; $('f').style.display=on?'none':'block';
   if(on){$('f').removeAttribute('src');}else{$('ph').style.display='grid';stream();} }
@@ -112,7 +112,6 @@ function drawHsv(a){ if(!hsvOn||a.length<3)return; const w=a[0],h=a[1],r=cur.rot
   $('ph').style.display='none'; }
 $('f').onload=()=>{$('ph').style.display='none';};
 $('f').onerror=()=>{if(hsvOn)return;$('ph').style.display='grid';setTimeout(stream,2000);};
-stream();
 $('mir').onchange=()=>fetch('/set?mir='+($('mir').checked?1:0));
 $('flip').onchange=()=>fetch('/set?flip='+($('flip').checked?1:0));
 $('rot').onchange=()=>fetch('/set?rot='+$('rot').value);

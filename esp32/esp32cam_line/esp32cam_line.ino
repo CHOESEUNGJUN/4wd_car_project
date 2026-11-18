@@ -63,7 +63,7 @@ const int WHITE_S_MAX = 50, WHITE_V_MIN = 170;   // 흰색 : 채도 낮고 밝�
 uint8_t colorLut[4096];
 inline int lutIndex(uint16_t p) { return ((p >> 4) & 0xF00) | ((p >> 3) & 0x0F0) | ((p >> 1) & 0x00F); }   // RGB565 -> R4 G4 B4
 // HSV 보기 (웹 카메라 설정) : 영상을 실제 색 대신 ESP 가 본 색 종류로 칠함. 없음 = 어두운 회색, 빨강, 초록, 노랑, 흰색 (RGB565)
-volatile bool hsvView = false;
+volatile bool hsvView = true;             // 켤 때 HSV 영상 (JPEG 압축이 없어 빠르고 메모리도 적게 씀, 2026-11-18). 실제 영상은 웹에서 HSV 보기를 끄면
 const uint16_t HSV_PAL[5] = {0x2945, 0xF920, 0x2F0B, 0xFEA0, 0xFFFF};
 uint8_t colorClass(int r, int g, int b) {  // 0~255 RGB -> 종류 (표 만들 때만 씀)
   int mx = max(r, max(g, b)), mn = min(r, min(g, b)), d = mx - mn;
@@ -574,7 +574,7 @@ void handleSet() {
   if (hasArg("mir")) { camMirror = arg("mir") == "1"; cam->set_hmirror(cam, camMirror); prefs.putBool("mir", camMirror); }
   if (hasArg("flip")) { camFlip = arg("flip") == "1"; cam->set_vflip(cam, camFlip); prefs.putBool("flip", camFlip); }
   if (hasArg("rot")) { camRot = (arg("rot").toInt() / 90) & 3; prefs.putInt("rot", camRot); }   // 0 / 90 / 180 / 270
-  if (hasArg("hsv")) hsvView = arg("hsv") == "1";   // HSV 보기 (저장 안 함 : 켤 때는 늘 실제 영상)
+  if (hasArg("hsv")) hsvView = arg("hsv") == "1";   // HSV 보기 (저장 안 함 : 켤 때는 늘 HSV 영상)
   if (hasArg("sig")) { sigMode = arg("sig") == "1"; prefs.putBool("sig", sigMode); sigState = 0;
     if (!sigMode && btOn()) for (int i = 0; i < 3; i++) btSend('n'); }   // 인식을 끄면 차의 빨강 정지를 풀어 줌 (빨강은 시간으로 안 풀려서)
   if (hasArg("rec")) {                    // SD 기록 켬/끔. 켤 때마다 번호 +1 (rec_0001.mjpeg, log_0001.csv …)
