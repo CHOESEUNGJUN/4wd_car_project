@@ -339,7 +339,8 @@ At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is 
 | Frequency | UNO default `analogWrite`: pins 5 and 6 at ~**980 Hz** (~1 ms period) | Timer1 set directly: pins 9 and 10 at ~**122 Hz** (~8 ms period) |
 | Low-speed force | Weak. Short pulses switch off before the coil current builds up → small PWM doesn't turn the wheel | Strong. Long pulses let the current build up each time, so even a small duty turns the wheel |
 | Consequence | Minimum `MIN_PWM` 90 + start kick 255 (0.12 s) to force a start → **jerky** in manual, and at low speed only a whine with no torque | Kick cut to **170 for 0.06 s** → smooth starts and slow driving, easier precise control |
-| Downside | Quiet | Low hum; the servo can't move while driving (Timer1 drives the motors; the servo only needs to face forward once at startup) |
+| Sound | A high **whine** at low speed (~980 Hz is right where the ear is most sensitive; the wheel doesn't turn, only the coil vibrates) | **Quieter** (observed 2026-11-16: the wheel actually turns, so the whine is gone; 122 Hz is a low tone the ear hears less) |
+| Downside | None | The servo can't move while driving (Timer1 drives the motors; the servo only needs to face forward once at startup) |
 | Wiring | ENA 5, IN2 9 / ENB 6, IN3 10 | **Swap 5↔9 and 6↔10** (Timer1 outputs only on pins 9 and 10). Swap back for version C |
 
 - **Why**: version C was a half fix that forced starts with a kick and a minimum power. The real cause (low-speed torque) was the PWM frequency; lowering it lets the car start with a much smaller kick. The goal is following the line precisely, not top speed, so we fixed the low frequency.
