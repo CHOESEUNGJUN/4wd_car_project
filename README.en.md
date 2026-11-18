@@ -344,9 +344,19 @@ Tuning order (one at a time): with **Ki = Kd = 0, raise Kp** until just before i
 
 PWM switches the motor power on and off very fast and sets the power by the fraction of time it is on (duty). The **frequency** is how many times per second it switches.
 
-![Coil current at 30 % duty, high vs low frequency](docs/img/pwm_high_vs_low.en.png)
+![Coil current at the same analogWrite values, original 976.6 Hz vs our 122.5 Hz (MATLAB · Simulink)](docs/img/pwm_coil_current.en.png)
 
-At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is about as long as the coil current takes to rise, so peak force stops at 66 %; with low frequency the pulse (2.5 ms) is long enough to reach 100 % → it beats static friction and the wheel turns (simple RL model; the friction line is an example).
+The same `analogWrite` value (90 · 100 · 120) drives a different current (= force) through the motor coil (Simulink model [`pwm_power_simulink.m`](docs/matlab/pwm_power_simulink.m); simple RL model with the wheel stopped, 7.4 V · 5 Ω · 1.5 mH):
+
+| `analogWrite` | Duty | Original 976.6 Hz: mean / peak | Ours 122.5 Hz: mean / peak |
+|---|---|---|---|
+| 90 | 35 % | 0.29 A / 1.04 A (70 %) | **0.48 A / 1.48 A (100 %)** |
+| 100 | 39 % | 0.34 A / 1.09 A (74 %) | **0.54 A / 1.48 A (100 %)** |
+| 120 | 47 % | 0.44 A / 1.18 A (80 %) | **0.66 A / 1.48 A (100 %)** |
+
+- **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is not the timer counter; it is the **coil current**. When the pin switches on, the current rises along a curve, but it switches off after only 0.36–0.48 ms, so only the start of the curve (almost straight) is used; when it switches off, the L298N pulls the current out fast, so it falls in a straight line. A rising line plus a falling line looks like a triangle, but it is **current that is cut off every time before it fills up**.
+- **The blue line (122.5 Hz)** stays on 2.9–3.8 ms, so it reaches the top (1.48 A) every time and stays flat. The value only sets **how long** that full force lasts.
+- So at the same value the mean force is about 1.5–1.7×, the peak force 1.25–1.4×. That is why, with the original wiring, 90 could not start the wheels and a 255 kick was needed. Full calculation and graphs: [`docs/PWM.en.md`](docs/PWM.en.md).
 
 | | High frequency (version C) | Low frequency (version E) |
 |---|---|---|
