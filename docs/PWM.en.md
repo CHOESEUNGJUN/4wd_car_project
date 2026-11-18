@@ -84,6 +84,19 @@ Doubling the prescaler makes each step twice as slow, so the frequency **halves*
 - At 976.6 Hz the time spent pulling the current out is a big share of each period, so a 35 % duty gives only 20 % mean current. At 122.5 Hz that loss is small, so it gives 33 %, close to the duty.
 - **The blue line (122.5 Hz)** reaches 1.48 A every time and stays flat. Raising the value makes it **wider**, not higher.
 
+**Why the car only moved at high frequency when the PWM value was raised a lot**: the same model with higher values (only `vals` changed in `pwm_power_simulink.m`):
+
+| `analogWrite` | 976.6 Hz: mean / peak | 122.5 Hz: mean / peak |
+|---|---|---|
+| 130 | 0.49 A / 1.22 A (82 %) | 0.72 A / 1.48 A (100 %) |
+| 150 | 0.60 A / 1.28 A (87 %) | 0.83 A / 1.48 A (100 %) |
+| 180 | 0.77 A / 1.35 A (91 %) | 1.01 A / 1.48 A (100 %) |
+| 210 | 0.96 A / 1.40 A (94 %) | 1.18 A / 1.48 A (100 %) |
+| 255 | 1.48 A / 1.48 A (100 %) | 1.48 A / 1.48 A (100 %) |
+
+- Matching the mean current of 90 at 122.5 Hz (0.48 A) takes **about 130** at 976.6 Hz.
+- At 976.6 Hz the peak current is still 94 % at 210 and reaches 100 % only at **255 (always on)**. That is why version C needed a **255 kick** to start a stopped car.
+
 As seen on the Simulink scope (top to bottom 90 / 100 / 120, yellow 976.6 Hz, blue 122.5 Hz):
 
 ![Simulink scope: coil current](img/pwm_simulink_coil_current.png)

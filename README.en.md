@@ -53,14 +53,14 @@
 
 | | |
 |---|---|
-| Folders | **`arduino/`** = uploaded to the UNO (car) with the Arduino IDE (version C `team2_bt_pid`, version D `team2_bt_cam` (original wiring), **default: version D + low frequency `motor_control_low_frequency_cam`** (used in the 2026-11-18 driving test), version E `motor_control_low_frequency` and camera variant `motor_control_low_frequency_cam` for low-frequency PWM, diagnostics `diag`) · **`esp32/`** = uploaded to the ESP32-CAM with PlatformIO · **`apps/`** = Gulno apps (iPhone and Android both have traffic-light / stop-sign screens; Android also has a camera screen) |
+| Folders | **`arduino/`** = uploaded to the UNO (car) with the Arduino IDE: **default = version D + low frequency `motor_control_low_frequency_cam`** (used in the 2026-11-18 driving test), version D with the original wiring `team2_bt_cam`, without the camera version E `motor_control_low_frequency` or version C `team2_bt_pid`, diagnostics `diag` · **`esp32/`** = uploaded to the ESP32-CAM with PlatformIO · **`apps/`** = Gulno apps (iPhone and Android both have traffic-light / stop-sign screens; Android also has a camera screen) |
 | Camera code | [`esp32/esp32cam_line/`](esp32/esp32cam_line) (`esp32cam_line.ino`, web page `page.h`, build settings `platformio.ini`) |
 | Docs | [`docs/CAMERA.md`](docs/CAMERA.md) (Korean): handling, structure, signals, wiring (5V external power), upload, Wi-Fi (printer-style setup), web page, speed and memory, mounting, troubleshooting, SD recording |
 | Command table | [`PROTOCOL.md`](PROTOCOL.md) (`x v n` are version D only) |
 | Reports | [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md) (11-12 → 11-16, English) · [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) (Korean) |
 | Next steps | [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) on `main` (checklist, Korean) |
 | Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](docs/ESP32_UPLOAD.en.md)**  The car is uploaded from the Arduino IDE (default `motor_control_low_frequency_cam`) |
-| Status (2026-11-16) | Confirmed: Bluetooth + Wi-Fi + camera together, web control, signal response ~0.1–0.15 s (~20 fps), SD recording and viewer, low-frequency PWM (passed the track, smoother). Camera line detection and camera driving removed by the principle change. Coded and tested only (not yet measured on the board): HSV colour detection and HSV view, IRAM optimisation, direct access 192.168.4.1, Android app. Next: mount the camera on the car and test line-sensor driving with traffic lights and signs |
+| Status (2026-11-18) | Confirmed: Bluetooth + Wi-Fi + camera together (after the memory rebuild), web control, HSV colour detection and HSV view (HSV view is the default at power-on), signal response ~0.1–0.15 s, SD recording (keeps the HSV view), **mounted on the low-frequency car (`motor_control_low_frequency_cam`) and passed the track**: stopped at a red light 7 times, started on green 4 times, held 3 s at a stop sign 5 times (logs in `docs/drive_logs/`). Camera line detection and camera driving removed by the principle change. The ESP's own Wi-Fi (192.168.4.1) only comes up when the hotspot can't be found. Android app not yet tested on a phone |
 
 Below is the car documentation (versions C and E), same as `main`. The default is the low-frequency wiring (chapter 2, 2-1).
 
@@ -94,9 +94,9 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 
 | Version | Folder | Motor PWM | Camera | Status |
 |---|---|---|---|---|
-| **C** | `arduino/team2_bt_pid/` | High frequency (default ~980 Hz) | None | **Passed** (2026-11-16, team car code) |
+| **C** | `arduino/team2_bt_pid/` | High frequency (default 976.6 Hz) | None | **Passed** (2026-11-16, team car code) |
 | **E (default)** | `arduino/motor_control_low_frequency/` | **Low frequency ~122 Hz** (swap 4 wires) | None | **Passed** (2026-11-16, smoother) — [release 1.0.1](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-low-frequency-pwm-pid-control-car-v1.0.1) |
-| D | `arduino/team2_bt_cam/` on branch `extra/esp32cam` (+ low-frequency `motor_control_low_frequency_cam`) | C or E | ESP32-CAM: traffic lights and stop signs (HSV) | Code done, not yet tested on the car |
+| D | `arduino/team2_bt_cam/` on branch `extra/esp32cam` (+ low-frequency `motor_control_low_frequency_cam`) | C or E | ESP32-CAM: traffic lights and stop signs (HSV) | **Passed** (2026-11-18, mounted on the low-frequency car on the track: reacted to red, green and stop signs) |
 
 ---
 
@@ -215,7 +215,7 @@ The on-ratio (30 %) stays the same; only the length of each pulse grows from 0.3
 
 1. In the Arduino IDE, open `arduino/motor_control_low_frequency/motor_control_low_frequency.ino` (original wiring: `team2_bt_pid`) via **File → Open** and upload.
    (If an old file is still open, the IDE compiles the old content. After downloading a new copy, close the tab and reopen.)
-2. Lift the car so the wheels are free and open the Serial Monitor — **115200 for version C**, 9600 for the diagnostic sketch.
+2. Lift the car so the wheels are free and open the Serial Monitor — **115200 for the car sketches (versions C, D, E)**, 9600 for the diagnostic sketch.
 3. Connect with the phone app (chapter 5).
 4. Checklist
 
@@ -226,7 +226,7 @@ The on-ratio (30 %) stays the same; only the length of each pulse grows from 0.3
 | Release | Stops immediately |
 | **Auto (자동으로)** | "Switch to auto mode?" → switch → orange banner, stops 0.5 s, then follows the line |
 | Any direction button during auto | Back to manual instantly, moves that way (even during a long manoeuvre) |
-| Close the app / turn off Bluetooth | In manual it stops within 0.6 s; the app shows a red banner "no remote control" |
+| Close the app / turn off Bluetooth | In manual it stops within 0.45 s; the app shows a red banner "no remote control" |
 | Hand in front of the sensor (10 cm) | Forward is blocked, "obstacle stop" |
 
 ---
@@ -307,7 +307,7 @@ Why textbook PID doesn't work as-is, and the fix:
 | Sensors are only 0/1, so the error jumps in **steps** (0 → 1). Normal D lasts only one 20 ms tick and is gone before the motor reacts | D decays by ×0.8 every 20 ms so it lasts ~0.1 s (`D_DECAY` 0.8) |
 | Accumulated I makes the car swing the other way after a curve | Reset I to 0 when the error crosses to the other side, and clamp to ±50 (`I_LIMIT`) |
 | PID alone can't make sharp corners (only an edge sensor sees the line) | Corners use fixed outer 180 / inner −90 instead of PID. Clear I and D when returning to PID so it doesn't jerk |
-| Small gearbox: small PWM values don't turn the wheels | Minimum 90 when non-zero, plus 0.12 s at full power (255) when the direction changes. Root-cause fix: **version E** (low-frequency PWM ~122 Hz, swap 4 wires) — chapter 5-1 |
+| Small gearbox: small PWM values don't turn the wheels | Minimum 90 when non-zero, plus a start kick when the direction changes (version C: 255 for 0.12 s). The cause is that at high frequency (976.6 Hz) the current never fills up → with **version E** (low frequency 122.5 Hz, swap 4 wires) a 170 kick for 0.06 s is enough (5-1) |
 | Sensor spacing (4.9 cm) is wider than the tape (1.9 cm), so the line can sit between sensors → `000`. After an overshooting corner the line is on the other side | Don't turn immediately when lost: PID correction for 0.5 s first, then search last side → other side |
 | The same PWM turns more or less depending on battery voltage | Corner outer set to 180 instead of 220 for a fresh battery (200–220 when weaker) |
 
@@ -339,7 +339,7 @@ Tuning order (one at a time): with **Ki = Kd = 0, raise Kp** until just before i
 **Why low frequency (the goal)** — not the noise.
 1. **Restarting after a stop**: at high frequency a stopped car couldn't roll again at a small PWM (after a red light, a stop sign or an obstacle, or a slow manual start), so a 255 kick forced it and the car jerked forward.
 2. **Control stability**: at low speed the force should stay steady at the PWM value instead of grabbing and slipping, so PID and manual control are precise.
-3. **Low-speed torque**: the same duty gives a higher peak force (torque), which solves both of the above.
+3. **Low-speed torque**: the same `analogWrite` value drives 1.5–1.7× the mean current and 1.25–1.4× the peak current (figure below) → this solves both of the above.
 - Result (2026-11-18 driving logs): after stopping at a red light or stop sign, the car started again within 0.1–0.3 s of green. Being quieter is a bonus.
 
 PWM switches the motor power on and off very fast and sets the power by the fraction of time it is on (duty). The **frequency** is how many times per second it switches.
@@ -357,13 +357,14 @@ The same `analogWrite` value (90 · 100 · 120) drives a different current (= fo
 - **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is not the timer counter; it is the **coil current**. When the pin switches on, the current rises along a curve, but it switches off after only 0.36–0.48 ms, so only the start of the curve (almost straight) is used; when it switches off, the L298N pulls the current out fast, so it falls in a straight line. A rising line plus a falling line looks like a triangle, but it is **current that is cut off every time before it fills up**.
 - **The blue line (122.5 Hz)** stays on 2.9–3.8 ms, so it reaches the top (1.48 A) every time and stays flat. The value only sets **how long** that full force lasts.
 - So at the same value the mean force is about 1.5–1.7×, the peak force 1.25–1.4×. That is why, with the original wiring, 90 could not start the wheels and a 255 kick was needed. Full calculation and graphs: [`docs/PWM.en.md`](docs/PWM.en.md).
+- **Why the car only moved at high frequency when the PWM value was raised a lot**: at 976.6 Hz, raising `analogWrite` doesn't give force in proportion, because the current is **cut off every time before it fills up**. In the same simulation, matching the mean current of 90 at 122.5 Hz (0.48 A) takes **about 130** at 976.6 Hz, and the peak current is still only 94 % at 210; it reaches 100 % only at **255 (always on)**. That is why version C needed a **255 start kick** for 0.12 s on top of the 90 minimum (`MIN_PWM`) to get a stopped car moving. At 122.5 Hz even a small value fills up to 1.48 A every time, so a 170 kick for 0.06 s is enough.
 
 | | High frequency (version C) | Low frequency (version E) |
 |---|---|---|
-| Frequency | UNO default `analogWrite`: pins 5 and 6 at ~**980 Hz** (~1 ms period) | Timer1 set directly: pins 9 and 10 at ~**122 Hz** (~8 ms period) |
-| Low-speed force | Weak. Short pulses switch off before the coil current builds up → small PWM doesn't turn the wheel | Strong. Long pulses let the current build up each time, so even a small duty turns the wheel |
+| Frequency | UNO default `analogWrite`: pins 5 and 6 at **976.6 Hz** (1.024 ms period) | Timer1 set directly: pins 9 and 10 at **122.5 Hz** (8.16 ms period) |
+| Low-speed force | Weak. The on-time (0.36 ms at 90) is short, so it switches off before the coil current fills up → at 90: mean 0.29 A, peak 70 % | Strong. The on-time (2.9 ms at 90) is long, so it fills up every time → at 90: mean 0.48 A, peak 100 % |
 | Consequence | Minimum `MIN_PWM` 90 + start kick 255 (0.12 s) to force a start → **jerky** in manual, and at low speed only a whine with no torque | Kick cut to **170 for 0.06 s** → smooth starts and slow driving, easier precise control |
-| Sound | A high **whine** at low speed (~980 Hz is right where the ear is most sensitive; the wheel doesn't turn, only the coil vibrates) | **Quieter** (observed 2026-11-16: the wheel actually turns, so the whine is gone; 122 Hz is a low tone the ear hears less) |
+| Sound | A high **whine** at low speed (976.6 Hz is right where the ear is most sensitive; the wheel doesn't turn, only the coil vibrates) | **Quieter** (observed 2026-11-16: the wheel actually turns, so the whine is gone; 122 Hz is a low tone the ear hears less) |
 | Downside | None | The servo can't move while driving (Timer1 drives the motors; the servo only needs to face forward once at startup) |
 | Wiring | ENA 5, IN2 9 / ENB 6, IN3 10 | **Swap 5↔9 and 6↔10** (Timer1 outputs only on pins 9 and 10). Swap back for version C |
 
@@ -489,14 +490,14 @@ The same `analogWrite` value (90 · 100 · 120) drives a different current (= fo
 | Situation | Behaviour | Setting |
 |---|---|---|
 | Commands stop arriving in manual (phone off, out of range) | Stops after 0.45 s. The app resends the same command every 0.2 s while a button is held | `LINK_MS` 450 |
-| **Bluetooth lost during auto** | If no heartbeat (`h`, every 0.6 s) for 1.5 s → stop and go to manual. After reconnecting you must press auto again | `AUTO_LINK_MS` 1500 |
+| **Bluetooth lost during auto** | If no heartbeat (`h`, every 0.6 s) for 5 s → stop and go to manual. After reconnecting you must press auto again | `AUTO_LINK_MS` 5000 |
 | Button released | Sends `s` twice (one character can be lost while the car is sending status) | — |
 | Switch to auto | Confirmation + 0.5 s forced stop (manual is instant) | `SWITCH_HOLD_MS` 500 |
 | Bluetooth lost / car not responding | App: no status line for over 1 s → red banner "no remote control", controls, mode and PID buttons disabled | app 1000 ms |
 | Obstacle ahead in manual | Only forward commands (g l r) are blocked; backward and spin work | `AVOID_MM` 10 cm |
 
 - `h` is used for the auto-mode link check and the "link O/X" display, but not for the manual stop timer (`LINK_MS`). Otherwise, if `s` is lost on release, `h` would keep the link alive and the car would keep driving.
-- **If Bluetooth drops, both manual and auto stop.** If you start auto from a serial terminal app that doesn't send `h`, it stops after 1.5 s (our three apps send it).
+- **If Bluetooth drops, both manual and auto stop.** If you start auto from a serial terminal app that doesn't send `h`, it stops after 5 s (our three apps send it).
 
 ### Status line (car → phone, every 0.2 s)
 
@@ -543,7 +544,7 @@ Version C appends error and correction: `ar,23,011,LINE,1,60`. PID values are se
 | Module not listed in the iPhone app | It's an HC-06 → use an HM-10, or Android / Mac |
 | iPhone settings say "connected" but no characters pass | iOS doesn't expose the HC-06 data channel (SPP) to apps → as above |
 | HC-06 port "busy" on the Mac | The Chrome web control tab holds it → close the tab |
-| Garbled characters | Baud mismatch → module 9600, Serial Monitor 115200 for version C |
+| Garbled characters | Baud mismatch → module 9600, Serial Monitor 115200 for the car sketches |
 | Car turns away from the line | Line sensor pins left/right swapped → swap `L_Line` and `R_Line` |
 | Ultrasonic servo jitters | Bluetooth (SoftwareSerial) disturbs the servo pulse on every character → fixed by turning the servo signal off after facing forward. If it still jitters, check the battery |
 | All three line sensor values similarly low | Sensor too close to the floor or covered → adjust height / sensitivity |
@@ -556,7 +557,7 @@ Version C appends error and correction: `ar,23,011,LINE,1,60`. PID values are se
 **Version D (also submitted)** = version C plus an ESP32-CAM. **The car follows the line with its 3 line sensors + PID; the camera only watches traffic lights and stop signs** (no camera line following — see 5-2). The ESP32 decides the colour itself and sends a signal character to the car over Bluetooth (no PC). Not on `main`; developed only on the branch.
 
 ```
- 5V external power ──▶ ESP32-CAM ── Wi-Fi ──▶ any phone/laptop: http://gulno-cam.local or http://192.168.4.1
+ 5V external power ──▶ ESP32-CAM ── Wi-Fi ──▶ any phone/laptop: http://gulno-cam.local (http://192.168.4.1 only when the hotspot can't be found)
                          │          colour video (border = current signal), HSV view, pixel counts, car status, drive buttons, SD recording
                          └──── Bluetooth ──▶ HC-06 ──▶ Arduino (version D, line following with line sensors + PID)
  Phone app Gulno (iPhone / Android) "traffic light screen" / "stop sign" ──▶ hold it in front of the camera
@@ -578,7 +579,7 @@ Red light and stop sign are both red, so they are told apart by **shape**: how m
 | Get it | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (or `git switch extra/esp32cam`) |
 | Docs | `docs/CAMERA.md` on the branch (handling, signals and signs, wiring, upload, Wi-Fi, web page, speed and memory, SD recording; Korean), report `docs/REPORT_20261111.md` |
 | Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](docs/ESP32_UPLOAD.en.md)** |
-| Status (2026-11-16) | Bluetooth + Wi-Fi + camera together, signal response ~0.1–0.15 s (~20 fps), SD recording and viewer confirmed. HSV, HSV view and direct access (192.168.4.1) are coded and tested offline, not yet measured on the board |
+| Status (2026-11-18) | Bluetooth + Wi-Fi + camera together, HSV colour detection and HSV view, signal response ~0.1–0.15 s, SD recording confirmed. Mounted on the low-frequency car and passed the track (stopped at red 7 times, started on green 4 times, held 3 s at a stop sign 5 times) |
 
 ---
 
