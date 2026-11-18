@@ -4,6 +4,9 @@
 
 ## 1. 우리가 만든 것 / Our work
 
+> `LICENSE` 는 MIT 원문만 둡니다 (GitHub 이 라이선스를 알아보게). MIT 는 소스 코드에 적용되고, 사진·영상·그림·로그·문서는 아래처럼 CC BY 4.0 입니다.
+> `LICENSE` holds only the MIT text (so GitHub recognises it). MIT applies to the source code; photos, videos, figures, logs and documentation are CC BY 4.0 as below.
+
 | 무엇 / What | 라이선스 / License |
 |---|---|
 | 소스 코드 : Arduino 스케치 (`arduino/`), ESP32-CAM 펌웨어·웹 화면 (`esp32/`), 앱 (`apps/`), 시험·도구 / Source code: Arduino sketches, ESP32-CAM firmware and web page, apps, tests and tools | **MIT** ([`LICENSE`](LICENSE)) |
