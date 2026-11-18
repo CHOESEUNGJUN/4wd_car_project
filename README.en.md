@@ -37,7 +37,7 @@
 | Command table | [`PROTOCOL.md`](PROTOCOL.md) (`x v n` are version D only) |
 | Reports | [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md) (11-12 → 11-16, English) · [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) (Korean) |
 | Next steps | [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) on `main` (checklist, Korean) |
-| Upload | ESP32-CAM **with PlatformIO only**: `cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (the Arduino IDE build runs out of memory and Bluetooth fails). The car gets version D from the Arduino IDE |
+| Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](docs/ESP32_UPLOAD.en.md)**  The car is uploaded from the Arduino IDE (default `motor_control_low_frequency_cam`) |
 | Status (2026-11-16) | Confirmed: Bluetooth + Wi-Fi + camera together, web control, signal response ~0.1–0.15 s (~20 fps), SD recording and viewer, low-frequency PWM (passed the track, smoother). Camera line detection and camera driving removed by the principle change. Coded and tested only (not yet measured on the board): HSV colour detection and HSV view, IRAM optimisation, direct access 192.168.4.1, Android app. Next: mount the camera on the car and test line-sensor driving with traffic lights and signs |
 
 Below is the car documentation (versions C and E), same as `main`. The default is the low-frequency wiring (chapter 2, 2-1).
@@ -517,5 +517,5 @@ Red light and stop sign are both red, so they are told apart by **shape**: how m
 |---|---|
 | Get it | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (or `git switch extra/esp32cam`) |
 | Docs | `docs/CAMERA.md` on the branch (handling, signals and signs, wiring, upload, Wi-Fi, web page, speed and memory, SD recording; Korean), report `docs/REPORT_20261111.md` |
-| Upload | **PlatformIO only** (`cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload`). Uploading from the Arduino IDE runs out of memory and Bluetooth fails |
+| Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](docs/ESP32_UPLOAD.en.md)** |
 | Status (2026-11-16) | Bluetooth + Wi-Fi + camera together, signal response ~0.1–0.15 s (~20 fps), SD recording and viewer confirmed. HSV, HSV view and direct access (192.168.4.1) are coded and tested offline, not yet measured on the board |

@@ -37,7 +37,7 @@
 | 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`x v n` 은 버전 D 만) |
 | 작업 보고 | [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) : 잘된 점, 안된 점, 앞으로 할 것 |
 | 다음에 할 일 | `main` 의 [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) (체크리스트) |
-| 업로드 | ESP32-CAM 은 **PlatformIO 로만** : `cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨). 차는 Arduino IDE 로 버전 D |
+| 업로드 | **Arduino IDE 로 올리면 안 됨** (미리 만든 라이브러리라 블루투스를 켜면 메모리 부족으로 멈춤). 완성 펌웨어(`.bin`)를 크롬·esptool 로 올리거나 PlatformIO 로 빌드 → **[ESP32 올리기 안내 (윈도우·리눅스·맥)](docs/ESP32_UPLOAD.md)**  차는 Arduino IDE 로 (기본 `motor_control_low_frequency_cam`) |
 | 지금 상태 (2026-11-16) | 확인됨 : 블루투스 + 와이파이 + 카메라 동시 동작, 웹 조종, 신호 반응 약 0.1~0.15초(초당 약 20장), SD 기록·보기 페이지, 저주파 PWM(트랙 통과, 더 부드러움). 원칙 변경으로 카메라 라인 인식·카메라 주행은 뺌. 코드·시험만 됨(보드 실측 전) : HSV 색 판단·HSV 보기, IRAM 최적화, 직접 접속 192.168.4.1, 안드로이드 앱. 다음 : 카메라를 차에 달고 라인센서 주행 + 신호등·표지판 시험 |
 
 아래는 `main` 과 같은 차량(버전 C·E) 설명입니다. 기본은 저주파 배선 (2장, 2-1).
@@ -512,5 +512,5 @@ ag,23,010,LINE
 |---|---|
 | 받기 | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (이미 받았으면 `git switch extra/esp32cam`) |
 | 설명 | 브랜치의 `docs/CAMERA.md` (다루기, 신호등·표지판, 배선, 업로드, 와이파이, 웹 화면, 속도·메모리, SD 기록), 작업 보고 `docs/REPORT_20261111.md` |
-| 업로드 | **PlatformIO 로만** (`cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload`). Arduino IDE 로 올리면 메모리 부족으로 블루투스가 안 됨 |
+| 업로드 | **Arduino IDE 로 올리면 안 됨** (미리 만든 라이브러리라 블루투스를 켜면 메모리 부족으로 멈춤). 완성 펌웨어(`.bin`)를 크롬·esptool 로 올리거나 PlatformIO 로 빌드 → **[ESP32 올리기 안내 (윈도우·리눅스·맥)](docs/ESP32_UPLOAD.md)** |
 | 상태 (2026-11-16) | 블루투스 + 와이파이 + 카메라 동시 동작, 신호 반응 약 0.1~0.15초 (초당 약 20장), SD 기록·보기 페이지 확인. HSV·HSV 보기·직접 접속(192.168.4.1)은 코드·시험 완료, 보드 실측은 다음에 |

@@ -123,22 +123,15 @@ ESP32-CAM-MB 에 꽂고 `~/.pio-venv/bin/pio device monitor` (또는 Arduino IDE
 
 ## 4. 올리기
 
-### ESP32-CAM (PlatformIO)
+### ESP32-CAM
 
-**Arduino IDE 로 올리면 안 된다** (예전 라이브러리로 빌드돼서 블루투스를 켜면 메모리 부족으로 멈춤).
+**Arduino IDE 로 올리면 안 된다** (미리 만든 라이브러리라 블루투스를 켜면 메모리 부족으로 멈춤). 완성 펌웨어를 크롬·esptool 로 올리거나 PlatformIO 로 빌드한다. 윈도우·리눅스·맥 순서, 드라이버, 포트, 문제 해결은 **[`ESP32_UPLOAD.md`](ESP32_UPLOAD.md)** ([English](ESP32_UPLOAD.en.md)).
 
-1. 처음 한 번 : `python3 -m venv ~/.pio-venv && ~/.pio-venv/bin/pip install platformio`
-2. ESP32-CAM 을 **ESP32-CAM-MB** 받침 보드에 꽂고 USB 연결.
-3. 올리기 : `cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload` (포트를 못 찾으면 `--upload-port /dev/cu.usbserial-xxxx`)
-4. 시리얼 : `~/.pio-venv/bin/pio device monitor` (나가기 Ctrl+C)
-
-- 처음 빌드는 ESP32 라이브러리를 `platformio.ini` 설정으로 다시 만드느라 약 2GB 를 받고 20~40분. 그다음부터는 1분 안팎.
-- 처음 빌드가 `IncompatiblePlatform ... v6.2.0-post.1` 로 멈추면 같은 명령을 한 번 더 (pioarduino 버전 판단 문제).
-- "Failed to connect" 면 MB 보드 IO0 버튼을 누른 채 RST → 떼고 다시.
+빠른 길 (맥·리눅스, PlatformIO 설치 뒤) : `cd esp32/esp32cam_line && pio run -t upload`, 시리얼 `pio device monitor` (9600).
 
 ### 차 (버전 D, Arduino IDE)
 
-`arduino/team2_bt_cam/team2_bt_cam.ino` 를 열고 보드 Arduino UNO 로 업로드. 핀·PID 값은 버전 C 와 같다.
+**기본 : `arduino/motor_control_low_frequency_cam/`** (저주파 배선, 2026-11-18 주행 시험에 쓴 것). 교안 원래 배선이면 `arduino/team2_bt_cam/`. 보드 Arduino UNO 로 업로드. 핀이 왜 다른지는 README 2-1.
 
 저주파 PWM : `arduino/motor_control_low_frequency_cam/` (버전 D 와 같고 모터 PWM 만 약 122Hz, 2026-11-16 시험 : 잘 돌고 더 부드러움). **먼저 배선 4개를 맞바꿈** (L298N ENA 선 5 → 9, IN2 선 9 → 5, ENB 선 6 → 10, IN3 선 10 → 6), 바퀴를 띄우고 방향부터 확인. 되돌릴 때는 선을 되돌리고 버전 D. 이유·비교 : `docs/PID.md` 끝
 
