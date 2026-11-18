@@ -1,20 +1,34 @@
 # NOTICE : 저작권과 라이선스 / Copyright and licenses
 
-> 4wd-car — Team 2 "Gulno" (굴노 · 굴러라 노란바퀴), 2026. **오픈 소스로 공개 / Released as open source.**
+> 4wd-car — Team 2 "Gulno" (굴노 · 굴러라 노란바퀴), 2026. **소스 코드: MIT / Source code: MIT. 비코드 자료: 비상업적 교육 목적에 한정 / Non-code materials: non-commercial education only.**
 
-## 1. 우리가 만든 것 / Our work
+## 1. 코드와 비코드 자료 / Code and non-code materials
 
-> `LICENSE` 는 MIT 원문만 둡니다 (GitHub 이 라이선스를 알아보게). MIT 는 소스 코드에 적용되고, 사진·영상·그림·로그·문서는 아래처럼 CC BY 4.0 입니다.
-> `LICENSE` holds only the MIT text (so GitHub recognises it). MIT applies to the source code; photos, videos, figures, logs and documentation are CC BY 4.0 as below.
+`LICENSE`의 MIT 허락은 프로젝트 소스 코드에 적용합니다. 사진·영상·그림·주행 로그·독립된 설명 문서는 아래 별도 조건을 따르며 MIT 적용 대상에서 제외합니다. 코드 안의 주석과 코드 사용에 필요한 API·빌드 설명은 코드와 함께 MIT로 이용할 수 있습니다.
+The MIT grant in `LICENSE` covers project source code. Photographs, videos, figures, drive logs and standalone narrative documentation are subject to the separate terms below and excluded from that grant. Code comments and API/build instructions needed to use the code may be used with the code under MIT.
 
-| 무엇 / What | 라이선스 / License |
+| 대상 / Material | 조건 / Terms |
 |---|---|
-| 소스 코드 : Arduino 스케치 (`arduino/`), ESP32-CAM 펌웨어·웹 화면 (`esp32/`), 앱 (`apps/`), MATLAB·Simulink 스크립트 (`docs/matlab/`), 시험·도구 / Source code: Arduino sketches, ESP32-CAM firmware and web page, apps, MATLAB · Simulink scripts, tests and tools | **MIT** ([`LICENSE`](LICENSE)) |
-| 사진·영상·그림(MATLAB·Simulink 로 그린 그래프·스코프 화면 포함)·주행 로그·문서 (`docs/`, README, 릴리스의 사진·영상) / Photos, videos, figures (including graphs and scope screenshots made with MATLAB · Simulink), drive logs, documentation | **CC BY 4.0** — 출처 표시 : "4wd-car Team 2 Gulno" / Attribution: "4wd-car Team 2 Gulno" |
+| Arduino 스케치, ESP32-CAM 펌웨어·웹 코드, 앱, MATLAB·Simulink 스크립트, 시험·도구 / Arduino sketches, ESP32-CAM firmware and web code, apps, MATLAB/Simulink scripts, tests and tools | **MIT** — [`LICENSE`](LICENSE). 상업적 이용 허용 / Commercial use permitted. |
+| 직접 제작한 사진·영상·그림(그래프·스코프 화면 포함)·주행 로그·독립된 설명 문서, README의 해당 자료, 릴리스의 해당 자료 / Original photos, videos, figures (including graphs and scope screenshots), drive logs, standalone documentation and such materials in README files and releases | **비상업적 교육·학습 목적만 허용 / Non-commercial education and learning only**, 아래 조건 적용 / subject to the terms below. |
+| 제3자 구성 요소·자료 / Third-party components and materials | 원래 권리자와 라이선스 유지 / Original rights and licenses remain applicable. |
 
-- 누구나 자유롭게 쓰고, 고치고, 다시 배포하고, 상업적으로도 쓸 수 있습니다. 코드는 저작권·허가 문구(`LICENSE`)를, 사진·문서는 출처를 남겨 주세요.
-- Anyone may use, modify, redistribute, and use commercially. Keep the copyright and permission notice (`LICENSE`) for code, and give attribution for photos and documents.
-- 소프트웨어와 문서는 "있는 그대로" 제공됩니다. 차·배터리·전원을 다룰 때의 안전은 사용자 책임입니다. / Provided "as is"; you are responsible for safety when handling the car, batteries and power.
+### 비코드 자료 이용 조건 / Non-code material terms
+
+1. **권리 귀속 / Ownership**: 직접 촬영·제작한 자료의 저작권은 해당 촬영자·제작자에게 있습니다. 저장소 소유자 CHOESEUNGJUN이 직접 촬영·제작한 사진·영상·문서 등의 저작권은 본인에게 있으며, 공개만으로 양도되지 않습니다. 다른 제작자나 공동저작자의 권리는 각자에게 남습니다.
+   Copyright remains with the respective photographers and creators. Original materials personally photographed or created by repository owner CHOESEUNGJUN remain that person's copyrighted work; publication does not transfer ownership. Other creators' and joint authors' rights remain theirs.
+2. **허용 범위 / Permission**: 비상업적 교육·학습 목적으로만 열람·복제·수정·공유할 수 있습니다. 원저작자, 저장소 주소(https://github.com/CHOESEUNGJUN/4wd_car_project), 이 조건을 표시하고 수정 여부를 밝혀야 합니다. 개별 제작자 표시가 없으면 저장소 출처를 "4wd-car Team 2 Gulno / CHOESEUNGJUN"으로 표시하되, 타인의 저작자를 임의로 변경해서는 안 됩니다.
+   Viewing, copying, modification and sharing are permitted solely for non-commercial education and learning. Credit the original creator, link to the repository, retain these terms and identify modifications. If no individual creator is identified, cite the repository as "4wd-car Team 2 Gulno / CHOESEUNGJUN" without misattributing authorship.
+3. **상업적 이용 금지 / No commercial use**: 판매, 광고·홍보, 유료 강의·교재, 제품·서비스 제공 등 사업·영리 목적 이용은 금지합니다. 교육 목적을 표방하더라도 상업적 이용이면 허용되지 않습니다. 이 범위를 벗어난 이용은 해당 권리자의 사전 서면 허락이 필요합니다.
+   Business and commercial use, including sales, advertising, promotion, paid courses or teaching materials, and use in products or services, is prohibited. An educational label does not permit commercial use. Uses outside this permission require prior written consent from the relevant rights holder.
+4. **침해 대응 / Enforcement**: 무단 상업적 이용 등 저작권 침해가 확인되면 이용 중단·삭제 요구, 손해배상 청구 등 관련 법령에 따른 법적 조치를 취할 수 있습니다. 법령상 허용되는 인용 등 저작권 제한·예외는 영향을 받지 않습니다.
+   Confirmed unauthorized commercial use or other copyright infringement may result in legal action under applicable law, including demands to cease use, removal requests and claims for damages. Statutory copyright exceptions and limitations remain unaffected.
+5. **시행과 기존 허락 / Effective date and prior permissions**: 이 비코드 자료 조건은 **2026-11-18 이 고지를 반영한 커밋부터** 적용합니다. 종전에 CC BY 4.0으로 적법하게 공개된 자료에 대한 기존 허락은 소급하여 취소하지 않습니다. 같은 자료가 과거 CC BY 4.0으로 공개되었다면 그 허락에 따른 이용은 계속 가능하며, 이 고지만으로 제한할 수 없습니다. 과거 커밋·태그·릴리스의 적용 조건은 해당 버전의 고지를 확인하세요.
+   These terms apply from the commit introducing this notice on 2026-11-18. They do not retroactively revoke permissions for materials lawfully released under CC BY 4.0. Identical previously licensed materials remain usable under that grant; this notice alone cannot restrict those uses. Check the notices in the relevant historical commits, tags and releases.
+   참고 / Reference: [CC BY 4.0 공식 안내 / official deed](https://creativecommons.org/licenses/by/4.0/).
+
+소프트웨어와 자료는 "있는 그대로" 제공되며, 차·배터리·전원을 다룰 때의 안전은 사용자 책임입니다.
+Software and materials are provided "as is"; users are responsible for safety when handling the car, batteries and power.
 
 ## 2. 우리 것이 아닌 것 / Third-party components
 

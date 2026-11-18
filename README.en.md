@@ -1,5 +1,7 @@
 # 4wd-car: Team 2 "Gulno" (굴러라 노란바퀴, Roll, Yellow Wheels) Autonomous Mini Car
 
+> **Usage terms:** Code is MIT open source. Original photos, videos and other non-code materials are for non-commercial education and learning only; commercial use is prohibited. See [NOTICE.md](NOTICE.md), including the exception for prior permissions.
+
 PID line follower + low-frequency PWM driving + Bluetooth manual / auto switch + ESP32-CAM traffic lights and stop signs
 
 > 한국어 : [README.md](README.md)
@@ -511,14 +513,14 @@ Red light and stop sign are both red, so they are told apart by **shape**: how m
 
 ## License and copyright
 
-**Released as open source.** Anyone may use, modify, redistribute, and use it commercially.
+**Source code remains open source under the MIT License.** Use, modification, redistribution and commercial use of code are permitted under MIT; retain its copyright and permission notices.
 
-| | License |
-|---|---|
-| Source code (Arduino sketches, ESP32-CAM firmware and web page, apps, tests and tools) | **MIT** — [`LICENSE`](LICENSE) |
-| Photos, videos, figures, drive logs, documentation | **CC BY 4.0** — attribute "4wd-car Team 2 Gulno" |
-| Libraries we build on (Arduino core, arduino-esp32, ESP-IDF, esp32-camera …) | their own licenses — [`NOTICE.md`](NOTICE.md) |
+**Non-code materials have separate terms.** Copyright in original photographs, videos, figures, drive logs and documentation remains with their respective photographers and creators. Materials personally photographed or created by repository owner CHOESEUNGJUN remain that person's copyrighted work.
 
-- Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴노 · 굴러라 노란바퀴).
-- The course lecture deck (PDF) belongs to its authors and is not included in this repository. "Lecture deck p. n" in the docs refers to it.
-- The software is provided "as is"; you are responsible for safety when handling the car, batteries and power.
+- Viewing, copying, modification and sharing are permitted solely for non-commercial education and learning. Identify the original creator, link to this repository, retain these terms and indicate changes.
+- Commercial or business use is prohibited, including sales, advertising, promotion, paid courses or teaching materials, and use in products or services. An educational label does not permit commercial use. Other uses require prior written permission from the relevant rights holder.
+- Confirmed unauthorized commercial use or other copyright infringement may result in legal action under applicable law, including demands to cease use, removal requests and claims for damages.
+- These non-code terms apply **from the commit introducing this notice on 2026-11-18**. Existing permissions for materials lawfully released under CC BY 4.0 are not retroactively revoked. This notice alone cannot retroactively restrict identical previously licensed materials.
+- Third-party materials retain their original rights holders and licenses. See [`NOTICE.md`](NOTICE.md) for scope and terms and [`LICENSE`](LICENSE) for the MIT text covering code.
+- The course lecture deck belongs to its authors and is not included in this repository.
+- Software and materials are provided "as is"; users are responsible for safety when handling the car, batteries and power.
