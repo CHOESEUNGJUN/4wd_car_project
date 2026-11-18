@@ -25,7 +25,7 @@
 
 1. Turn on the iPhone hotspot (Maximize Compatibility) → connect the laptop / phone too
 2. Turn on the car (version D) → power the ESP32-CAM with 5V → ready when the front white LED stops blinking and **stays on**
-3. Browser **http://gulno-cam.local** (if it doesn't open, switch the phone's Wi-Fi to `GULNO-CAM-xxxx` and open **http://192.168.4.1**; on Android use "Camera" in the app)
+3. Browser **http://gulno-cam.local** (if it doesn't open, use the numeric address from the page's address card, e.g. `http://172.20.10.2`; on Android use "Camera" in the app. Since 2026-11-18 the ESP's own Wi-Fi at `192.168.4.1` only comes up when the hotspot can't be found, to save memory)
 4. **Traffic light recognition: on** + phone traffic-light screen → **Line-sensor drive**; to stop, **Stop · Manual (정지 · 수동)**
 5. Finish: Stop · Manual → disconnect Bluetooth → power off. One-time setup: upload (PlatformIO) and enter Wi-Fi (`CAMERA.md` ch. 4–5); troubleshooting in ch. 9
 

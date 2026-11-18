@@ -152,8 +152,8 @@ char carLine[64] = "";                    // 아두이노 상태 줄 (loop 에�
 volatile bool carClear = false;           // 블루투스 끊김 -> 상태 줄 비우기 (btTask 가 표시, loop 가 비움)
 volatile bool btWant = false;             // 연결 유지 (끄면 폰 앱이 HC-06 을 쓸 수 있음)
 volatile bool btScanReq = false, btScanning = false, btFail = false;
-const uint32_t HEAP_MIN = 12000;          // 내부 메모리가 이보다 적게 5초 이어지면 재시작 (아래 loop)
-const uint32_t BT_NEED = 40000;           // 블루투스를 켤 때 남아 있어야 할 내부 메모리 (PlatformIO 빌드는 블루투스가 외부 메모리를 먼저 써서 적게 필요)
+const uint32_t HEAP_MIN = 8000;          // 내부 메모리가 이보다 적게 5초 이어지면 재시작 (아래 loop)
+const uint32_t BT_NEED = 62000;           // 블루투스를 켤 때 남아 있어야 할 내부 메모리 (PlatformIO 빌드는 블루투스가 외부 메모리를 먼저 써서 적게 필요)
 // 블루투스 상태는 여러 작업(웹 서버, 블루투스 작업, loop)이 같이 씀 -> 반드시 btLock 을 잡고 읽고 씀
 // (안 잡으면 한쪽이 String 을 바꾸는 사이 다른 쪽이 읽다가 메모리가 깨져서 멈출 수 있음)
 SemaphoreHandle_t btLock = xSemaphoreCreateMutex();   // btAddr, btName, btLabel, btList
@@ -173,7 +173,7 @@ Preferences prefs;
 bool setupMode = false;
 // 어디서든 직접 연결 : 핫스팟에 붙은 뒤에도 ESP 자기 와이파이(설정용과 같은 이름·암호)를 켜 둠. 그 와이파이에 붙으면 어느 폰이든
 // 늘 http://192.168.4.1 (모르는 주소는 첫 화면으로 보내서 로그인 화면처럼 바로 뜸). 안드로이드 크롬이 .local 을 못 찾아도 됨
-const bool DIRECT_AP = true;
+const bool DIRECT_AP = false;
 bool apOn = false;
 String setupName, setupPass, ssidOptions, myIp, savedSsid, failWhy;
 unsigned long lastInfo = 0;
@@ -188,13 +188,15 @@ portMUX_TYPE vMux = portMUX_INITIALIZER_UNLOCKED;
 unsigned long frames = 0, lastFpsAt = 0, lastViewer = 0, lastHb = 0;
 // HSV 영상 (JPEG 없이) : HSV 보기를 켜면 칸마다 색 종류(0~4)를 "종류 3비트 + 이어진 칸 수 5비트" 한 바이트씩 묶어(RLE) 웹소켓으로 보내고
 // 브라우저가 칠함. 신호를 세면서 같이 만들어서 계산이 거의 없음 (JPEG 압축 한 장 55ms 가 없어짐 -> 카메라가 주는 대로 초당 약 20장).
-// 내용 앞 2바이트 = 가로, 세로. 보내기는 코어 0 작업(hsvTask)이 함 : 와이파이가 막혀도 신호 판단(loop)이 안 멈춤. 보내는 중이면 그 사진은 건너뜀
+// 내용 앞 2바이트 = 가로, 세로. loop 가 바로 보냄 (기다리지 않는 방식 wsSendAll 이라 와이파이가 막혀도 신호 판단이 안 멈춤. 못 받으면 그 사진은 건너뜀)
 const int RLE_MAX = 5000;                 // 이보다 길어지는 (아주 얼룩덜룩한) 사진은 안 보냄 (소켓 보내기 칸 5.7KB 에 한 번에 들어가게)
 uint8_t* rleBuf;                          // 외부 메모리 RLE_MAX + 여유
+// 칸마다 흰색 / 빨강인지 1비트씩 (빨강 덩어리 네모와 그 안의 흰색을 사진을 다시 읽지 않고 셈). 외부 메모리 2.4KB 씩 :
+// 내부 메모리는 블루투스가 약 60KB 를 써서 아껴야 함 (2026-11-18 : 내부에 두니 블루투스를 켜면 남은 게 9KB 라 재시작)
+const int BITW = (CW + 31) / 32;
+uint32_t (*whiteBits)[BITW], (*redBits)[BITW];
 volatile int rleN = 0;                    // 보낼 길이 (0 = 없음)
 bool rleOn = false;                       // 이번 사진을 RLE 로 만들지 (loop 가 정함)
-SemaphoreHandle_t rleLock, wsLock;
-TaskHandle_t hsvTaskH = nullptr;
 float fps = 0;
 volatile uint32_t tSig = 0, tCopy = 0, tJpeg = 0, nJ = 0;   // 단계별 시간 (µs 합, 시리얼 I,step_us)
 volatile uint32_t colorNo = 0;            // 컬러 버퍼가 새 사진으로 바뀔 때마다 +1 (영상은 새 사진일 때만 JPEG 로)
@@ -382,8 +384,7 @@ esp_err_t notFound(httpd_req_t* r, httpd_err_code_t) {
 
 void startServer() {
   jpgLock = xSemaphoreCreateMutex();
-  rleLock = xSemaphoreCreateMutex();
-  wsLock = xSemaphoreCreateMutex();
+
   httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
   cfg.max_uri_handlers = 12;
   cfg.stack_size = 6144;
@@ -515,11 +516,11 @@ esp_err_t wsHandler(httpd_req_t* r) {
 
 // 열려 있는 화면 모두에게 보냄. 보낸 화면이 있으면 true
 // 웹소켓 보내기 (상태 줄, HSV 영상 공용). 모두 **기다리지 않는 방식** : 느리거나 끊긴 화면 때문에 신호 판단(loop)·다른 화면이 멈추지 않게.
-//   wsLock : 상태 줄(loop, 코어 1)과 HSV 영상(hsvTask, 코어 0)이 같은 소켓에 동시에 쓰면 섞임 -> 한 번에 하나만
+//   보내는 곳은 loop 하나뿐 (상태 줄, HSV 영상) : 따로 작업을 두면 같은 소켓에 동시에 써서 섞이고, 작업 스택만큼 내부 메모리가 듦
 //   소켓이 한 프레임을 다 못 받으면 남은 부분을 화면별 칸(pend)에 두고 다음 번에 이어 보냄. 남은 게 있는 화면에는 새 프레임을 안 보냄 (끼어들면 깨짐)
 //   = 느린 연결(아이폰 핫스팟은 응답이 0.05~0.3초씩 밀림)에서는 저절로 영상 장수가 줄고, 밀리지 않음
 //   3초 동안 조금도 못 보내면 그 화면을 끊음 (화면은 1초 뒤 스스로 다시 붙음)
-bool wsSendAll(const uint8_t* frame, int n) {   // frame = 웹소켓 머리까지 든 한 프레임. wsLock 을 잡고 부름. 열린 화면이 있으면 true
+bool wsSendAll(const uint8_t* frame, int n) {   // frame = 웹소켓 머리까지 든 한 프레임. loop 에서만 부름. 열린 화면이 있으면 true
   bool any = false;
   for (int i = 0; i < MAX_WS; i++) {
     int fd = wsFd[i];
@@ -547,31 +548,20 @@ bool wsSendAll(const uint8_t* frame, int n) {   // frame = 웹소켓 머리까�
   }
   return any;
 }
-// 글자 프레임(상태 줄)을 열려 있는 화면 모두에게. 보낼 화면이 있으면 true. waitMs 안에 wsLock 을 못 잡으면 안 보내고 false
-bool wsBroadcast(const uint8_t* data, size_t len, uint32_t waitMs) {
+// 글자 프레임(상태 줄)을 열려 있는 화면 모두에게. 보낼 화면이 있으면 true
+bool wsBroadcast(const uint8_t* data, size_t len) {
   static uint8_t f[4 + 512];
-  if (len > 512 || xSemaphoreTake(wsLock, pdMS_TO_TICKS(waitMs)) != pdTRUE) return false;
+  if (len > 512) return false;
   int h = 2; f[0] = 0x81;                          // 글자 프레임 머리
   if (len < 126) f[1] = len; else { f[1] = 126; f[2] = len >> 8; f[3] = len & 0xFF; h = 4; }
   memcpy(f + h, data, len);
-  bool any = wsSendAll(f, h + len);
-  xSemaphoreGive(wsLock);
-  return any;
-}
-void hsvTask(void*) {                     // 코어 0 : loop 가 만든 HSV 영상 한 장을 화면들에 보냄
-  while (true) {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    xSemaphoreTake(rleLock, portMAX_DELAY);
-    if (rleN >= 130 && xSemaphoreTake(wsLock, pdMS_TO_TICKS(100)) == pdTRUE) { wsSendAll(rleBuf, rleN); xSemaphoreGive(wsLock); }
-    rleN = 0;
-    xSemaphoreGive(rleLock);
-  }
+  return wsSendAll(f, h + len);
 }
 
 void pushStatus() {
   static char buf[512];
   buildStatus(buf, sizeof buf);
-  if (wsBroadcast((const uint8_t*)buf, strlen(buf), 5)) lastViewer = millis();   // 화면이 열려 있음 -> 차에 연결 신호 h 계속
+  if (wsBroadcast((const uint8_t*)buf, strlen(buf))) lastViewer = millis();   // 화면이 열려 있음 -> 차에 연결 신호 h 계속
 }
 
 
@@ -716,6 +706,8 @@ void setup() {
   vbuf[0] = (uint8_t*)ps_calloc(W * H * 2, 1);
   vbuf[1] = (uint8_t*)ps_calloc(W * H * 2, 1);
   rleBuf = (uint8_t*)ps_malloc(RLE_MAX + CW + 4);
+  whiteBits = (uint32_t (*)[BITW])ps_calloc(CH, sizeof(uint32_t[BITW]));
+  redBits = (uint32_t (*)[BITW])ps_calloc(CH, sizeof(uint32_t[BITW]));
   color = vbuf[1];
   ledcAttachChannel(FLASH_LED, 5000, 8, 7); // 채널 7 (카메라 XCLK 가 채널 0 을 씀)
   prefs.begin("gulno", false);             // 저장된 설정 (핫스팟, 블루투스 기기, 화면 방향)
@@ -730,7 +722,6 @@ void setup() {
   if (sdOk) SD_MMC.end();                                                  // 바로 뗌 (기록할 때만 다시 붙임)
   Serial.printf("I,sd,%d\n", sdOk ? 1 : 0);
   xTaskCreatePinnedToCore(btTask, "bt", 4096, nullptr, 1, nullptr, 0);
-  xTaskCreatePinnedToCore(hsvTask, "hsv", 3072, nullptr, 1, &hsvTaskH, 0);
 }
 
 // 신호등 : SIG_Y1 위쪽(지금은 화면 전체)에서 SIG_STEP 칸마다 색을 봄. 빨강 = R 높고 G·B 낮음, 초록 = G 높고 R 낮음, 노랑 = R·G 높고 B 낮음
@@ -775,7 +766,6 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
   // 한 줄씩 빠른 내부 메모리로 옮겨서 봄 (외부 메모리를 칸마다 읽으면 느림). 흰색 칸은 비트로 적어 둠 (내부 2.4KB) :
   // 빨강 덩어리 네모 칸이 정해진 뒤 그 안의 흰색을 외부 메모리를 다시 읽지 않고 셈
   static uint8_t row[CW * 2];
-  static uint32_t whiteBits[CH][(CW + 31) / 32], redBits[CH][(CW + 31) / 32];
   static uint16_t rowRed[CH], colRed[CW];   // 줄마다 / 칸마다 빨강 수 (빨강 덩어리 네모 칸 찾기)
   static uint8_t vrow[CW * 2];             // HSV 보기 : 이 줄을 색 종류로 칠한 것
   const bool hsvOut = copyView && hsvView && camRot == 0 && CW == W && SIG_STEP == 1 && SIG_Y1 == CH;
@@ -785,8 +775,7 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
   for (int y = 0; y < SIG_Y1; y += SIG_STEP) {
     memcpy(row, b + y * CW * 2, CW * 2);
     if (copyView && !hsvOut) memcpy(color + y * W * 2, row, W * 2);
-    uint32_t *wb = whiteBits[y], *rb = redBits[y];
-    memset(wb, 0, sizeof whiteBits[0]); memset(rb, 0, sizeof redBits[0]);
+    uint32_t wb[BITW] = {0}, rb[BITW] = {0};   // 이 줄의 흰색·빨강 칸 (내부에서 만들고 줄 끝에 외부 메모리 표로)
     int rowN = 0;
     for (int x = 0; x < CW; x += SIG_STEP) {
       uint16_t p = (row[2 * x] << 8) | row[2 * x + 1];
@@ -802,6 +791,7 @@ HOT bool detectSignal(const uint8_t* b, bool copyView) {
       else if (c == C_WHITE) wb[x >> 5] |= 1u << (x & 31);
     }
     rowRed[y] = rowN; red += rowN;
+    memcpy(whiteBits[y], wb, sizeof wb); memcpy(redBits[y], rb, sizeof rb);
     if (hsvOut) memcpy(color + y * W * 2, vrow, W * 2);
     if (rle && ro >= 0) {                  // 이 줄에서 끝난 묶음들을 외부 메모리로 (한 줄에 최대 CW 개)
       if (ro + rn > RLE_MAX) ro = -1;      // 너무 길면 이 사진은 안 보냄
@@ -872,11 +862,11 @@ void loop() {
         portENTER_CRITICAL(&vMux); back = 1 - vFront; if (vBusy == back) wantView = false; portEXIT_CRITICAL(&vMux);
         if (wantView) color = vbuf[back];
       }
-      // HSV 영상 : HSV 보기가 켜져 있고 화면이 열려 있으면 (보내는 작업이 지난 장을 다 보냈을 때만) 색 종류를 묶어서 만듦
-      rleOn = hsvView && hsvTaskH && millis() - lastViewer < 2500 && xSemaphoreTake(rleLock, 0) == pdTRUE;
+      // HSV 영상 : HSV 보기가 켜져 있고 화면이 열려 있으면 색 종류를 묶어서 만들고 바로 보냄
+      rleOn = hsvView && millis() - lastViewer < 2500;
       uint32_t ts = micros();
       bool copied = (sigMode || rleOn) && detectSignal(b, wantView);   // 신호를 보면서 같은 줄을 영상용으로도 복사 (한 번만 읽음)
-      if (rleOn) { bool go = rleN > 0; xSemaphoreGive(rleLock); rleOn = false; if (go) xTaskNotifyGive(hsvTaskH); }
+      if (rleOn) { rleOn = false; if (rleN >= 130) wsSendAll(rleBuf, rleN); rleN = 0; }
       uint32_t tc = micros();
       tSig += tc - ts;
       if (wantView) { if (!copied) shrinkView(b); drawBorder(); vFront = back; colorNo++; }   // 신호를 안 보거나 회전 중이면 따로 복사. 테두리를 그리고 앞으로

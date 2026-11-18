@@ -20,6 +20,7 @@ using std::max; using std::min;
 volatile int camRot=0,viewW,viewH; static uint8_t colorb[160*120*2]; uint8_t* color=colorb;
 '''
 out+=L(38,39)+'\n'+L(41,41)+'\n'+L(48,51)+'\n'+L(54,65)+'\n'+fn('uint8_t colorClass')+'\n'+fn('void buildColorLut')+'\n'+L(84,85)+'\n'+L(88,88)+'\n'
+out+='const int BITW=(CW+31)/32; static uint32_t wB[CH][BITW], rB[CH][BITW]; uint32_t (*whiteBits)[BITW]=wB, (*redBits)[BITW]=rB;\n'
 out+='const int RLE_MAX = 8000; static uint8_t rleB[RLE_MAX+200]; uint8_t* rleBuf=rleB; volatile int rleN=0; bool rleOn=false;\n'
 out+=fn('HOT bool detectSignal')+'\n#include "scenes.inc"\n'
 open(os.path.join(HERE,'t.cpp'),'w').write(out)
