@@ -74,27 +74,27 @@ Doubling the prescaler makes each step twice as slow, so the frequency **halves*
 
 | `analogWrite` | Duty | Original 976.6 Hz: mean / peak | Ours 122.5 Hz: mean / peak |
 |---|---|---|---|
-| 90 | 35 % | 0.29 A (20 %) / 1.04 A (70 %) | **0.48 A (33 %) / 1.48 A (100 %)** |
-| 100 | 39 % | 0.34 A (23 %) / 1.09 A (74 %) | **0.54 A (37 %) / 1.48 A (100 %)** |
-| 120 | 47 % | 0.44 A (30 %) / 1.18 A (80 %) | **0.66 A (45 %) / 1.48 A (100 %)** |
+| 90 | 35 % | 0.28 A (20 %) / 1.01 A (70 %) | **0.47 A (33 %) / 1.44 A (100 %)** |
+| 100 | 39 % | 0.33 A (23 %) / 1.06 A (74 %) | **0.53 A (37 %) / 1.44 A (100 %)** |
+| 120 | 47 % | 0.43 A (30 %) / 1.15 A (80 %) | **0.64 A (45 %) / 1.44 A (100 %)** |
 
-(Brackets = share of 1.48 A, the current if always on. Simulink model [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): RL model with the wheel stopped (no back-EMF), 7.4 V · 5 Ω · 1.5 mH, on = +V, off = −V through the L298N diodes. These are example values, so the real car's numbers can differ; the difference between the two frequencies goes the same way.)
+(Brackets = share of 1.44 A, the current if always on. Simulink model [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): RL model with the wheel stopped (no back-EMF), 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH, on = +V, off = −V through the L298N diodes. These are example values, so the real car's numbers can differ; the difference between the two frequencies goes the same way.)
 
 - **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is the **coil current**, not the counter. It rises along a curve but switches off after only 0.36–0.48 ms, so only the start of the curve (almost straight) is used; when off, the L298N pulls the current out fast, so it drops in a straight line. It only looks like a triangle; it is **current cut off every time before it fills up**.
 - At 976.6 Hz the time spent pulling the current out is a big share of each period, so a 35 % duty gives only 20 % mean current. At 122.5 Hz that loss is small, so it gives 33 %, close to the duty.
-- **The blue line (122.5 Hz)** reaches 1.48 A every time and stays flat. Raising the value makes it **wider**, not higher.
+- **The blue line (122.5 Hz)** reaches 1.44 A every time and stays flat. Raising the value makes it **wider**, not higher.
 
 **Why the car only moved at high frequency when the PWM value was raised a lot**: the same model with higher values (only `vals` changed in `pwm_power_simulink.m`):
 
 | `analogWrite` | 976.6 Hz: mean / peak | 122.5 Hz: mean / peak |
 |---|---|---|
-| 130 | 0.49 A / 1.22 A (82 %) | 0.72 A / 1.48 A (100 %) |
-| 150 | 0.60 A / 1.28 A (87 %) | 0.83 A / 1.48 A (100 %) |
-| 180 | 0.77 A / 1.35 A (91 %) | 1.01 A / 1.48 A (100 %) |
-| 210 | 0.96 A / 1.40 A (94 %) | 1.18 A / 1.48 A (100 %) |
-| 255 | 1.48 A / 1.48 A (100 %) | 1.48 A / 1.48 A (100 %) |
+| 130 | 0.48 A / 1.19 A (82 %) | 0.70 A / 1.44 A (100 %) |
+| 150 | 0.58 A / 1.25 A (87 %) | 0.81 A / 1.44 A (100 %) |
+| 180 | 0.74 A / 1.31 A (91 %) | 0.98 A / 1.44 A (100 %) |
+| 210 | 0.93 A / 1.36 A (94 %) | 1.15 A / 1.44 A (100 %) |
+| 255 | 1.44 A / 1.44 A (100 %) | 1.44 A / 1.44 A (100 %) |
 
-- Matching the mean current of 90 at 122.5 Hz (0.48 A) takes **about 130** at 976.6 Hz.
+- Matching the mean current of 90 at 122.5 Hz (0.47 A) takes **about 130** at 976.6 Hz.
 - At 976.6 Hz the peak current is still 94 % at 210 and reaches 100 % only at **255 (always on)**. That is why version C needed a **255 kick** to start a stopped car.
 
 As seen on the Simulink scope (top to bottom 90 / 100 / 120, yellow 976.6 Hz, blue 122.5 Hz):
