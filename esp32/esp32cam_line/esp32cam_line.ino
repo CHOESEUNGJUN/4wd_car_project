@@ -1,4 +1,4 @@
-/* 굴노 카메라 : 신호등 보기 (ESP32-CAM, AI-Thinker 보드, OV2640)
+/* 굴노 카메라 : 신호등 보기 (ESP32-CAM, AI-Thinker 보드, 카메라 칩 OV3660 : 2026-11-18 보드에서 확인. OV2640 아님)
  *  - 원칙 : 카메라로 라인 주행은 하지 않는다. 라인은 차(아두이노)가 라인센서 3개 + PID 로 따라가고,
  *    카메라는 신호등(빨강·초록·노랑)만 보고 차에 블루투스로 신호 글자를 보낸다 (x 정지 / v 서행 / n 보통, 0.2초마다)
  *  - 와이파이는 프린터처럼 : 처음(또는 저장된 핫스팟을 못 찾으면) 설정용 와이파이 "GULNO-CAM-SETUP-xxxx" 를 켠다.
@@ -277,7 +277,7 @@ void streamLoop(httpd_req_t* req) {
   uint32_t sentNo = 0;
   unsigned long sentAt = 0;
   while (true) {
-    // 새 사진이 없으면 같은 그림을 다시 압축하지 않음. 단 1초에 한 번은 보냄 (모폴로지 화면처럼 사진이 안 바뀌어도 브라우저가 닫혔는지 알아야 작업이 끝남)
+    // 새 사진이 없으면 같은 그림을 다시 압축하지 않음. 단 1초에 한 번은 보냄 (사진이 안 바뀌어도 브라우저가 닫혔는지 알아야 작업이 끝남)
     if (colorNo == sentNo && millis() - sentAt < 1000) { vTaskDelay(pdMS_TO_TICKS(10)); continue; }
     sentNo = colorNo; sentAt = millis();
     uint8_t* jpg = nullptr; size_t len = 0;
@@ -634,7 +634,7 @@ bool startCamera() {
   c.pin_sccb_sda = SIOD_GPIO_NUM; c.pin_sccb_scl = SIOC_GPIO_NUM;
   c.pin_pwdn = PWDN_GPIO_NUM; c.pin_reset = RESET_GPIO_NUM;
   c.xclk_freq_hz = CAM_XCLK;
-  c.pixel_format = PIXFORMAT_RGB565;       // 늘 컬러 : 라인은 밝기만 뽑아서, 신호등은 색으로
+  c.pixel_format = PIXFORMAT_RGB565;       // 늘 컬러 : 신호등·표지판을 색으로 봄
   c.frame_size = CAM_SIZE;
   c.fb_count = 2;                          // 2장 : 한 장을 처리하는 동안 다음 장을 미리 찍음 (외부 메모리 38KB 더, 처리와 촬영이 겹쳐서 빨라짐)
   c.fb_location = CAMERA_FB_IN_PSRAM;
@@ -647,7 +647,7 @@ bool startCamera() {
 }
 
 void setup() {
-  Serial.begin(9600);                      // U0T(GPIO1) -> 아두이노 D0(RX)
+  Serial.begin(9600);                      // 안내 줄 (I, / E, 로 시작) 을 USB 시리얼로. 9600
   pinMode(FLASH_LED, OUTPUT); digitalWrite(FLASH_LED, LOW);
   pinMode(STATUS_LED, OUTPUT); digitalWrite(STATUS_LED, HIGH);
   color = (uint8_t*)ps_calloc(W * H * 2, 1);
