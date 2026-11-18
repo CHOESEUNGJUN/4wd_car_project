@@ -276,23 +276,23 @@ PWM switches the motor power on and off very fast and sets the power by the frac
 
 ![Coil current at the same analogWrite values, original 976.6 Hz vs our 122.5 Hz (MATLAB · Simulink)](docs/img/pwm_coil_current.en.png)
 
-The same `analogWrite` value (90 · 100 · 120) drives a different current (= force) through the motor coil (Simulink model [`pwm_power_simulink.m`](docs/matlab/pwm_power_simulink.m); simple RL model with the wheel stopped, 7.4 V · 5 Ω · 1.5 mH):
+The same `analogWrite` value (90 · 100 · 120) drives a different current (= force) through the motor coil (Simulink model [`pwm_power_simulink.m`](docs/matlab/pwm_power_simulink.m); simple RL model with the wheel stopped, 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH):
 
 | `analogWrite` | Duty | Original 976.6 Hz: mean / peak | Ours 122.5 Hz: mean / peak |
 |---|---|---|---|
-| 90 | 35 % | 0.29 A / 1.04 A (70 %) | **0.48 A / 1.48 A (100 %)** |
-| 100 | 39 % | 0.34 A / 1.09 A (74 %) | **0.54 A / 1.48 A (100 %)** |
-| 120 | 47 % | 0.44 A / 1.18 A (80 %) | **0.66 A / 1.48 A (100 %)** |
+| 90 | 35 % | 0.28 A / 1.01 A (70 %) | **0.47 A / 1.44 A (100 %)** |
+| 100 | 39 % | 0.33 A / 1.06 A (74 %) | **0.53 A / 1.44 A (100 %)** |
+| 120 | 47 % | 0.43 A / 1.15 A (80 %) | **0.64 A / 1.44 A (100 %)** |
 
 - **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is not the timer counter; it is the **coil current**. When the pin switches on, the current rises along a curve, but it switches off after only 0.36–0.48 ms, so only the start of the curve (almost straight) is used; when it switches off, the L298N pulls the current out fast, so it falls in a straight line. A rising line plus a falling line looks like a triangle, but it is **current that is cut off every time before it fills up**.
-- **The blue line (122.5 Hz)** stays on 2.9–3.8 ms, so it reaches the top (1.48 A) every time and stays flat. The value only sets **how long** that full force lasts.
+- **The blue line (122.5 Hz)** stays on 2.9–3.8 ms, so it reaches the top (1.44 A) every time and stays flat. The value only sets **how long** that full force lasts.
 - So at the same value the mean force is about 1.5–1.7×, the peak force 1.25–1.4×. That is why, with the original wiring, 90 could not start the wheels and a 255 kick was needed. Full calculation and graphs: [`docs/PWM.en.md`](docs/PWM.en.md).
-- **Why the car only moved at high frequency when the PWM value was raised a lot**: at 976.6 Hz, raising `analogWrite` doesn't give force in proportion, because the current is **cut off every time before it fills up**. In the same simulation, matching the mean current of 90 at 122.5 Hz (0.48 A) takes **about 130** at 976.6 Hz, and the peak current is still only 94 % at 210; it reaches 100 % only at **255 (always on)**. That is why version C needed a **255 start kick** for 0.12 s on top of the 90 minimum (`MIN_PWM`) to get a stopped car moving. At 122.5 Hz even a small value fills up to 1.48 A every time, so a 170 kick for 0.06 s is enough.
+- **Why the car only moved at high frequency when the PWM value was raised a lot**: at 976.6 Hz, raising `analogWrite` doesn't give force in proportion, because the current is **cut off every time before it fills up**. In the same simulation, matching the mean current of 90 at 122.5 Hz (0.47 A) takes **about 130** at 976.6 Hz, and the peak current is still only 94 % at 210; it reaches 100 % only at **255 (always on)**. That is why version C needed a **255 start kick** for 0.12 s on top of the 90 minimum (`MIN_PWM`) to get a stopped car moving. At 122.5 Hz even a small value fills up to 1.44 A every time, so a 170 kick for 0.06 s is enough.
 
 | | High frequency (version C) | Low frequency (version E) |
 |---|---|---|
 | Frequency | UNO default `analogWrite`: pins 5 and 6 at **976.6 Hz** (1.024 ms period) | Timer1 set directly: pins 9 and 10 at **122.5 Hz** (8.16 ms period) |
-| Low-speed force | Weak. The on-time (0.36 ms at 90) is short, so it switches off before the coil current fills up → at 90: mean 0.29 A, peak 70 % | Strong. The on-time (2.9 ms at 90) is long, so it fills up every time → at 90: mean 0.48 A, peak 100 % |
+| Low-speed force | Weak. The on-time (0.36 ms at 90) is short, so it switches off before the coil current fills up → at 90: mean 0.28 A, peak 70 % | Strong. The on-time (2.9 ms at 90) is long, so it fills up every time → at 90: mean 0.47 A, peak 100 % |
 | Consequence | Minimum `MIN_PWM` 90 + start kick 255 (0.12 s) to force a start → **jerky** in manual, and at low speed only a whine with no torque | Kick cut to **170 for 0.06 s** → smooth starts and slow driving, easier precise control |
 | Sound | A high **whine** at low speed (976.6 Hz is right where the ear is most sensitive; the wheel doesn't turn, only the coil vibrates) | **Quieter** (observed 2026-11-16: the wheel actually turns, so the whine is gone; 122 Hz is a low tone the ear hears less) |
 | Downside | None | The servo can't move while driving (Timer1 drives the motors; the servo only needs to face forward once at startup) |
