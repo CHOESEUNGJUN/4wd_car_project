@@ -17,7 +17,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 
 - Folders: **`arduino/`** = code uploaded to the UNO (the car) with the Arduino IDE. The camera (ESP32, PlatformIO) lives in **`esp32/`** on the branch `extra/esp32cam`.
 - Car code: **default is `arduino/motor_control_low_frequency/` (version E = PID + low-frequency PWM)**. Version C (`team2_bt_pid`) is kept for the lecture deck's original wiring (why the pins differ: [2-1](#2-1-why-low-frequency-moves-the-pins)). First finished build: [release 1.0, PID version](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (includes the app APK).
-- Lecture deck: team 2 in `minicar_lecture_deck_all_teams_v5.pdf` (pages 34–48)
+- Lecture deck: team 2 in the course deck (`minicar_lecture_deck_all_teams_v5.pdf`, pages 34–48) — not in the repository for copyright reasons ([license](#license-and-copyright))
 - Protocol (team agreement): [`PROTOCOL.md`](PROTOCOL.md) — change this document first, and agree on it, before changing the communication code in the apps or sketches.
 - Extra project **ESP32-CAM camera** lives on the branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (chapter 9).
 - **What we changed in driving and image processing, and why: [chapter 5](#5-what-we-changed-and-why-high--low-frequency-pwm-hsv-image-processing)** (high → low frequency PWM, camera line following → traffic lights and signs only, RGB → HSV)
@@ -480,3 +480,19 @@ Red light and stop sign are both red, so they are told apart by **shape**: how m
 | Docs | `docs/CAMERA.md` on the branch (handling, signals and signs, wiring, upload, Wi-Fi, web page, speed and memory, SD recording; Korean), report `docs/REPORT_20261111.md` |
 | Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/ESP32_UPLOAD.en.md)** |
 | Status (2026-11-16) | Bluetooth + Wi-Fi + camera together, signal response ~0.1–0.15 s (~20 fps), SD recording and viewer confirmed. HSV, HSV view and direct access (192.168.4.1) are coded and tested offline, not yet measured on the board |
+
+---
+
+## License and copyright
+
+**Released as open source.** Anyone may use, modify, redistribute, and use it commercially.
+
+| | License |
+|---|---|
+| Source code (Arduino sketches, ESP32-CAM firmware and web page, apps, tests and tools) | **MIT** — [`LICENSE`](LICENSE) |
+| Photos, videos, figures, drive logs, documentation | **CC BY 4.0** — attribute "4wd-car Team 2 Gulno" |
+| Libraries we build on (Arduino core, arduino-esp32, ESP-IDF, esp32-camera …) | their own licenses — [`NOTICE.md`](NOTICE.md) |
+
+- Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴노 · 굴러라 노란바퀴).
+- The course lecture deck (PDF) belongs to its authors and is not included in this repository. "Lecture deck p. n" in the docs refers to it.
+- The software is provided "as is"; you are responsible for safety when handling the car, batteries and power.
