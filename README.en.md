@@ -12,7 +12,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 <img src="docs/img/car_side.jpg" width="23%" alt="Side">
 <img src="docs/img/car_rear.jpg" width="23%" alt="Rear">
 <img src="docs/img/car_bt.jpg" width="23%" alt="HC-06 Bluetooth">
-<br><sub>The finished car (2026-11-18): front · side · rear · HC-06 Bluetooth</sub>
+<br><sub>The finished car (2026-11-18): front · side · rear · HC-06 Bluetooth — <b><a href="https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.en.md">more photos</a></b> (what the ESP32-CAM saw, the web page while driving)</sub>
 </p>
 
 - Folders: **`arduino/`** = code uploaded to the UNO (the car) with the Arduino IDE. The camera (ESP32, PlatformIO) lives in **`esp32/`** on the branch `extra/esp32cam`.

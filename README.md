@@ -12,7 +12,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 <img src="docs/img/car_side.jpg" width="23%" alt="옆">
 <img src="docs/img/car_rear.jpg" width="23%" alt="뒤">
 <img src="docs/img/car_bt.jpg" width="23%" alt="HC-06 블루투스">
-<br><sub>완성 차량 (2026-11-18) : 앞 · 옆 · 뒤 · HC-06 블루투스</sub>
+<br><sub>완성 차량 (2026-11-18) : 앞 · 옆 · 뒤 · HC-06 블루투스 — <b><a href="https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.md">사진 더 보기</a></b> (ESP32-CAM 이 본 장면, 주행 중 웹 화면)</sub>
 </p>
 
 - 폴더 : **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 코드. 카메라(ESP32, PlatformIO)는 브랜치 `extra/esp32cam` 의 **`esp32/`** 에 있다.
