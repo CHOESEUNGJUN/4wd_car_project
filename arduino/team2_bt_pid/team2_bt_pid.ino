@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 /* 2팀 블루투스 수동/자동 + PID 라인트레이서 (버전 C)
  *  - 자동 모드 주행 : 라인센서 3개(0/1)로 오차를 만들고 PID 로 좌우 속도를 정함. 밝은 바탕 + 검은 선
  *  - Kp, Ki, Kd, 기본 속도는 아래 [설정] 숫자를 고쳐서 업로드 (앱 PID 슬라이더는 쓰지 않음)

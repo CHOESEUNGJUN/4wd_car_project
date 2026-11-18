@@ -160,6 +160,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8R3KG9MUJY;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "굴노";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "미니카(HM-10)에 블루투스로 연결합니다.";
@@ -186,6 +187,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 8R3KG9MUJY;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "굴노";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "미니카(HM-10)에 블루투스로 연결합니다.";

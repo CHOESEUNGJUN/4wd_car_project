@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 // 진단 스케치: 블루투스로 글자가 들어오는지, 센서 값이 읽히는지 한 번에 본다.
 // 업로드 후 시리얼 모니터를 9600으로 연다. 모터는 움직이지 않는다.
 #include <SoftwareSerial.h>

@@ -79,7 +79,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 
 - 폴더 : **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 코드. 카메라(ESP32, PlatformIO)는 브랜치 `extra/esp32cam` 의 **`esp32/`** 에 있다.
 - 차량 코드 : **기본은 `arduino/motor_control_low_frequency/` (버전 E = PID + 저주파 PWM)**. 버전 C(`team2_bt_pid`)는 교안 원래 배선용으로 남겨 둠 (핀이 왜 다른지 [2-1](#2-1-저주파는-왜-핀을-바꾸나)). 첫 완성 버전은 [릴리스 1.0 PID 버전](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (앱 APK 포함).
-- 교안 : `minicar_lecture_deck_all_teams_v5.pdf` 의 2팀 (34~48쪽)
+- 교안 : 수업 교안 (`minicar_lecture_deck_all_teams_v5.pdf`) 의 2팀 (34~48쪽) — 저작권 때문에 저장소에는 없음 ([라이선스](#라이선스--저작권))
 - 통신 프로토콜 (팀 합의 문서) : [`PROTOCOL.md`](PROTOCOL.md) — 앱이나 스케치의 통신 부분을 고치기 전에 먼저 이 문서를 바꾸고 합의한다.
 - 추가 프로젝트 **ESP32-CAM 카메라** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (9장).
 - **주행 방식과 영상 처리를 무엇을, 왜 바꿨는지 : [5장](#5-무엇을-왜-바꿨나--고주파저주파-주행-hsv-영상-처리)** (고주파 → 저주파 PWM, 카메라 라인 인식 → 신호등·표지판만, RGB → HSV)
@@ -543,3 +543,19 @@ ag,23,010,LINE
 | 설명 | 브랜치의 `docs/CAMERA.md` (다루기, 신호등·표지판, 배선, 업로드, 와이파이, 웹 화면, 속도·메모리, SD 기록), 작업 보고 `docs/REPORT_20261111.md` |
 | 업로드 | **Arduino IDE 로 올리면 안 됨** (미리 만든 라이브러리라 블루투스를 켜면 메모리 부족으로 멈춤). 완성 펌웨어(`.bin`)를 크롬·esptool 로 올리거나 PlatformIO 로 빌드 → **[ESP32 올리기 안내 (윈도우·리눅스·맥)](docs/ESP32_UPLOAD.md)** |
 | 상태 (2026-11-16) | 블루투스 + 와이파이 + 카메라 동시 동작, 신호 반응 약 0.1~0.15초 (초당 약 20장), SD 기록·보기 페이지 확인. HSV·HSV 보기·직접 접속(192.168.4.1)은 코드·시험 완료, 보드 실측은 다음에 |
+
+---
+
+## 라이선스 · 저작권
+
+**오픈 소스로 공개합니다.** 누구나 자유롭게 쓰고, 고치고, 다시 배포하고, 상업적으로도 쓸 수 있습니다.
+
+| | 라이선스 |
+|---|---|
+| 소스 코드 (아두이노 스케치, ESP32-CAM 펌웨어·웹 화면, 앱, 시험·도구) | **MIT** — [`LICENSE`](LICENSE) |
+| 사진·영상·그림·주행 로그·문서 | **CC BY 4.0** — 출처 "4wd-car Team 2 Gulno" 표시 |
+| 같이 쓰는 라이브러리 (Arduino core, arduino-esp32, ESP-IDF, esp32-camera …) | 각자의 라이선스 — [`NOTICE.md`](NOTICE.md) |
+
+- Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴노 · 굴러라 노란바퀴).
+- 수업 교안(PDF)은 작성자의 저작물이라 저장소에 넣지 않습니다. 문서의 "교안 n쪽" 은 그 자료를 가리킵니다.
+- 소프트웨어는 "있는 그대로" 제공됩니다. 차·배터리·전원을 다룰 때의 안전은 사용자 책임입니다.

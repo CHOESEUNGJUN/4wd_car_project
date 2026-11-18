@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 # 보드 시험 : 웹 화면의 차 상태 줄이 얼마나 자주 오는지 (HSV 영상을 받으면서). 실행 : python3 lag.py 15 1   (15초, 영상마다 답 k 보냄)
 # 상태 줄(글자 프레임)이 얼마나 고르게 오는지 : HSV 영상을 받으면서. ack=1 이면 영상 한 장마다 'k' 를 보냄
 import socket,os,base64,struct,time,json,sys,subprocess,statistics

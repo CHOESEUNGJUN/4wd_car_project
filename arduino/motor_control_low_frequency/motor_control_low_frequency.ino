@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 /* 2팀 블루투스 수동/자동 + PID 라인트레이서 (버전 E = 버전 C + 저주파 PWM, 시험용)
  *  - 버전 C (team2_bt_pid) 와 다른 곳 : 모터 PWM 을 약 980Hz -> 약 122Hz 로 낮춤 (저속 힘 부족, "삐-" 소리, 툭툭 튀는 것 시험).
  *    [핀] 과 setup() 의 Timer1 설정만 다름. 안 좋으면 배선을 되돌리고 버전 C 를 올리면 롤백. 설명 : docs/PID.md 끝

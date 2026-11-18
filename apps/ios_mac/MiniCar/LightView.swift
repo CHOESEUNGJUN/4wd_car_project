@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 import SwiftUI
 
 // 폰을 신호등으로 (ESP32-CAM 신호등 인식 시험용) : 화면 전체가 초록 -> 노랑 -> 빨강 -> 초록 ... (진짜 신호등 순서)

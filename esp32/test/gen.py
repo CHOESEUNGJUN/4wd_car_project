@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 # 신호 판단 시험 (PC 에서) : .ino 에서 진짜 코드(상수, 색 종류표, detectSignal)를 뽑아 t.cpp 를 만듦.
 # 실행 :  sh run.sh   (가짜 사진 27가지 + HSV 영상 묶음 풀기. 다 맞으면 끝 줄 27/27, 종료값 0)
 import re,sys

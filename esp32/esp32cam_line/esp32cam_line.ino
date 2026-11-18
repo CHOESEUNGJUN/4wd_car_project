@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 /* 굴노 카메라 : 신호등 보기 (ESP32-CAM, AI-Thinker 보드, 카메라 칩 OV3660 : 2026-11-18 보드에서 확인. OV2640 아님)
  *  - 원칙 : 카메라로 라인 주행은 하지 않는다. 라인은 차(아두이노)가 라인센서 3개 + PID 로 따라가고,
  *    카메라는 신호등(빨강·초록·노랑)만 보고 차에 블루투스로 신호 글자를 보낸다 (x 정지 / v 서행 / n 보통, 0.2초마다)

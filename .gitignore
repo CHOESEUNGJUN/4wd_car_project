@@ -35,3 +35,6 @@ esp32/esp32cam_line/dependencies.lock
 
 # 편집기 설정
 esp32/esp32cam_line/.vscode/
+
+# 수업 교안 (저작권 : 작성자) : 저장소에 넣지 않음
+minicar_lecture_deck_all_teams_v5.pdf

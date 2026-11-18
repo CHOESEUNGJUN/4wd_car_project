@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT · Copyright (c) 2026 4wd-car Team 2 "Gulno" (굴러라 노란바퀴) · see LICENSE, NOTICE.md
 /* 2팀 블루투스 수동/자동 + PID 라인트레이서 + 신호등 (버전 D = 버전 C + ESP32-CAM 신호등)
  *  - 버전 C (team2_bt_pid) 와 버전 D 둘 다 제출용. 버전 D 는 버전 C 에 ESP32-CAM 신호등을 더한 것 (브랜치 extra/esp32cam)
  *  - 원칙 : 카메라로 라인 주행은 하지 않는다. 라인은 이 아두이노가 라인센서 3개 + PID 로, 카메라는 신호등만 보고 신호 글자를 보냄
