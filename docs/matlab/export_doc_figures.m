@@ -76,3 +76,13 @@ for lang = ["ko" "en"]
   xlabel(t{4})
   exportgraphics(f, fullfile(out, "pwm_duty_90_100_120" + sfx + ".png"), 'Resolution', 110); close(f)
 end
+
+% 코일 전류 (Simulink 모델 pwm_power 를 돌려서)
+% pwm_power_simulink 가 out, f 같은 변수를 덮어쓰므로 경로를 미리 정해 둠
+here = fileparts(mfilename('fullpath')); imgDir = out;
+for lang = {'ko', 'en'}
+  lang = lang{1};
+  if strcmp(lang, 'en'), exportFile = fullfile(imgDir, 'pwm_coil_current.en.png'); else, exportFile = fullfile(imgDir, 'pwm_coil_current.png'); end
+  run(fullfile(here, 'pwm_power_simulink.m'));
+  close(f); close_system('pwm_power', 0);
+end

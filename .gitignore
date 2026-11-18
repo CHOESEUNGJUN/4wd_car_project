@@ -35,3 +35,7 @@ esp32/esp32cam_line/dependencies.lock
 
 # 수업 교안 (저작권 : 작성자) : 저장소에 넣지 않음
 minicar_lecture_deck_all_teams_v5.pdf
+
+# MATLAB/Simulink 가 실행할 때 만드는 모델 파일 (스크립트가 매번 다시 만듦)
+docs/matlab/*.slx
+docs/matlab/slprj/

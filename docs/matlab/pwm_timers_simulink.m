@@ -34,6 +34,5 @@ for k = 1:3
   fprintf('%s : %.3f ms -> %.1f Hz\n', n, T*1e3, 1/T);
 end
 
-save_system(mdl);
 sim(mdl);
 for k = 1:3, open_system([mdl '/' cfg{k,1} '_scope']); end

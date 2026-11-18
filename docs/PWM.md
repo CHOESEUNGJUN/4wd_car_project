@@ -68,7 +68,25 @@ PWM 은 모터 전원을 빠르게 켰다 껐다 하는 것이다. 이 켜고 �
 - 다른 것은 **한 번 켜질 때의 길이** : 0.31ms → 1.23ms → **2.45ms**.
 - 모터 코일은 전류가 차오르는 데 시간이 걸린다 (우리 모터 모델로 약 0.3ms). 0.31ms 로는 다 차기 전에 꺼지고, 2.45ms 면 끝까지 찬다 → **순간 힘(토크)이 커져** 멈춘 차가 다시 출발한다.
 
-![같은 듀티 30% 에서 고주파와 저주파의 코일 전류](img/pwm_high_vs_low.png)
+### 실제로 흐르는 전력 : 코일 전류
+
+![같은 analogWrite 값에서 976.6Hz 와 122.5Hz 의 코일 전류](img/pwm_coil_current.png)
+
+| `analogWrite` | 듀티 | 원래 976.6Hz : 평균 / 최대 | 우리 122.5Hz : 평균 / 최대 |
+|---|---|---|---|
+| 90 | 35% | 0.29A (20%) / 1.04A (70%) | **0.48A (33%) / 1.48A (100%)** |
+| 100 | 39% | 0.34A (23%) / 1.09A (74%) | **0.54A (37%) / 1.48A (100%)** |
+| 120 | 47% | 0.44A (30%) / 1.18A (80%) | **0.66A (45%) / 1.48A (100%)** |
+
+(괄호 = 계속 켜 두었을 때 1.48A 대비. Simulink 모델 [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m) : 바퀴가 서 있을 때(역기전력 0)의 RL 모델 7.4V·5Ω·1.5mH, 켜짐 +V, 꺼짐 L298N 다이오드로 −V. 예시값이라 실제 차와 숫자는 다를 수 있고, 두 주파수의 차이 방향은 같다.)
+
+- **노란 선(976.6Hz)은 삼각파처럼 보이지만 삼각파가 아니다.** 카운터가 아니라 **코일 전류**다. 켜지면 곡선으로 차오르다 0.36~0.48ms 만에 꺼져 곡선 앞부분(거의 직선)만 지나가고, 꺼지면 L298N 이 전류를 빠르게 빼서 직선으로 떨어진다. 그래서 삼각파처럼 보일 뿐, **매번 끝까지 차기 전에 끊기는 전류**다.
+- 976.6Hz 는 끊길 때마다 전류를 빼는 시간이 한 주기에서 큰 몫이라, 듀티 35% 를 줘도 평균은 20% 만 흐른다. 122.5Hz 는 그 손해가 작아서 듀티와 거의 같은 33% 가 흐른다.
+- **파란 선(122.5Hz)** 은 매번 1.48A 까지 차서 평평하게 유지된다. 값을 올리면 높이가 아니라 **폭**이 넓어진다.
+
+Simulink 스코프에서 직접 본 것 (위부터 90 / 100 / 120, 노랑 976.6Hz, 파랑 122.5Hz) :
+
+![Simulink 스코프 : 코일 전류](img/pwm_simulink_coil_current.png)
 
 - 삼각파에서는 켜진 구간이 카운트가 0 에 닿는 곳(8.16ms, 16.3ms)을 **가운데**로 양쪽에 대칭으로 생긴다. 그래서 이름이 Phase Correct 다. 듀티가 바뀌어도 펄스의 가운데 위치가 그대로라 신호가 고르다.
 
@@ -144,9 +162,11 @@ TCCR1B = _BV(CS12);      // CS = 100 : 분주 256
 
 ## 6. 직접 보기 : MATLAB · Simulink
 
-이 문서의 그래프는 모두 MATLAB 으로 그렸다 ([`matlab/export_doc_figures.m`](matlab/export_doc_figures.m) 을 Run 하면 `docs/img/pwm_*.png` 를 한국어·영어로 다시 저장). 코일 전류 그림(`pwm_high_vs_low.png`)만 README 5-1 의 간단한 RL 모델 그림이다.
+이 문서의 그래프는 모두 MATLAB 으로 그렸다 ([`matlab/export_doc_figures.m`](matlab/export_doc_figures.m) 을 Run 하면 `docs/img/pwm_*.png` 를 한국어·영어로 다시 저장). 코일 전류 그림은 Simulink 모델 `pwm_power_simulink.m` 을 돌린 결과다.
 
 - [`matlab/pwm_shapes.m`](matlab/pwm_shapes.m) : 장난감(TOP 2) 톱니파·삼각파와 세 타이머, 듀티 90·100·120 을 그린다. MATLAB 에서 열고 Run (F5).
+- [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m) : 같은 analogWrite 90·100·120 에서 976.6Hz 와 122.5Hz 의 코일 전류를 비교한다 (스코프 값마다 한 칸, 명령 창에 평균·최대 표).
+- [`matlab/pwm_duty_simulink.m`](matlab/pwm_duty_simulink.m) : 122.5Hz 에서 analogWrite 90·100·120 의 PWM 파형 (값마다 스코프).
 - [`matlab/pwm_timers_simulink.m`](matlab/pwm_timers_simulink.m) : Simulink 모델 `pwm_timers` 를 만들어 돌린다. 한 줄이 타이머 하나 : `Repeating Sequence`(카운터) → `<` 비교(OCR 77) → PWM 출력 → 스코프.
 
 Simulink 스코프 결과 (노랑 = 카운트, 파랑 = PWM 출력, 20ms) :
