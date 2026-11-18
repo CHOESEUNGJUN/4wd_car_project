@@ -1,22 +1,33 @@
-# Autonomous Mini Car, Team 2: PID Line Follower + Bluetooth Manual / Auto Switch
+# 4wd-car: Team 2 "Gulno" (굴러라 노란바퀴, Roll, Yellow Wheels) Autonomous Mini Car
+
+PID line follower + low-frequency PWM driving + Bluetooth manual / auto switch + ESP32-CAM traffic lights and stop signs
 
 > 한국어 : [README.md](README.md)
 
 A 4WD RC car (Eduino kit, Arduino UNO) that **follows a black line with PID control (auto)**. You drive it from the phone app "Gulno" (manual) and switch to auto with one button.
 If the link drops, the car stops by itself, and while it drives on its own the phone shows what it is doing (straight, corner, searching for the line, waiting for an obstacle …).
 
+<p align="center">
+<img src="docs/img/car_front.jpg" width="23%" alt="Front">
+<img src="docs/img/car_side.jpg" width="23%" alt="Side">
+<img src="docs/img/car_rear.jpg" width="23%" alt="Rear">
+<img src="docs/img/car_bt.jpg" width="23%" alt="HC-06 Bluetooth">
+<br><sub>The finished car (2026-11-18): front · side · rear · HC-06 Bluetooth</sub>
+</p>
+
 - Folders: **`arduino/`** = code uploaded to the UNO (the car) with the Arduino IDE. The camera (ESP32, PlatformIO) lives in **`esp32/`** on the branch `extra/esp32cam`.
-- Car code: **`arduino/team2_bt_pid/team2_bt_pid.ino` (version C).** Finished build: [release 1.0, PID version](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (includes the app APK).
+- Car code: **default is `arduino/motor_control_low_frequency/` (version E = PID + low-frequency PWM)**. Version C (`team2_bt_pid`) is kept for the lecture deck's original wiring (why the pins differ: [2-1](#2-1-why-low-frequency-moves-the-pins)). First finished build: [release 1.0, PID version](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) (includes the app APK).
 - Lecture deck: team 2 in `minicar_lecture_deck_all_teams_v5.pdf` (pages 34–48)
 - Protocol (team agreement): [`PROTOCOL.md`](PROTOCOL.md) — change this document first, and agree on it, before changing the communication code in the apps or sketches.
-- Extra project **ESP32-CAM camera** lives on the branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (chapter 8).
-- **What we changed in driving and image processing, and why: [chapter 9](#9-what-we-changed-and-why-high--low-frequency-pwm-hsv-image-processing)** (high → low frequency PWM, camera line following → traffic lights and signs only, RGB → HSV)
-- **Next steps: [`docs/NEXT.md`](docs/NEXT.md)** · **Report notes: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md)**
+- Extra project **ESP32-CAM camera** lives on the branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (chapter 9).
+- **What we changed in driving and image processing, and why: [chapter 5](#5-what-we-changed-and-why-high--low-frequency-pwm-hsv-image-processing)** (high → low frequency PWM, camera line following → traffic lights and signs only, RGB → HSV)
+- **Finished release: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)** (Arduino sketches, ESP32-CAM firmware, Android app, drive logs and videos, how-to) · **Final report: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md)**
+- Next steps: [`docs/NEXT.md`](docs/NEXT.md) (retune signal thresholds, test the Android app on a phone, low-frequency numbers; Korean)
 
 | Version | Folder | Motor PWM | Camera | Status |
 |---|---|---|---|---|
 | **C** | `arduino/team2_bt_pid/` | High frequency (default ~980 Hz) | None | **Passed** (2026-11-16, team car code) |
-| **E** | `arduino/motor_control_low_frequency/` | **Low frequency ~122 Hz** (swap 4 wires) | None | **Passed** (2026-11-16, smoother) — [release 1.0.1](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-low-frequency-pwm-pid-control-car-v1.0.1) |
+| **E (default)** | `arduino/motor_control_low_frequency/` | **Low frequency ~122 Hz** (swap 4 wires) | None | **Passed** (2026-11-16, smoother) — [release 1.0.1](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-low-frequency-pwm-pid-control-car-v1.0.1) |
 | D | `arduino/team2_bt_cam/` on branch `extra/esp32cam` (+ low-frequency `motor_control_low_frequency_cam`) | C or E | ESP32-CAM: traffic lights and stop signs (HSV) | Code done, not yet tested on the car |
 
 ---
@@ -33,7 +44,7 @@ How someone who downloads this repository can build the same car and make it dri
 | 3 digital line sensors (black line = 1) | Left, centre, right at the front |
 | Ultrasonic sensor + servo | Obstacle stop |
 | Bluetooth module **HC-06** (Android) or **HM-10** (iPhone, web) | 9600 bps |
-| Battery (motors) | A fresh battery spins harder → see 1-3, 1-4 |
+| Battery (motors) | A fresh battery spins harder → see 4-3, 4-4 |
 | Track: bright floor + **black electrical tape (~1.9 cm wide)** | Adjust the corner values on slippery boards |
 
 **1) Get the code** — on GitHub, **Code → Download ZIP** and unzip, or
@@ -42,32 +53,109 @@ How someone who downloads this repository can build the same car and make it dri
 git clone https://github.com/CHOESEUNGJUN/4wd_car_project.git
 ```
 
-**2) Wiring** — see [chapter 3](#3-wiring). Line sensors **left A3 / centre A4 / right A5**, Bluetooth **TXD → D3, RXD → D4** (crossed).
+**2) Wiring** — see [chapter 2](#2-wiring) (**motor driver uses the low-frequency wiring**). Line sensors **left A3 / centre A4 / right A5**, Bluetooth **TXD → D3, RXD → D4** (crossed).
 
 **3) Upload**
 1. Install the [Arduino IDE](https://www.arduino.cc/en/software) (2.x).
-2. Open `arduino/team2_bt_pid/team2_bt_pid.ino` → board **Arduino Uno**, select the port → **Upload**.
+2. Open `arduino/motor_control_low_frequency/motor_control_low_frequency.ino` (with the original wiring: `team2_bt_pid`) → board **Arduino Uno**, select the port → **Upload**.
 3. If `Servo.h` is missing, install `Servo` from the **Library Manager**.
 
 **4) Check the sensors** — lift the car so the wheels are free, Serial Monitor at **115200**.
 Put each line sensor over the tape and check that `라인=100 / 010 / 001` (line = …) changes at the right position.
 If not, turn the sensor's sensitivity screw; if left and right are swapped, swap `L_Line` and `R_Line` at the top of the sketch.
 
-**5) Connect the app** — [chapter 5](#5-apps)
+**5) Connect the app** — [chapter 6](#6-apps)
 - Android + HC-06: download `gulno.apk` from [release 1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) and install it (or open `apps/android` in Android Studio and press ▶).
 - iPhone + HM-10: open `apps/ios_mac/MiniCar.xcodeproj` in Xcode and press ▶.
 - No install: open `apps/web/index.html` in Chrome (HM-10 over BLE; on a Mac also HC-06 over serial).
 
 **6) Drive** — check that ▲ moves the car in manual → put the car on the line and press **Auto (자동으로)** → it starts after 0.5 s.
-Checklist in the [chapter 4](#4-first-run) table.
+Checklist in the [chapter 3](#3-first-run) table.
 
-**7) Tune for your track** — if it wobbles or misses corners, change `KP`, `KD`, `CORNER_OUT` in the order of [1-4](#1-4-settings-and-tuning) and upload again. Fixes by symptom are in [`docs/PID.md`](docs/PID.md) (Korean).
+**7) Tune for your track** — if it wobbles or misses corners, change `KP`, `KD`, `CORNER_OUT` in the order of [4-4](#4-4-settings-and-tuning) and upload again. Fixes by symptom are in [`docs/PID.md`](docs/PID.md) (Korean).
 
 ---
 
-## 1. Core technique: PID line following
+## 1. Overview
 
-### 1-1. What is PID
+```
+ [phone app / web] ──Bluetooth 9600──▶ [HC-06 or HM-10] ──D3/D4──▶ [Arduino UNO] ──▶ motors, servo
+   buttons: g b l r q w s                (wireless serial)              3 line sensors
+   mode buttons: a / m                                                   ultrasonic sensor
+   every 0.6 s: h (heartbeat)
+       ◀── every 0.2 s one status line "ag,23,010,LINE" ──
+```
+
+| Folder | What | When |
+|---|---|---|
+| `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **Version C** car sketch (lecture deck's original wiring) | PID line following + separate outer/inner wheel power in corners. See `docs/PID.md` |
+| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **Default: version E = version C + low-frequency PWM (passed 2026-11-16)** | Motor PWM ~122 Hz: more low-speed torque and smoother (track tested), start kick 170 / 0.06 s. **Swap 4 wires** (ENA 9, IN2 5, ENB 10, IN3 6). With the original wiring, use version C. End of `docs/PID.md` |
+| Camera (extra project) | ESP32-CAM traffic light / stop sign detection (HSV) + Wi-Fi page + Bluetooth | **Only on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam)** (chapter 9) |
+| `arduino/diag/` (Arduino IDE → UNO) | Diagnostic sketch | Only to check that Bluetooth characters arrive and sensors read |
+| `apps/ios_mac/` | iPhone / Mac app (Xcode) | iPhone + **HM-10** |
+| `apps/android/` | Android app | Android + **HC-06** |
+| `apps/web/index.html` | Web control page | Directly in Chrome (HM-10 BLE / HC-06 on a Mac) |
+
+---
+
+## 2. Wiring
+
+Same as the common pin plan in the lecture deck (pp. 131–140). Numbers are the S (signal) pins on the sensor shield.
+
+| Part | Pins |
+|---|---|
+| L298N motor driver | **Default (low frequency, versions E and D)**: ENA **9**, IN1 8, IN2 **5** (right) / ENB **10**, IN3 **6**, IN4 11 (left)<br>Original wiring (version C, lecture deck): ENA 5, IN2 9 / ENB 6, IN3 10 — only the 4 bold pins differ ([2-1](#2-1-why-low-frequency-moves-the-pins)) |
+| 3 line sensors | left A3 / centre A4 / right A5 (black line = 1) |
+| Ultrasonic | TRIG 13, ECHO 12 |
+| Servo (ultrasonic mount) | 2 — **keep it connected**. Faces forward (90°) at power-on |
+| **Bluetooth module** | VCC → V(3) 5V, GND → G(3), **TXD → S(3) = D3**, **RXD → S(4) = D4** |
+
+- Bluetooth TX/RX are **crossed** (the module's TXD goes to D3, which the Arduino reads). If it connects but no characters pass, swap the two wires.
+- Don't use pins 0 and 1 (shared with USB; uploads fail).
+- RXD is 3.3 V logic, so a divider D4 ─ 1 kΩ ─ RXD ─ 2 kΩ ─ GND is safer (optional).
+- **The HC-06 doesn't work with iPhones** (classic Bluetooth). iPhones need the HM-10 (BLE). Same pins and code; just swap the module.
+
+### 2-1. Why low frequency moves the pins
+
+The UNO's PWM pins (the ones that can set a speed) belong to **three timers**, and each timer has one PWM frequency. Going to low frequency (~122 Hz) means changing one timer's settings.
+
+| Timer | PWM pins | Already used by | If its frequency changes |
+|---|---|---|---|
+| Timer0 | **5, 6** | `millis()`, `delay()` (the Arduino clock) | the clock runs wrong, breaking the 20 ms PID period and link-loss detection → **can't change** |
+| Timer1 | **9, 10** | Servo library (only faces forward once at startup) | **free to change** → ~122 Hz |
+| Timer2 | 3, 11 | pin 3 = Bluetooth receive (D3), pin 11 = motor direction | not free |
+
+- In the lecture deck's wiring the speed pins (ENA, ENB) are on **5 and 6 = Timer0**, whose frequency can't change → move the speed pins to **9 and 10, where Timer1 comes out**.
+- The **direction pins (IN2, IN3)** that were on 9 and 10 only switch on and off (digital), so any pin works; they move to the freed pins 5 and 6.
+- So it is just **swapping 4 wires**: 5↔9, 6↔10. In the code only the 4 pin numbers and a few Timer1 lines differ.
+- Cost: the servo can't move while driving (the motors use Timer1). The ultrasonic mount servo only needs to face forward once at startup, so that's fine.
+- Why low frequency is the default (low-speed torque, smoothness): [5-1](#5-1-motors-high-frequency-pwm-version-c--low-frequency-pwm-version-e).
+
+---
+
+## 3. First run
+
+1. In the Arduino IDE, open `arduino/motor_control_low_frequency/motor_control_low_frequency.ino` (original wiring: `team2_bt_pid`) via **File → Open** and upload.
+   (If an old file is still open, the IDE compiles the old content. After downloading a new copy, close the tab and reopen.)
+2. Lift the car so the wheels are free and open the Serial Monitor — **115200 for version C**, 9600 for the diagnostic sketch.
+3. Connect with the phone app (chapter 5).
+4. Checklist
+
+| Try | Correct result |
+|---|---|
+| Right after connecting | Serial shows `링크 O` (link O), app shows "manual · stop" |
+| Hold ▲ | Wheels turn forward, app shows "manual · straight" |
+| Release | Stops immediately |
+| **Auto (자동으로)** | "Switch to auto mode?" → switch → orange banner, stops 0.5 s, then follows the line |
+| Any direction button during auto | Back to manual instantly, moves that way (even during a long manoeuvre) |
+| Close the app / turn off Bluetooth | In manual it stops within 0.6 s; the app shows a red banner "no remote control" |
+| Hand in front of the sensor (10 cm) | Forward is blocked, "obstacle stop" |
+
+---
+
+## 4. Core technique: PID line following
+
+### 4-1. What is PID
 
 **PID control** is a **feedback control** method: it keeps measuring how far you are from the target (the error) and corrects the output to shrink that error.
 It is used almost everywhere a target has to be held: factory temperature, drone attitude, car cruise control.
@@ -98,7 +186,7 @@ u = Kp × e  +  Ki × ∫e dt  +  Kd × de/dt
 
 P alone overshoots and comes back over and over (oscillation); D damps that, and I removes the one-sided drift P leaves behind (motor imbalance, long curves).
 
-### 1-2. How it works on our car
+### 4-2. How it works on our car
 
 **① Making the error — 3 line sensors (black line = 1, white floor = 0)**
 
@@ -132,7 +220,7 @@ The car has no steering; it turns only by the **speed difference between left an
   120     120         170~200     90               180        -90 (reverse)
 ```
 
-### 1-3. What we changed for this car
+### 4-3. What we changed for this car
 
 Why textbook PID doesn't work as-is, and the fix:
 
@@ -141,13 +229,13 @@ Why textbook PID doesn't work as-is, and the fix:
 | Sensors are only 0/1, so the error jumps in **steps** (0 → 1). Normal D lasts only one 20 ms tick and is gone before the motor reacts | D decays by ×0.8 every 20 ms so it lasts ~0.1 s (`D_DECAY` 0.8) |
 | Accumulated I makes the car swing the other way after a curve | Reset I to 0 when the error crosses to the other side, and clamp to ±50 (`I_LIMIT`) |
 | PID alone can't make sharp corners (only an edge sensor sees the line) | Corners use fixed outer 180 / inner −90 instead of PID. Clear I and D when returning to PID so it doesn't jerk |
-| Small gearbox: small PWM values don't turn the wheels | Minimum 90 when non-zero, plus 0.12 s at full power (255) when the direction changes. Root-cause fix: **version E** (low-frequency PWM ~122 Hz, swap 4 wires) — chapter 9-1 |
+| Small gearbox: small PWM values don't turn the wheels | Minimum 90 when non-zero, plus 0.12 s at full power (255) when the direction changes. Root-cause fix: **version E** (low-frequency PWM ~122 Hz, swap 4 wires) — chapter 5-1 |
 | Sensor spacing (4.9 cm) is wider than the tape (1.9 cm), so the line can sit between sensors → `000`. After an overshooting corner the line is on the other side | Don't turn immediately when lost: PID correction for 0.5 s first, then search last side → other side |
 | The same PWM turns more or less depending on battery voltage | Corner outer set to 180 instead of 220 for a fresh battery (200–220 when weaker) |
 
-### 1-4. Settings and tuning
+### 4-4. Settings and tuning
 
-Edit the numbers in the `[설정]` (settings) block at the top of `arduino/team2_bt_pid/team2_bt_pid.ino` and upload. The error and correction are shown on Serial (115200) and in the app.
+Edit the numbers in the `[설정]` (settings) block at the top of the sketch (`motor_control_low_frequency` or `team2_bt_pid`; both use the same PID and corner values) and upload. The error and correction are shown on Serial (115200) and in the app.
 
 | Name | Now | Meaning |
 |---|---|---|
@@ -166,68 +254,68 @@ Tuning order (one at a time): with **Ki = Kd = 0, raise Kp** until just before i
 
 ---
 
-## 2. Overview
+## 5. What we changed and why: high / low frequency PWM, HSV image processing
 
-```
- [phone app / web] ──Bluetooth 9600──▶ [HC-06 or HM-10] ──D3/D4──▶ [Arduino UNO] ──▶ motors, servo
-   buttons: g b l r q w s                (wireless serial)              3 line sensors
-   mode buttons: a / m                                                   ultrasonic sensor
-   every 0.6 s: h (heartbeat)
-       ◀── every 0.2 s one status line "ag,23,010,LINE" ──
-```
+### 5-1. Motors: high-frequency PWM (version C) → low-frequency PWM (version E)
 
-| Folder | What | When |
+PWM switches the motor power on and off very fast and sets the power by the fraction of time it is on (duty). The **frequency** is how many times per second it switches.
+
+![Coil current at 30 % duty, high vs low frequency](docs/img/pwm_high_vs_low.en.png)
+
+At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is about as long as the coil current takes to rise, so peak force stops at 66 %; with low frequency the pulse (2.5 ms) is long enough to reach 100 % → it beats static friction and the wheel turns (simple RL model; the friction line is an example).
+
+| | High frequency (version C) | Low frequency (version E) |
 |---|---|---|
-| `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **Version C** car sketch (**team car code**) | PID line following + separate outer/inner wheel power in corners. See `docs/PID.md` |
-| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **Version E = version C + low-frequency PWM (passed 2026-11-16)** | Motor PWM ~122 Hz: more low-speed torque and smoother (track tested), start kick 170 / 0.06 s. **Swap 4 wires** (ENA 9, IN2 5, ENB 10, IN3 6). With the original wiring, use version C. End of `docs/PID.md` |
-| Camera (extra project) | ESP32-CAM traffic light / stop sign detection (HSV) + Wi-Fi page + Bluetooth | **Only on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam)** (chapter 8) |
-| `arduino/diag/` (Arduino IDE → UNO) | Diagnostic sketch | Only to check that Bluetooth characters arrive and sensors read |
-| `apps/ios_mac/` | iPhone / Mac app (Xcode) | iPhone + **HM-10** |
-| `apps/android/` | Android app | Android + **HC-06** |
-| `apps/web/index.html` | Web control page | Directly in Chrome (HM-10 BLE / HC-06 on a Mac) |
+| Frequency | UNO default `analogWrite`: pins 5 and 6 at ~**980 Hz** (~1 ms period) | Timer1 set directly: pins 9 and 10 at ~**122 Hz** (~8 ms period) |
+| Low-speed force | Weak. Short pulses switch off before the coil current builds up → small PWM doesn't turn the wheel | Strong. Long pulses let the current build up each time, so even a small duty turns the wheel |
+| Consequence | Minimum `MIN_PWM` 90 + start kick 255 (0.12 s) to force a start → **jerky** in manual, and at low speed only a whine with no torque | Kick cut to **170 for 0.06 s** → smooth starts and slow driving, easier precise control |
+| Downside | Quiet | Low hum; the servo can't move while driving (Timer1 drives the motors; the servo only needs to face forward once at startup) |
+| Wiring | ENA 5, IN2 9 / ENB 6, IN3 10 | **Swap 5↔9 and 6↔10** (Timer1 outputs only on pins 9 and 10). Swap back for version C |
 
----
+- **Why**: version C was a half fix that forced starts with a kick and a minimum power. The real cause (low-speed torque) was the PWM frequency; lowering it lets the car start with a much smaller kick. The goal is following the line precisely, not top speed, so we fixed the low frequency.
+- Result (2026-11-16): passed the track, smoother. Version C is kept as-is for rollback. `millis()`, Bluetooth and ultrasonic use Timer0 / SoftwareSerial and are unaffected. Details: "버전 E" at the end of [`docs/PID.md`](docs/PID.md).
 
-## 3. Wiring
+### 5-2. Camera: line following → traffic lights and signs only
 
-Same as the common pin plan in the lecture deck (pp. 131–140). Numbers are the S (signal) pins on the sensor shield.
-
-| Part | Pins |
+| First (2026-11-11) | Now (2026-11-16) |
 |---|---|
-| L298N motor driver | ENA 5, IN1·IN2 8·9 (right) / ENB 6, IN3·IN4 10·11 (left). **Version E** swaps to **ENA 9, IN2 5 / ENB 10, IN3 6** |
-| 3 line sensors | left A3 / centre A4 / right A5 (black line = 1) |
-| Ultrasonic | TRIG 13, ECHO 12 |
-| Servo (ultrasonic mount) | 2 — **keep it connected**. Faces forward (90°) at power-on |
-| **Bluetooth module** | VCC → V(3) 5V, GND → G(3), **TXD → S(3) = D3**, **RXD → S(4) = D4** |
+| The camera found the floor line, cleaned it with morphology, drew the path and target, and drove from the camera | **No camera line following.** The line is followed by the line sensors + PID (same as version C); the camera only gives signals |
 
-- Bluetooth TX/RX are **crossed** (the module's TXD goes to D3, which the Arduino reads). If it connects but no characters pass, swap the two wires.
-- Don't use pins 0 and 1 (shared with USB; uploads fail).
-- RXD is 3.3 V logic, so a divider D4 ─ 1 kΩ ─ RXD ─ 2 kΩ ─ GND is safer (optional).
-- **The HC-06 doesn't work with iPhones** (classic Bluetooth). iPhones need the HM-10 (BLE). Same pins and code; just swap the module.
+- **Why**: on the track the car was faster than expected, so steering from the camera (~20 fps plus Wi-Fi/Bluetooth delay) was too late. The line sensors + PID already follow the line every 20 ms, so the camera does **one job (watching signals)** — faster and safer. If the camera stops, line following continues, and a red light never times out, so the car stays stopped.
+- Lecture team 4 sends the video to a PC and decides in Python → we decide **inside the ESP32** with no PC (no Wi-Fi video round trip, so it is faster).
+
+### 5-3. Colour detection: RGB rules → HSV + class table
+
+| | RGB (first) | **HSV + table (now)** |
+|---|---|---|
+| Method | Compare R, G, B directly, e.g. "R high and G, B low = red" | Convert to hue H (0–359°), saturation S, value V and decide by **hue** (lecture team 3's method). Red H < 20 or ≥ 330, yellow 35–75, green 85–170, white = low saturation and bright |
+| Weakness / strength | Misses dark or faded colours; when exposure changes while driving, all three values shift together | Hue stays the same when brightness changes → **same colour in a dark room or at speed** |
+| Test (17 synthetic scenes) | 12 correct (missed dark red, green, yellow, faded red, dark sign) | **All 17 correct**; floor (beige, wood) and white walls are not signals |
+| Speed | Comparisons for every pixel | A 4096-colour (4 bits per R, G, B) class table (4 KB) built once at boot; per pixel just **one table lookup** → no math |
+
+![Colour ranges the ESP32 uses, and its decision when brightness or saturation changes](docs/img/hsv_ranges.en.png)
+
+
+- **Why**: when the car drove fast, recognition often failed because colours got darker or washed out → HSV separates brightness from hue. HSV is normally slower to compute, but the precomputed table makes it lighter than the RGB comparisons.
+- **HSV view is the fastest video**: no JPEG encoding; only colour classes are packed and sent, and the browser paints them (~1.4 KB per frame; on the same hotspot link JPEG 3–4 fps → HSV 5–11 fps, measured).
+- Turn on **HSV view** in the web camera settings to paint the video with the colour class the ESP32 sees (red, green, yellow, white; grey = not a signal) — useful for tuning under real lighting.
+
+### 5-4. Speed: recognition speed over resolution
+
+| Tried | Result | Chosen |
+|---|---|---|
+| 320x240 colour | Sensor gives only 9–10 fps → ~105 ms per loop | ✗ |
+| Sensor JPEG (hardware compression) + decode | Decoding takes 95 ms → 110 ms per loop | ✗ |
+| Camera clock 24 MHz | Not faster, only more incomplete frames | ✗ (20 MHz) |
+| **160x120 colour, every pixel** | ~48 ms per loop (~20 fps), catches stop signs down to an 11 px radius | ✓ |
+
+- Signal response: ~2 s at first → **~0.1–0.15 s** (confirmed after 2 frames for red, 3 for other colours; a change is sent immediately and repeated every 0.2 s).
+- Per-frame functions run from IRAM with -O2 (flash code and PSRAM frames share the cache, so code would be evicted); each frame is read once and signal counting and video copy share the same row pass. The field of view is already maximal (the OV3660 scales the full sensor even at small sizes; wider needs a wide-angle lens module).
+- **The camera chip is an OV3660 (confirmed on the board 2026-11-18, not an OV2640).** The sensor sets the frame rate: at 160x120 colour the driver runs the sensor clock at 40 MHz, giving **one frame every 45 ms (22.2 fps)** (measured on the VSYNC pin). Of the 48 ms loop only ~7 ms is processing; the rest is waiting for the next frame, so trimming code no longer helps. Raising the sensor clock (PLL multiplier 8 → 10) makes the sensor output 27.8 fps, but the ESP32 can't capture it: incomplete frames rise from 1 to 28 per 10 s, and multiplier 12 breaks almost every frame → left unchanged. Going faster needs an ESP32-S3 board (faster camera input)
 
 ---
 
-## 4. First run
-
-1. In the Arduino IDE, open `arduino/team2_bt_pid/team2_bt_pid.ino` via **File → Open** and upload.
-   (If an old file is still open, the IDE compiles the old content. After downloading a new copy, close the tab and reopen.)
-2. Lift the car so the wheels are free and open the Serial Monitor — **115200 for version C**, 9600 for the diagnostic sketch.
-3. Connect with the phone app (chapter 5).
-4. Checklist
-
-| Try | Correct result |
-|---|---|
-| Right after connecting | Serial shows `링크 O` (link O), app shows "manual · stop" |
-| Hold ▲ | Wheels turn forward, app shows "manual · straight" |
-| Release | Stops immediately |
-| **Auto (자동으로)** | "Switch to auto mode?" → switch → orange banner, stops 0.5 s, then follows the line |
-| Any direction button during auto | Back to manual instantly, moves that way (even during a long manoeuvre) |
-| Close the app / turn off Bluetooth | In manual it stops within 0.6 s; the app shows a red banner "no remote control" |
-| Hand in front of the sensor (10 cm) | Forward is blocked, "obstacle stop" |
-
----
-
-## 5. Apps
+## 6. Apps
 
 ### Android (HC-06)
 - Install: download `gulno.apk` from the [release](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/v1.0) on the phone and install (allow "unknown sources"). To build yourself, open `apps/android` in Android Studio and press ▶.
@@ -259,7 +347,7 @@ Same as the common pin plan in the lecture deck (pp. 131–140). Numbers are the
 
 ---
 
-## 6. How it works
+## 7. How it works
 
 ### Commands (phone → car, one character)
 
@@ -328,7 +416,7 @@ Version C appends error and correction: `ar,23,011,LINE,1,60`. PID values are se
 
 ---
 
-## 7. Debugging
+## 8. Debugging
 
 - The Serial Monitor (115200) prints one line every 0.2–0.3 s:
   - Version C: `링크=O MAN  단계=MAN act=g cmd=g 라인=010 오차=0 보정=0 모터L=150 R=150 거리=230mm 장애물=X`
@@ -355,9 +443,9 @@ Version C appends error and correction: `ar,23,011,LINE,1,60`. PID values are se
 
 ---
 
-## 8. Extra project: ESP32-CAM camera (branch `extra/esp32cam`)
+## 9. Extra project: ESP32-CAM camera (branch `extra/esp32cam`)
 
-**Version D (also submitted)** = version C plus an ESP32-CAM. **The car follows the line with its 3 line sensors + PID; the camera only watches traffic lights and stop signs** (no camera line following — see 9-2). The ESP32 decides the colour itself and sends a signal character to the car over Bluetooth (no PC). Not on `main`; developed only on the branch.
+**Version D (also submitted)** = version C plus an ESP32-CAM. **The car follows the line with its 3 line sensors + PID; the camera only watches traffic lights and stop signs** (no camera line following — see 5-2). The ESP32 decides the colour itself and sends a signal character to the car over Bluetooth (no PC). Not on `main`; developed only on the branch.
 
 ```
  5V external power ──▶ ESP32-CAM ── Wi-Fi ──▶ any phone/laptop: http://gulno-cam.local or http://192.168.4.1
@@ -383,65 +471,3 @@ Red light and stop sign are both red, so they are told apart by **shape**: how m
 | Docs | `docs/CAMERA.md` on the branch (handling, signals and signs, wiring, upload, Wi-Fi, web page, speed and memory, SD recording; Korean), report `docs/REPORT_20261111.md` |
 | Upload | **PlatformIO only** (`cd esp32/esp32cam_line && ~/.pio-venv/bin/pio run -t upload`). Uploading from the Arduino IDE runs out of memory and Bluetooth fails |
 | Status (2026-11-16) | Bluetooth + Wi-Fi + camera together, signal response ~0.1–0.15 s (~20 fps), SD recording and viewer confirmed. HSV, HSV view and direct access (192.168.4.1) are coded and tested offline, not yet measured on the board |
-
----
-
-## 9. What we changed and why: high / low frequency PWM, HSV image processing
-
-### 9-1. Motors: high-frequency PWM (version C) → low-frequency PWM (version E)
-
-PWM switches the motor power on and off very fast and sets the power by the fraction of time it is on (duty). The **frequency** is how many times per second it switches.
-
-![Coil current at 30 % duty, high vs low frequency](docs/img/pwm_high_vs_low.png)
-
-At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is about as long as the coil current takes to rise, so peak force stops at 66 %; with low frequency the pulse (2.5 ms) is long enough to reach 100 % → it beats static friction and the wheel turns (simple RL model; the friction line is an example). Figure labels are in Korean: 켜짐/꺼짐 = on/off, 코일 전류 = 힘 = coil current = force, 순간 최대 = peak.
-
-| | High frequency (version C) | Low frequency (version E) |
-|---|---|---|
-| Frequency | UNO default `analogWrite`: pins 5 and 6 at ~**980 Hz** (~1 ms period) | Timer1 set directly: pins 9 and 10 at ~**122 Hz** (~8 ms period) |
-| Low-speed force | Weak. Short pulses switch off before the coil current builds up → small PWM doesn't turn the wheel | Strong. Long pulses let the current build up each time, so even a small duty turns the wheel |
-| Consequence | Minimum `MIN_PWM` 90 + start kick 255 (0.12 s) to force a start → **jerky** in manual, and at low speed only a whine with no torque | Kick cut to **170 for 0.06 s** → smooth starts and slow driving, easier precise control |
-| Downside | Quiet | Low hum; the servo can't move while driving (Timer1 drives the motors; the servo only needs to face forward once at startup) |
-| Wiring | ENA 5, IN2 9 / ENB 6, IN3 10 | **Swap 5↔9 and 6↔10** (Timer1 outputs only on pins 9 and 10). Swap back for version C |
-
-- **Why**: version C was a half fix that forced starts with a kick and a minimum power. The real cause (low-speed torque) was the PWM frequency; lowering it lets the car start with a much smaller kick. The goal is following the line precisely, not top speed, so we fixed the low frequency.
-- Result (2026-11-16): passed the track, smoother. Version C is kept as-is for rollback. `millis()`, Bluetooth and ultrasonic use Timer0 / SoftwareSerial and are unaffected. Details: "버전 E" at the end of [`docs/PID.md`](docs/PID.md).
-
-### 9-2. Camera: line following → traffic lights and signs only
-
-| First (2026-11-11) | Now (2026-11-16) |
-|---|---|
-| The camera found the floor line, cleaned it with morphology, drew the path and target, and drove from the camera | **No camera line following.** The line is followed by the line sensors + PID (same as version C); the camera only gives signals |
-
-- **Why**: on the track the car was faster than expected, so steering from the camera (~20 fps plus Wi-Fi/Bluetooth delay) was too late. The line sensors + PID already follow the line every 20 ms, so the camera does **one job (watching signals)** — faster and safer. If the camera stops, line following continues, and a red light never times out, so the car stays stopped.
-- Lecture team 4 sends the video to a PC and decides in Python → we decide **inside the ESP32** with no PC (no Wi-Fi video round trip, so it is faster).
-
-### 9-3. Colour detection: RGB rules → HSV + class table
-
-| | RGB (first) | **HSV + table (now)** |
-|---|---|---|
-| Method | Compare R, G, B directly, e.g. "R high and G, B low = red" | Convert to hue H (0–359°), saturation S, value V and decide by **hue** (lecture team 3's method). Red H < 20 or ≥ 330, yellow 35–75, green 85–170, white = low saturation and bright |
-| Weakness / strength | Misses dark or faded colours; when exposure changes while driving, all three values shift together | Hue stays the same when brightness changes → **same colour in a dark room or at speed** |
-| Test (17 synthetic scenes) | 12 correct (missed dark red, green, yellow, faded red, dark sign) | **All 17 correct**; floor (beige, wood) and white walls are not signals |
-| Speed | Comparisons for every pixel | A 4096-colour (4 bits per R, G, B) class table (4 KB) built once at boot; per pixel just **one table lookup** → no math |
-
-![Colour ranges the ESP32 uses, and its decision when brightness or saturation changes](docs/img/hsv_ranges.png)
-
-(Figure labels in Korean: 빨강 red, 노랑 yellow, 초록 green, 흰색 white, 아님 not a signal; columns = bright, a bit dark, dark, faded, faded and dark, very dark.)
-
-- **Why**: when the car drove fast, recognition often failed because colours got darker or washed out → HSV separates brightness from hue. HSV is normally slower to compute, but the precomputed table makes it lighter than the RGB comparisons.
-- **HSV view is the fastest video**: no JPEG encoding; only colour classes are packed and sent, and the browser paints them (~1.4 KB per frame; on the same hotspot link JPEG 3–4 fps → HSV 5–11 fps, measured).
-- Turn on **HSV view** in the web camera settings to paint the video with the colour class the ESP32 sees (red, green, yellow, white; grey = not a signal) — useful for tuning under real lighting.
-
-### 9-4. Speed: recognition speed over resolution
-
-| Tried | Result | Chosen |
-|---|---|---|
-| 320x240 colour | Sensor gives only 9–10 fps → ~105 ms per loop | ✗ |
-| Sensor JPEG (hardware compression) + decode | Decoding takes 95 ms → 110 ms per loop | ✗ |
-| Camera clock 24 MHz | Not faster, only more incomplete frames | ✗ (20 MHz) |
-| **160x120 colour, every pixel** | ~48 ms per loop (~20 fps), catches stop signs down to an 11 px radius | ✓ |
-
-- Signal response: ~2 s at first → **~0.1–0.15 s** (confirmed after 2 frames for red, 3 for other colours; a change is sent immediately and repeated every 0.2 s).
-- Per-frame functions run from IRAM with -O2 (flash code and PSRAM frames share the cache, so code would be evicted); each frame is read once and signal counting and video copy share the same row pass. The field of view is already maximal (the OV3660 scales the full sensor even at small sizes; wider needs a wide-angle lens module).
-- **The camera chip is an OV3660 (confirmed on the board 2026-11-18, not an OV2640).** The sensor sets the frame rate: at 160x120 colour the driver runs the sensor clock at 40 MHz, giving **one frame every 45 ms (22.2 fps)** (measured on the VSYNC pin). Of the 48 ms loop only ~7 ms is processing; the rest is waiting for the next frame, so trimming code no longer helps. Raising the sensor clock (PLL multiplier 8 → 10) makes the sensor output 27.8 fps, but the ESP32 can't capture it: incomplete frames rise from 1 to 28 per 10 s, and multiplier 12 breaks almost every frame → left unchanged. Going faster needs an ESP32-S3 board (faster camera input)
