@@ -8,6 +8,7 @@
  *  보드 : "AI Thinker ESP32-CAM". 올리기는 PlatformIO (docs/CAMERA.md)
  */
 
+#include <esp_coexist.h>
 #include <esp_wifi.h>
 #include "esp_camera.h"
 #include <WiFi.h>
@@ -414,6 +415,9 @@ void btTask(void*) {
   while (heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < BT_NEED) { btFail = true; btWant = false; btScanReq = false; vTaskDelay(pdMS_TO_TICKS(1000)); }
   BT.begin("GULNO-CAM", true, true);       // 마스터(내가 먼저 붙음), BLE 는 안 써서 그 메모리는 돌려받음
   BT.setPin(BT_PIN, strlen(BT_PIN));
+  // 안테나 하나를 와이파이·블루투스가 나눠 씀 : 기본(반반)이면 HC-06 연결 중 와이파이 응답이 약 5초까지 밀려 화면이 멈춤 (2026-11-18 실측).
+  // 와이파이 먼저로 두면 약 0.2초. 차로 가는 글자는 몇 바이트라 블루투스는 틈만 있으면 충분
+  esp_coex_preference_set(ESP_COEX_PREFER_WIFI);
   btReady = true;
   while (true) {
     if (btScanReq) {                       // 주변 기기 찾기 (약 5초)
