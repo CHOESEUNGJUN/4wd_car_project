@@ -258,6 +258,12 @@ Tuning order (one at a time): with **Ki = Kd = 0, raise Kp** until just before i
 
 ### 5-1. Motors: high-frequency PWM (version C) → low-frequency PWM (version E)
 
+**Why low frequency (the goal)** — not the noise.
+1. **Restarting after a stop**: at high frequency a stopped car couldn't roll again at a small PWM (after a red light, a stop sign or an obstacle, or a slow manual start), so a 255 kick forced it and the car jerked forward.
+2. **Control stability**: at low speed the force should stay steady at the PWM value instead of grabbing and slipping, so PID and manual control are precise.
+3. **Low-speed torque**: the same duty gives a higher peak force (torque), which solves both of the above.
+- Result (2026-11-18 driving logs): after stopping at a red light or stop sign, the car started again within 0.1–0.3 s of green. Being quieter is a bonus.
+
 PWM switches the motor power on and off very fast and sets the power by the fraction of time it is on (duty). The **frequency** is how many times per second it switches.
 
 ![Coil current at 30 % duty, high vs low frequency](docs/img/pwm_high_vs_low.en.png)
