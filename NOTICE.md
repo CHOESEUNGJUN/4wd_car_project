@@ -32,8 +32,8 @@ Not stored in this repository (downloaded at build time) unless noted, or linked
 | SwiftUI, CoreBluetooth (Apple SDK) | 아이폰·맥 앱 / iOS and macOS app | Apple SDK license |
 | Web Bluetooth / Web Serial (브라우저 기능 / browser APIs) | `apps/web/index.html` | — |
 
-- **LGPL 부분 / LGPL parts** : 릴리스 펌웨어(`4wd-car-esp32cam-v1.0-*.bin`)에는 LGPL-2.1 인 arduino-esp32 가 링크되어 있습니다. 이 저장소에 펌웨어 소스와 빌드 설정(`esp32/esp32cam_line/platformio.ini`)이 모두 있어서, 누구나 그 라이브러리를 바꿔 다시 빌드·링크할 수 있습니다 ([`docs/ESP32_UPLOAD.md`](docs/ESP32_UPLOAD.md) 방법 B). 라이브러리 소스 : https://github.com/espressif/arduino-esp32 , https://github.com/pioarduino/platform-espressif32
-  The release firmware links arduino-esp32 (LGPL-2.1). This repository contains the complete firmware source and build configuration, so anyone can modify those libraries and rebuild/relink (see [`docs/ESP32_UPLOAD.en.md`](docs/ESP32_UPLOAD.en.md), method B). Library sources at the links above.
+- **LGPL 부분 / LGPL parts** : 릴리스 펌웨어(`4wd-car-esp32cam-v1.0-*.bin`)에는 LGPL-2.1 인 arduino-esp32 가 링크되어 있습니다. 이 저장소에 펌웨어 소스와 빌드 설정(브랜치 `extra/esp32cam` 의 `esp32/esp32cam_line/platformio.ini`)이 모두 있어서, 누구나 그 라이브러리를 바꿔 다시 빌드·링크할 수 있습니다 ([`docs/ESP32_UPLOAD.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/ESP32_UPLOAD.md) 방법 B). 라이브러리 소스 : https://github.com/espressif/arduino-esp32 , https://github.com/pioarduino/platform-espressif32
+  The release firmware links arduino-esp32 (LGPL-2.1). This repository contains the complete firmware source and build configuration, so anyone can modify those libraries and rebuild/relink (see [`docs/ESP32_UPLOAD.en.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/ESP32_UPLOAD.en.md), method B). Library sources at the links above.
 - 라이선스 전문은 각 프로젝트에서 확인하세요 / Full license texts are in each project.
 
 ## 3. 교안과 상표 / Lecture deck and trademarks
