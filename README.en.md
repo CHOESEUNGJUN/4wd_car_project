@@ -293,7 +293,16 @@ At the same average voltage (30 % duty), the high-frequency on-time (0.3 ms) is 
 | Test (17 synthetic scenes) | 12 correct (missed dark red, green, yellow, faded red, dark sign) | **All 17 correct**; floor (beige, wood) and white walls are not signals |
 | Speed | Comparisons for every pixel | A 4096-colour (4 bits per R, G, B) class table (4 KB) built once at boot; per pixel just **one table lookup** → no math |
 
+
+**How it decides**: one camera pixel → colour index (12 bits) → precomputed class table → count per class → decide → Bluetooth letter. The HSV math runs only 4096 times when the table is built at boot; while driving each pixel is a single table lookup, so a frame (19,200 pixels) takes about 7 ms.
+
+![How the HSV decision works: from one camera pixel to the signal letter sent to the car](docs/img/hsv_pipeline.en.png)
+
 ![Colour ranges the ESP32 uses, and its decision when brightness or saturation changes](docs/img/hsv_ranges.en.png)
+
+**Red light vs stop sign**: both are red, so colour alone can't tell them apart → the ESP32 looks at the red blob's **shape**. The phone's red screen almost fills its box (99 %) with no white; the octagon leaves the corners empty (73 %) and has white text in the middle (15 %). Below: the boxes the firmware's rule finds on real frames from the drive.
+
+![Red light vs stop sign](docs/img/sign_vs_red.en.png)
 
 
 - **Why**: when the car drove fast, recognition often failed because colours got darker or washed out → HSV separates brightness from hue. HSV is normally slower to compute, but the precomputed table makes it lighter than the RGB comparisons.
