@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Scope: this MIT license covers the source code written by the team (Arduino
-sketches, ESP32-CAM firmware and web page, apps, tests and tools).
-Photos, videos, figures, drive logs and documentation in this repository and
-its releases are licensed under Creative Commons Attribution 4.0 International
-(CC BY 4.0, https://creativecommons.org/licenses/by/4.0/).
-Third-party components keep their own licenses; see NOTICE.md.
