@@ -131,6 +131,14 @@ The UNO's PWM pins (the ones that can set a speed) belong to **three timers**, a
 - Cost: the servo can't move while driving (the motors use Timer1). The ultrasonic mount servo only needs to face forward once at startup, so that's fine.
 - Why low frequency is the default (low-speed torque, smoothness): [5-1](#5-1-motors-high-frequency-pwm-version-c--low-frequency-pwm-version-e).
 
+**Where 122 Hz comes from**: a timer divides the 16 MHz clock by the **prescaler**, counts one step at a time, and repeats 0 → 255 as a **sawtooth** (Timer0, 256 steps per period) or a **triangle** (Timer1·2, 510 steps per period). The `analogWrite` value is a horizontal line on top; the pin is on while the count is below it.
+
+> frequency = 16,000,000 ÷ (prescaler × steps per period) → Timer1 triangle, prescaler 256: 16,000,000 ÷ (256 × 510) = **122.5 Hz**
+
+![Timer0 default, Timer0 prescaler 256 and Timer1 prescaler 256 at the same 30 % duty (MATLAB)](docs/img/pwm_three_timers.en.png)
+
+The on-ratio (30 %) stays the same; only the length of each pulse grows from 0.31 ms to 2.45 ms. Step-by-step calculation, duty figures (90 · 100 · 120), how far `delay` drifts if Timer0 is changed, and the MATLAB · Simulink files: [`docs/PWM.en.md`](docs/PWM.en.md).
+
 ---
 
 ## 3. First run
