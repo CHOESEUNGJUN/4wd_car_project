@@ -46,7 +46,7 @@ How someone who downloads this repository can build the same car and make it dri
 | 3 digital line sensors (black line = 1) | Left, centre, right at the front |
 | Ultrasonic sensor + servo | Obstacle stop |
 | Bluetooth module **HC-06** (Android) or **HM-10** (iPhone, web) | 9600 bps |
-| Battery (motors) | A fresh battery spins harder → see 4-3, 4-4 |
+| Battery (motors): **six 1.2 V rechargeable cells (7.2 V)** | Freshly charged cells spin harder → see 4-3, 4-4 |
 | Track: bright floor + **black electrical tape (~1.9 cm wide)** | Adjust the corner values on slippery boards |
 
 **1) Get the code** — on GitHub, **Code → Download ZIP** and unzip, or
