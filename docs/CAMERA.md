@@ -245,7 +245,7 @@ ESP32-CAM-MB 에 꽂고 `~/.pio-venv/bin/pio device monitor` (또는 Arduino IDE
 | `SIGN_FILL_MAX` / `SIGN_WHITE_MIN` (ESP) | 80 / 4 (%) | 빨강이 네모 칸을 이보다 덜 채우고 흰색이 이보다 많으면 정지 표지판 |
 | `STOP_WAIT_MS` / `STOP_IGNORE_MS` (ESP) | 3000 / 5000 | 정지 표지판에서 서 있는 시간 / 출발 뒤 같은 표지판 무시 시간 |
 | HSV 기준 (ESP `RED_H1`…`WHITE_V_MIN`) | 빨강 H<20·≥330, 노랑 35~75, 초록 85~170, S≥110, V≥60, 흰색 S≤50·V≥170 | 실제 화면으로 재서 맞춤 (바닥이 주황·갈색이면 `RED_H1` 을 15 로) |
-| `FLASH_DUTY` (ESP) | 30 | 앞 LED 밝기 (0~255). 폰 화면에 비치거나 뜨거우면 낮춤 |
+| `FLASH_DUTY` (ESP) | 20 | 앞 LED 밝기 (0~255). 폰 화면에 비치거나 뜨거우면 낮춤 |
 | `SLOW_BASE` (버전 D) | 100 | 서행 기본 속도 (`MIN_PWM` 90 보다 커야 출발) |
 | `SIG_HOLD_MS` (버전 D) | 1000 | 노랑이 이만큼 안 오면 보통으로 (빨강은 안 풀림) |
 
