@@ -21,7 +21,7 @@
 | Front, bottom | 3 line sensors (left A3 / centre A4 / right A5) |
 | Middle | Arduino UNO + sensor shield, L298N motor driver (low-frequency wiring: ENA 9, IN2 5, ENB 10, IN3 6) |
 | Small breadboard at the front | HC-06 Bluetooth (TXD → D3, RXD → D4) |
-| Rear | AA battery pack (motors); the ESP32-CAM runs from a separate 5 V power bank |
+| Rear | Six 1.2 V AA rechargeable cells (7.2 V, motors); the ESP32-CAM runs from a separate 5 V power bank |
 
 ## 2. What the ESP32-CAM saw (SD recording rec_0012, HSV view)
 

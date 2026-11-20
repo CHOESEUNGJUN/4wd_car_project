@@ -894,7 +894,7 @@ void loop() {
   static uint8_t shownSig = 255;          // 신호가 바뀌면 화면에도 0.2초를 기다리지 않고 바로
   if (millis() - lastPush >= 200 || sigState != shownSig) { lastPush = millis(); shownSig = sigState; pushStatus(); }
   // 화면이 열려 있는 동안(웹소켓 연결) 차에 연결 신호 h 를 0.6초마다 대신 보냄.
-  // 화면을 닫으면 끊겨서 차의 자동 주행이 1.5초 뒤 멈춘다 (앱과 같은 안전장치)
+  // 화면을 닫으면 끊겨서 차의 자동 주행이 5초 뒤 멈춘다 (앱과 같은 안전장치, 차의 AUTO_LINK_MS)
   if (btOn() && millis() - lastViewer < 2500 && millis() - lastHb >= 600) { lastHb = millis(); btSend('h'); }
   // 신호등 : 지금 신호를 차(버전 D)에 0.2초마다 계속 보냄 (2초면 10번. 교안 4팀처럼 한 번이 아니라 계속 보내서 몇 개 놓쳐도 유지).
   // x 빨강 = 정지, v 노랑 = 서행, n 초록·신호 없음 = 보통. 차는 모드를 안 바꾸고 라인센서로 계속 라인을 따라가면서 신호만 따름.
