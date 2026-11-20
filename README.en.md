@@ -24,7 +24,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 - Extra project **ESP32-CAM camera** lives on the branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (chapter 9).
 - **What we changed in driving and image processing, and why: [chapter 5](#5-what-we-changed-and-why-high--low-frequency-pwm-hsv-image-processing)** (high → low frequency PWM, camera line following → traffic lights and signs only, RGB → HSV)
 - **Finished release: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)** (Arduino sketches, ESP32-CAM firmware, Android app, drive logs and videos, how-to) · **Final report: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md)**
-- Next steps: [`docs/NEXT.md`](docs/NEXT.md) (retune signal thresholds, test the Android app on a phone, low-frequency numbers; Korean)
+- Next steps: [`docs/NEXT.md`](docs/NEXT.md) (retune signal thresholds, test the Android app on a phone; Korean)
 
 | Version | Folder | Motor PWM | Camera | Status |
 |---|---|---|---|---|

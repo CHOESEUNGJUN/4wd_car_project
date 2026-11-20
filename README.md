@@ -24,7 +24,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 - 추가 프로젝트 **ESP32-CAM 카메라** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (9장).
 - **주행 방식과 영상 처리를 무엇을, 왜 바꿨는지 : [5장](#5-무엇을-왜-바꿨나--고주파저주파-주행-hsv-영상-처리)** (고주파 → 저주파 PWM, 카메라 라인 인식 → 신호등·표지판만, RGB → HSV)
 - **완성 릴리스 : [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)** (아두이노 스케치, ESP32-CAM 펌웨어, 안드로이드 앱, 주행 기록·영상, 사용법) · **최종 보고서 : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md)**
-- 다음에 할 일 : [`docs/NEXT.md`](docs/NEXT.md) (신호 기준 다시 맞추기, 안드로이드 앱 폰 시험, 저주파 숫자 비교)
+- 다음에 할 일 : [`docs/NEXT.md`](docs/NEXT.md) (신호 기준 다시 맞추기, 안드로이드 앱 폰 시험)
 
 | 버전 | 폴더 | 모터 PWM | 카메라 | 상태 |
 |---|---|---|---|---|
