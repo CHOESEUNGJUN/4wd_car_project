@@ -102,6 +102,44 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 
 ---
 
+## 과제 한눈에 : 원래 과제 + 추가 과제
+
+| | **원래 과제** (교안 2팀) | **추가 과제** (교안 2팀 심화 B "1인칭 시점" 을 넘어서) |
+|---|---|---|
+| 목표 | PID 로 검은 선을 따라가는 자율주행 + 블루투스 수동 / 자동 전환 | ESP32-CAM 이 신호등·정지 표지판을 보고 차가 따르기 (PC 없이 ESP32 안에서 판단) |
+| 만든 것 | 버전 C (PID) → **버전 E** (PID + 저주파 PWM 122.5Hz), 앱 3종 (안드로이드·아이폰·웹), 끊김·장애물 안전장치 | **버전 D** (라인은 라인센서 + PID 그대로, 카메라는 신호만), HSV 색 판단, 웹 화면, SD 기록 |
+| 결과 | **트랙 통과** (2026-11-16, 버전 C·E) | **트랙 통과** (2026-11-18) : 빨간불 7번 정지 (0.21~0.54초), 초록불 4번 출발 (0.11~0.33초), 정지 표지판 5번 3초 정지 |
+| 코드 | `main` 의 [`arduino/`](arduino) | 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 의 `esp32/`, `arduino/*_cam` |
+| 자세히 | [4장 PID](#4-핵심-기술--pid-라인-추종), [5-1 저주파](#5-1-모터--고주파-pwm-버전-c--저주파-pwm-버전-e), [`docs/PWM.md`](docs/PWM.md) | [9장](#9-추가-프로젝트--esp32-cam-카메라-브랜치-extraesp32cam), [`CAMERA.md`](docs/CAMERA.md), [사진·영상](docs/GALLERY.md) |
+
+<p align="center">
+<img src="docs/img/gallery/esp_strip.png" width="62%" alt="ESP32-CAM 이 본 장면 : 빨간불, 초록불, 정지 표지판">
+<img src="docs/img/gallery/drive_0012_red_to_green.gif" width="30%" alt="빨간불에 서 있다가 초록불에 출발"><br>
+<sub>추가 과제 : 차의 ESP32-CAM 이 실제로 본 장면 (SD 기록, HSV 보기) — 빨간불 정지, 초록불 출발, 정지 표지판 3초 정지</sub>
+</p>
+
+**통신**
+
+```
+ [폰 앱 굴노] ──블루투스 클래식 (SPP 9600)──▶ [HC-06] ──D3/D4 소프트웨어 시리얼──▶ [Arduino UNO 차]   ← 원래 과제
+                                                 ▲
+ [ESP32-CAM] ──같은 HC-06 에 블루투스로 붙음 (폰 대신)──┘                                          ← 추가 과제
+      ▲
+      └──와이파이 (내 핫스팟) : 웹 HTTP + 웹소켓──── [폰·노트북 브라우저 http://gulno-cam.local]
+```
+
+| 어디 ↔ 어디 | 방식 | 오가는 것 |
+|---|---|---|
+| 폰 앱 ↔ 차 | 블루투스 클래식 HC-06, 9600bps (아이폰은 HM-10 BLE) | 명령 한 글자 `g b l r q w s a m h` (7장), 차 → 폰 상태 줄 0.2초마다 `ag,23,010,LINE` |
+| ESP32-CAM ↔ 차 | 같은 HC-06 블루투스 (ESP32 가 마스터로 연결) | 신호 글자 `x` 정지 · `v` 서행 · `n` 보통 (0.2초마다), 연결 신호 `h` |
+| 폰·노트북 ↔ ESP32-CAM | 와이파이 (핫스팟), HTTP + 웹소켓 | 웹 화면, HSV 영상, 차 상태, 주행·조종 버튼 |
+
+HC-06 은 한 번에 한 기기만 붙어서, 추가 과제(버전 D)에서는 폰 앱 대신 ESP32 웹 화면으로 조종한다. 글자 약속은 [`PROTOCOL.md`](PROTOCOL.md).
+
+**최종 보고서** : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md) · **완성 릴리스** : [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
+
+---
+
 ## 0. 받아서 쓰기 (처음 보는 사람용)
 
 > 이 장은 ESP32 없이 차만 달리는 순서 (버전 C·E, 폰 앱으로 조종). 카메라를 단 버전 D 는 맨 위 "ESP32-CAM 다루기" 순서대로 (조종은 웹 화면).
