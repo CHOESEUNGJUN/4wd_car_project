@@ -34,6 +34,44 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 
 ---
 
+## The assignment at a glance: original + extra
+
+| | **Original assignment** (lecture deck, team 2) | **Extra assignment** (beyond team 2's advanced task B, "first-person view") |
+|---|---|---|
+| Goal | Follow a black line autonomously with PID + switch between Bluetooth manual and auto | The ESP32-CAM reads traffic lights and stop signs and the car obeys (decided inside the ESP32, no PC) |
+| What we built | Version C (PID) → **version E** (PID + low-frequency PWM 122.5 Hz), 3 apps (Android, iPhone, web), link-loss and obstacle safety | **Version D** (line following unchanged: line sensors + PID; the camera only watches signals), HSV colour detection, web page, SD recording |
+| Result | **Passed the track** (2026-11-16, versions C and E) | **Passed the track** (2026-11-18): stopped at red 7 times (0.21–0.54 s), started on green 4 times (0.11–0.33 s), held 3 s at a stop sign 5 times |
+| Code | [`arduino/`](arduino) on `main` | `esp32/` and `arduino/*_cam` on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) |
+| Details | [ch. 4 PID](#4-core-technique-pid-line-following), [5-1 low frequency](#5-1-motors-high-frequency-pwm-version-c--low-frequency-pwm-version-e), [`docs/PWM.en.md`](docs/PWM.en.md) | [ch. 9](#9-extra-project-esp32-cam-camera-branch-extraesp32cam), [`CAMERA.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/CAMERA.md) (Korean), [photos and videos](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.en.md) |
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/esp_strip.png" width="62%" alt="What the ESP32-CAM saw: red light, green light, stop sign">
+<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/drive_0012_red_to_green.gif" width="30%" alt="Stopped at red, starts on green"><br>
+<sub>Extra assignment: what the car's ESP32-CAM actually saw (SD recording, HSV view) — stop at red, go on green, 3 s stop at a stop sign</sub>
+</p>
+
+**Communication**
+
+```
+ [Gulno phone app] ──Bluetooth Classic (SPP 9600)──▶ [HC-06] ──D3/D4 SoftwareSerial──▶ [Arduino UNO car]   ← original
+                                                        ▲
+ [ESP32-CAM] ──connects to the same HC-06 over Bluetooth (instead of the phone)──┘                       ← extra
+      ▲
+      └──Wi-Fi (your hotspot): web HTTP + WebSocket──── [phone / laptop browser http://gulno-cam.local]
+```
+
+| Between | How | What goes over it |
+|---|---|---|
+| Phone app ↔ car | Bluetooth Classic HC-06, 9600 bps (HM-10 BLE for iPhone) | one-letter commands `g b l r q w s a m h` (ch. 7); car → phone status line every 0.2 s `ag,23,010,LINE` |
+| ESP32-CAM ↔ car | the same HC-06 Bluetooth (the ESP32 connects as master) | signal letters `x` stop · `v` slow · `n` normal (every 0.2 s), heartbeat `h` |
+| Phone / laptop ↔ ESP32-CAM | Wi-Fi (hotspot), HTTP + WebSocket | web page, HSV video, car status, drive and control buttons |
+
+The HC-06 accepts only one device at a time, so in the extra assignment (version D) the car is driven from the ESP32 web page instead of the phone app. Letter protocol: [`PROTOCOL.md`](PROTOCOL.md) (Korean).
+
+**Final report**: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md) · **Release**: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
+
+---
+
 ## 0. Getting started (for newcomers)
 
 How someone who downloads this repository can build the same car and make it drive. Details are in each chapter.
