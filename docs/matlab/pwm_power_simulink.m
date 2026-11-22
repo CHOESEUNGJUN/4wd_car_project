@@ -8,7 +8,7 @@
 % 결과 : 스코프 하나, 값마다 한 칸 (노랑 976.6Hz, 파랑 122.5Hz). 같은 그림을 MATLAB figure 로도 그리고, 명령 창에 평균·최대 전류 표
 % 문서 그림 저장 : export_doc_figures.m 이 lang, exportFile 을 정하고 이 파일을 부름
 
-vals = [90 100 120];        % analogWrite 값. 바꿔서 다시 Run
+if ~exist('vals', 'var'), vals = [30 60 90 120]; end   % analogWrite 값. 명령 창에서 vals = [60 120 200]; 처럼 먼저 정해도 됨
 V  = 7.2;                   % 배터리 전압 : 1.2V 충전지 6개 (L298N 전압 강하는 무시)
 R  = 5;                     % 모터 코일 저항 (옴), 예시값
 Lh = 1.5e-3;                % 모터 코일 인덕턴스 (H), 예시값 -> 시간상수 L/R = 0.3ms

@@ -341,24 +341,25 @@ Tuning order (one at a time): with **Ki = Kd = 0, raise Kp** until just before i
 **Why low frequency (the goal)** — not the noise.
 1. **Restarting after a stop**: at high frequency a stopped car couldn't roll again at a small PWM (after a red light, a stop sign or an obstacle, or a slow manual start), so a 255 kick forced it and the car jerked forward.
 2. **Control stability**: at low speed the force should stay steady at the PWM value instead of grabbing and slipping, so PID and manual control are precise.
-3. **Low-speed torque**: the same `analogWrite` value drives 1.5–1.7× the mean current and 1.25–1.4× the peak current (figure below) → this solves both of the above.
+3. **Low-speed torque**: the same `analogWrite` value drives 1.5–2.6× the mean current and 1.25–2.9× the peak current, more the smaller the value (figure below) → this solves both of the above.
 - Result (2026-11-18 driving logs): after stopping at a red light or stop sign, the car started again within 0.1–0.3 s of green. Being quieter is a bonus.
 
 PWM switches the motor power on and off very fast and sets the power by the fraction of time it is on (duty). The **frequency** is how many times per second it switches.
 
 ![Coil current at the same analogWrite values, original 976.6 Hz vs our 122.5 Hz (MATLAB · Simulink)](docs/img/pwm_coil_current.en.png)
 
-The same `analogWrite` value (90 · 100 · 120) drives a different current (= force) through the motor coil (Simulink model [`pwm_power_simulink.m`](docs/matlab/pwm_power_simulink.m); simple RL model with the wheel stopped, 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH):
+The same `analogWrite` value (30 · 60 · 90 · 120) drives a different current (= force) through the motor coil (Simulink model [`pwm_power_simulink.m`](docs/matlab/pwm_power_simulink.m); simple RL model with the wheel stopped, 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH):
 
 | `analogWrite` | Duty | Original 976.6 Hz: mean / peak | Ours 122.5 Hz: mean / peak |
 |---|---|---|---|
+| 30 | 12 % | 0.05 A / 0.48 A (33 %) | **0.13 A / 1.38 A (96 %)** |
+| 60 | 24 % | 0.15 A / 0.79 A (55 %) | **0.30 A / 1.44 A (100 %)** |
 | 90 | 35 % | 0.28 A / 1.01 A (70 %) | **0.47 A / 1.44 A (100 %)** |
-| 100 | 39 % | 0.33 A / 1.06 A (74 %) | **0.53 A / 1.44 A (100 %)** |
 | 120 | 47 % | 0.43 A / 1.15 A (80 %) | **0.64 A / 1.44 A (100 %)** |
 
-- **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is not the timer counter; it is the **coil current**. When the pin switches on, the current rises along a curve, but it switches off after only 0.36–0.48 ms, so only the start of the curve (almost straight) is used; when it switches off, the L298N pulls the current out fast, so it falls in a straight line. A rising line plus a falling line looks like a triangle, but it is **current that is cut off every time before it fills up**.
-- **The blue line (122.5 Hz)** stays on 2.9–3.8 ms, so it reaches the top (1.44 A) every time and stays flat. The value only sets **how long** that full force lasts.
-- So at the same value the mean force is about 1.5–1.7×, the peak force 1.25–1.4×. That is why, with the original wiring, 90 could not start the wheels and a 255 kick was needed. Full calculation and graphs: [`docs/PWM.en.md`](docs/PWM.en.md).
+- **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is not the timer counter; it is the **coil current**. When the pin switches on, the current rises along a curve, but it switches off after only 0.12–0.48 ms, so only the start of the curve (almost straight) is used; when it switches off, the L298N pulls the current out fast, so it falls in a straight line. A rising line plus a falling line looks like a triangle, but it is **current that is cut off every time before it fills up**.
+- **The blue line (122.5 Hz)** stays on longer (1.0 ms at 30 to 3.8 ms at 120), so it reaches almost the top (1.44 A) every time (96 % even at 30) and stays flat. The value only sets **how long** that full force lasts.
+- So at the same value the mean force is about 1.5–2.6×, the peak force 1.25–2.9×. **The smaller the value, the bigger the gap**: at 30 the 976.6 Hz current peaks at only 33 %, while 122.5 Hz fills to 96 %. That is why, with the original wiring, 90 could not start the wheels and a 255 kick was needed. Full calculation and graphs: [`docs/PWM.en.md`](docs/PWM.en.md).
 - **Why the car only moved at high frequency when the PWM value was raised a lot**: at 976.6 Hz, raising `analogWrite` doesn't give force in proportion, because the current is **cut off every time before it fills up**. In the same simulation, matching the mean current of 90 at 122.5 Hz (0.47 A) takes **about 130** at 976.6 Hz, and the peak current is still only 94 % at 210; it reaches 100 % only at **255 (always on)**. That is why version C needed a **255 start kick** for 0.12 s on top of the 90 minimum (`MIN_PWM`) to get a stopped car moving. At 122.5 Hz even a small value fills up to 1.44 A every time, so a 170 kick for 0.06 s is enough.
 
 | | High frequency (version C) | Low frequency (version E) |
