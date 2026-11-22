@@ -78,6 +78,8 @@ Doubling the prescaler makes each step twice as slow, so the frequency **halves*
 | 60 | 24 % | 0.15 A (11 %) / 0.79 A (55 %) | **0.30 A (21 %) / 1.44 A (100 %)** |
 | 90 | 35 % | 0.28 A (20 %) / 1.01 A (70 %) | **0.47 A (33 %) / 1.44 A (100 %)** |
 | 120 | 47 % | 0.43 A (30 %) / 1.15 A (80 %) | **0.64 A (45 %) / 1.44 A (100 %)** |
+| 130 | 51 % | 0.48 A (33 %) / 1.19 A (82 %) | **0.70 A (48 %) / 1.44 A (100 %)** |
+| 150 | 59 % | 0.58 A (41 %) / 1.25 A (87 %) | **0.81 A (56 %) / 1.44 A (100 %)** |
 
 (Brackets = share of 1.44 A, the current if always on. Simulink model [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): RL model with the wheel stopped (no back-EMF), 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH, on = +V, off = −V through the L298N diodes. These are example values, so the real car's numbers can differ; the difference between the two frequencies goes the same way.)
 
@@ -180,7 +182,7 @@ TCCR1B = _BV(CS12);      // CS = 100: prescaler 256
 All graphs in this document were drawn with MATLAB (run [`matlab/export_doc_figures.m`](matlab/export_doc_figures.m) to save `docs/img/pwm_*.png` again in Korean and English). The coil-current figure is the result of the Simulink model `pwm_power_simulink.m`.
 
 - [`matlab/pwm_shapes.m`](matlab/pwm_shapes.m): draws the toy (TOP 2) sawtooth and triangle, the three timers, and duty 90 / 100 / 120. Open in MATLAB and Run (F5).
-- [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): compares the coil current at 976.6 Hz and 122.5 Hz for analogWrite 30 · 60 · 90 · 120 (one scope panel per value, mean and peak table in the Command Window; set `vals = [...]` in the Command Window to change the values).
+- [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): compares the coil current at 976.6 Hz and 122.5 Hz for analogWrite 30 · 60 · 90 · 120 · 130 · 150 (one scope panel per value, mean and peak table in the Command Window; set `vals = [...]` in the Command Window to change the values).
 - [`matlab/pwm_duty_simulink.m`](matlab/pwm_duty_simulink.m): PWM waveform at 122.5 Hz for analogWrite 90 · 100 · 120 (one scope per value).
 - [`matlab/pwm_timers_simulink.m`](matlab/pwm_timers_simulink.m): builds and runs the Simulink model `pwm_timers`. One row per timer: `Repeating Sequence` (counter) → `<` compare (OCR 77) → PWM output → scope.
 

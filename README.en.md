@@ -278,7 +278,7 @@ PWM switches the motor power on and off very fast and sets the power by the frac
 
 ![Coil current at the same analogWrite values, original 976.6 Hz vs our 122.5 Hz (MATLAB · Simulink)](docs/img/pwm_coil_current.en.png)
 
-The same `analogWrite` value (30 · 60 · 90 · 120) drives a different current (= force) through the motor coil (Simulink model [`pwm_power_simulink.m`](docs/matlab/pwm_power_simulink.m); simple RL model with the wheel stopped, 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH):
+The same `analogWrite` value (30 · 60 · 90 · 120 · 130 · 150) drives a different current (= force) through the motor coil (Simulink model [`pwm_power_simulink.m`](docs/matlab/pwm_power_simulink.m); simple RL model with the wheel stopped, 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH):
 
 | `analogWrite` | Duty | Original 976.6 Hz: mean / peak | Ours 122.5 Hz: mean / peak |
 |---|---|---|---|
@@ -286,6 +286,8 @@ The same `analogWrite` value (30 · 60 · 90 · 120) drives a different current 
 | 60 | 24 % | 0.15 A / 0.79 A (55 %) | **0.30 A / 1.44 A (100 %)** |
 | 90 | 35 % | 0.28 A / 1.01 A (70 %) | **0.47 A / 1.44 A (100 %)** |
 | 120 | 47 % | 0.43 A / 1.15 A (80 %) | **0.64 A / 1.44 A (100 %)** |
+| 130 | 51 % | 0.48 A / 1.19 A (82 %) | **0.70 A / 1.44 A (100 %)** |
+| 150 | 59 % | 0.58 A / 1.25 A (87 %) | **0.81 A / 1.44 A (100 %)** |
 
 - **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is not the timer counter; it is the **coil current**. When the pin switches on, the current rises along a curve, but it switches off after only 0.12–0.48 ms, so only the start of the curve (almost straight) is used; when it switches off, the L298N pulls the current out fast, so it falls in a straight line. A rising line plus a falling line looks like a triangle, but it is **current that is cut off every time before it fills up**.
 - **The blue line (122.5 Hz)** stays on longer (1.0 ms at 30 to 3.8 ms at 120), so it reaches almost the top (1.44 A) every time (96 % even at 30) and stays flat. The value only sets **how long** that full force lasts.

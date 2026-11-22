@@ -78,6 +78,8 @@ PWM 은 모터 전원을 빠르게 켰다 껐다 하는 것이다. 이 켜고 �
 | 60 | 24% | 0.15A (11%) / 0.79A (55%) | **0.30A (21%) / 1.44A (100%)** |
 | 90 | 35% | 0.28A (20%) / 1.01A (70%) | **0.47A (33%) / 1.44A (100%)** |
 | 120 | 47% | 0.43A (30%) / 1.15A (80%) | **0.64A (45%) / 1.44A (100%)** |
+| 130 | 51% | 0.48A (33%) / 1.19A (82%) | **0.70A (48%) / 1.44A (100%)** |
+| 150 | 59% | 0.58A (41%) / 1.25A (87%) | **0.81A (56%) / 1.44A (100%)** |
 
 (괄호 = 계속 켜 두었을 때 1.44A 대비. Simulink 모델 [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m) : 바퀴가 서 있을 때(역기전력 0)의 RL 모델 7.2V (1.2V 충전지 6개)·5Ω·1.5mH, 켜짐 +V, 꺼짐 L298N 다이오드로 −V. 예시값이라 실제 차와 숫자는 다를 수 있고, 두 주파수의 차이 방향은 같다.)
 
@@ -179,7 +181,7 @@ TCCR1B = _BV(CS12);      // CS = 100 : 분주 256
 이 문서의 그래프는 모두 MATLAB 으로 그렸다 ([`matlab/export_doc_figures.m`](matlab/export_doc_figures.m) 을 Run 하면 `docs/img/pwm_*.png` 를 한국어·영어로 다시 저장). 코일 전류 그림은 Simulink 모델 `pwm_power_simulink.m` 을 돌린 결과다.
 
 - [`matlab/pwm_shapes.m`](matlab/pwm_shapes.m) : 장난감(TOP 2) 톱니파·삼각파와 세 타이머, 듀티 90·100·120 을 그린다. MATLAB 에서 열고 Run (F5).
-- [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m) : 같은 analogWrite 30·60·90·120 에서 976.6Hz 와 122.5Hz 의 코일 전류를 비교한다 (스코프 값마다 한 칸, 명령 창에 평균·최대 표. 명령 창에서 `vals = [...]` 로 값을 바꿀 수 있음).
+- [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m) : 같은 analogWrite 30·60·90·120·130·150 에서 976.6Hz 와 122.5Hz 의 코일 전류를 비교한다 (스코프 값마다 한 칸, 명령 창에 평균·최대 표. 명령 창에서 `vals = [...]` 로 값을 바꿀 수 있음).
 - [`matlab/pwm_duty_simulink.m`](matlab/pwm_duty_simulink.m) : 122.5Hz 에서 analogWrite 90·100·120 의 PWM 파형 (값마다 스코프).
 - [`matlab/pwm_timers_simulink.m`](matlab/pwm_timers_simulink.m) : Simulink 모델 `pwm_timers` 를 만들어 돌린다. 한 줄이 타이머 하나 : `Repeating Sequence`(카운터) → `<` 비교(OCR 77) → PWM 출력 → 스코프.
 
