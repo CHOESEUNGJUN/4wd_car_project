@@ -83,6 +83,6 @@ here = fileparts(mfilename('fullpath')); imgDir = out;
 for lang = {'ko', 'en'}
   lang = lang{1};
   if strcmp(lang, 'en'), exportFile = fullfile(imgDir, 'pwm_coil_current.en.png'); else, exportFile = fullfile(imgDir, 'pwm_coil_current.png'); end
-  run(fullfile(here, 'pwm_power_simulink.m'));
+  clear vals; run(fullfile(here, 'pwm_power_simulink.m'));   % 문서 그림은 기본 30·60·90·120
   close(f); close_system('pwm_power', 0);
 end

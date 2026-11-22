@@ -74,13 +74,14 @@ Doubling the prescaler makes each step twice as slow, so the frequency **halves*
 
 | `analogWrite` | Duty | Original 976.6 Hz: mean / peak | Ours 122.5 Hz: mean / peak |
 |---|---|---|---|
+| 30 | 12 % | 0.05 A (3 %) / 0.48 A (33 %) | **0.13 A (9 %) / 1.38 A (96 %)** |
+| 60 | 24 % | 0.15 A (11 %) / 0.79 A (55 %) | **0.30 A (21 %) / 1.44 A (100 %)** |
 | 90 | 35 % | 0.28 A (20 %) / 1.01 A (70 %) | **0.47 A (33 %) / 1.44 A (100 %)** |
-| 100 | 39 % | 0.33 A (23 %) / 1.06 A (74 %) | **0.53 A (37 %) / 1.44 A (100 %)** |
 | 120 | 47 % | 0.43 A (30 %) / 1.15 A (80 %) | **0.64 A (45 %) / 1.44 A (100 %)** |
 
 (Brackets = share of 1.44 A, the current if always on. Simulink model [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): RL model with the wheel stopped (no back-EMF), 7.2 V (six 1.2 V cells) · 5 Ω · 1.5 mH, on = +V, off = −V through the L298N diodes. These are example values, so the real car's numbers can differ; the difference between the two frequencies goes the same way.)
 
-- **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is the **coil current**, not the counter. It rises along a curve but switches off after only 0.36–0.48 ms, so only the start of the curve (almost straight) is used; when off, the L298N pulls the current out fast, so it drops in a straight line. It only looks like a triangle; it is **current cut off every time before it fills up**.
+- **The yellow line (976.6 Hz) looks like a triangle wave, but it is not one.** It is the **coil current**, not the counter. It rises along a curve but switches off after only 0.12–0.48 ms, so only the start of the curve (almost straight) is used; when off, the L298N pulls the current out fast, so it drops in a straight line. It only looks like a triangle; it is **current cut off every time before it fills up**.
 - At 976.6 Hz the time spent pulling the current out is a big share of each period, so a 35 % duty gives only 20 % mean current. At 122.5 Hz that loss is small, so it gives 33 %, close to the duty.
 - **The blue line (122.5 Hz)** reaches 1.44 A every time and stays flat. Raising the value makes it **wider**, not higher.
 
@@ -97,7 +98,7 @@ Doubling the prescaler makes each step twice as slow, so the frequency **halves*
 - Matching the mean current of 90 at 122.5 Hz (0.47 A) takes **about 130** at 976.6 Hz.
 - At 976.6 Hz the peak current is still 94 % at 210 and reaches 100 % only at **255 (always on)**. That is why version C needed a **255 kick** to start a stopped car.
 
-As seen on the Simulink scope (top to bottom 90 / 100 / 120, yellow 976.6 Hz, blue 122.5 Hz):
+As seen on the Simulink scope (top to bottom 30 / 60 / 90 / 120, yellow 976.6 Hz, blue 122.5 Hz):
 
 ![Simulink scope: coil current](img/pwm_simulink_coil_current.png)
 
@@ -179,7 +180,7 @@ TCCR1B = _BV(CS12);      // CS = 100: prescaler 256
 All graphs in this document were drawn with MATLAB (run [`matlab/export_doc_figures.m`](matlab/export_doc_figures.m) to save `docs/img/pwm_*.png` again in Korean and English). The coil-current figure is the result of the Simulink model `pwm_power_simulink.m`.
 
 - [`matlab/pwm_shapes.m`](matlab/pwm_shapes.m): draws the toy (TOP 2) sawtooth and triangle, the three timers, and duty 90 / 100 / 120. Open in MATLAB and Run (F5).
-- [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): compares the coil current at 976.6 Hz and 122.5 Hz for analogWrite 90 · 100 · 120 (one scope panel per value, mean and peak table in the Command Window).
+- [`matlab/pwm_power_simulink.m`](matlab/pwm_power_simulink.m): compares the coil current at 976.6 Hz and 122.5 Hz for analogWrite 30 · 60 · 90 · 120 (one scope panel per value, mean and peak table in the Command Window; set `vals = [...]` in the Command Window to change the values).
 - [`matlab/pwm_duty_simulink.m`](matlab/pwm_duty_simulink.m): PWM waveform at 122.5 Hz for analogWrite 90 · 100 · 120 (one scope per value).
 - [`matlab/pwm_timers_simulink.m`](matlab/pwm_timers_simulink.m): builds and runs the Simulink model `pwm_timers`. One row per timer: `Repeating Sequence` (counter) → `<` compare (OCR 77) → PWM output → scope.
 
