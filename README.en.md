@@ -199,7 +199,7 @@ Checklist in the [chapter 3](#3-first-run) table.
 | Folder | What | When |
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **Version C** car sketch (lecture deck's original wiring) | PID line following + separate outer/inner wheel power in corners. See `docs/PID.md` |
-| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **Default: version E = version C + low-frequency PWM (passed 2026-11-16)** | Motor PWM ~122 Hz: more low-speed torque and smoother (track tested), start kick 170 / 0.06 s. **Swap 4 wires** (ENA 9, IN2 5, ENB 10, IN3 6). With the original wiring, use version C. End of `docs/PID.md` |
+| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **Default: version E = version C + low-frequency PWM (passed 2026-11-16)** | Motor PWM ~122 Hz: more low-speed torque and smoother (track tested), start kick 130 / 0.06 s, PID and speeds tuned for low frequency (2026-11-23). **Swap 4 wires** (ENA 9, IN2 5, ENB 10, IN3 6). With the original wiring, use version C. End of `docs/PID.md` |
 | Camera (extra project) | ESP32-CAM traffic light / stop sign detection (HSV) + Wi-Fi page + Bluetooth | **Only on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam)** (chapter 9) |
 | `arduino/diag/` (Arduino IDE → UNO) | Diagnostic sketch | Only to check that Bluetooth characters arrive and sensors read |
 | `apps/ios_mac/` | iPhone / Mac app (Xcode) | iPhone + **HM-10** |
@@ -347,19 +347,21 @@ Why textbook PID doesn't work as-is, and the fix:
 | Sensors are only 0/1, so the error jumps in **steps** (0 → 1). Normal D lasts only one 20 ms tick and is gone before the motor reacts | D decays by ×0.8 every 20 ms so it lasts ~0.1 s (`D_DECAY` 0.8) |
 | Accumulated I makes the car swing the other way after a curve | Reset I to 0 when the error crosses to the other side, and clamp to ±50 (`I_LIMIT`) |
 | PID alone can't make sharp corners (only an edge sensor sees the line) | Corners use fixed outer 180 / inner −90 instead of PID. Clear I and D when returning to PID so it doesn't jerk |
-| Small gearbox: small PWM values don't turn the wheels | Minimum 90 when non-zero, plus a start kick when the direction changes (version C: 255 for 0.12 s). The cause is that at high frequency (976.6 Hz) the current never fills up → with **version E** (low frequency 122.5 Hz, swap 4 wires) a 170 kick for 0.06 s is enough (5-1) |
+| Small gearbox: small PWM values don't turn the wheels | Minimum 90 when non-zero, plus a start kick when the direction changes (version C: 255 for 0.12 s). The cause is that at high frequency (976.6 Hz) the current never fills up → with **version E** (low frequency 122.5 Hz, swap 4 wires) a kick of 170 → 130 for 0.06 s is enough (5-1) |
 | Sensor spacing (4.9 cm) is wider than the tape (1.9 cm), so the line can sit between sensors → `000`. After an overshooting corner the line is on the other side | Don't turn immediately when lost: PID correction for 0.5 s first, then search last side → other side |
 | The same PWM turns more or less depending on battery voltage | Corner outer set to 180 instead of 220 for a fresh battery (200–220 when weaker) |
 
 ### 4-4. Settings and tuning
 
-Edit the numbers in the `[설정]` (settings) block at the top of the sketch (`motor_control_low_frequency` or `team2_bt_pid`; both use the same PID and corner values) and upload. The error and correction are shown on Serial (115200) and in the app.
+Edit the numbers in the `[설정]` (settings) block at the top of the sketch (`motor_control_low_frequency` or `team2_bt_pid`) and upload. **Low frequency (E) gives 1.5–2.6× the force at the same value, so it has its own values** (2026-11-23); full comparison in [`docs/CODE.en.md`](docs/CODE.en.md) chapter 4. The error and correction are shown on Serial (115200) and in the app.
 
-| Name | Now | Meaning |
+| Name | Value | Meaning |
 |---|---|---|
-| `KP` / `KI` / `KD` | 51 / 0.2 / 30 | P, I, D gains |
-| `BASE` | 120 | base speed on straights |
-| `CORNER_OUT` / `CORNER_IN` | 180 / −90 | outer / inner wheel in corners |
+| `KP` / `KI` / `KD` | C 51 / 0.2 / 30 · **E 30 / 0 / 25** | P, I, D gains |
+| `BASE` | C 120 · **E 90** | base speed on straights |
+| `CORNER_OUT` / `CORNER_IN` | C 180 / −90 · **E 150 / −100** | outer / inner wheel in corners |
+| `MIN_PWM` | C 90 · **E 60** | minimum power when non-zero |
+| `KICK_PWM` / `KICK_MS` | C 255 / 120 ms · **E 130 / 60 ms** | kick on start / direction change |
 | `PID_MS` | 20 | calculation period (ms) |
 | `LOST_PID_MS` / `LOST_STOP_MS` / `BACK_SEARCH_MS` | 500 / 500 / 1000 | line lost: PID correction / search last side / search other side (ms) |
 
@@ -404,7 +406,7 @@ The same `analogWrite` value (30 · 60 · 90 · 120) drives a different current 
 |---|---|---|
 | Frequency | UNO default `analogWrite`: pins 5 and 6 at **976.6 Hz** (1.024 ms period) | Timer1 set directly: pins 9 and 10 at **122.5 Hz** (8.16 ms period) |
 | Low-speed force | Weak. The on-time (0.36 ms at 90) is short, so it switches off before the coil current fills up → at 90: mean 0.28 A, peak 70 % | Strong. The on-time (2.9 ms at 90) is long, so it fills up every time → at 90: mean 0.47 A, peak 100 % |
-| Consequence | Minimum `MIN_PWM` 90 + start kick 255 (0.12 s) to force a start → **jerky** in manual, and at low speed only a whine with no torque | Kick cut to **170 for 0.06 s** → smooth starts and slow driving, easier precise control |
+| Consequence | Minimum `MIN_PWM` 90 + start kick 255 (0.12 s) to force a start → **jerky** in manual, and at low speed only a whine with no torque | Kick cut to **170 for 0.06 s** (11-16), then **130** (11-23) → smooth starts and slow driving, easier precise control |
 | Sound | A high **whine** at low speed (976.6 Hz is right where the ear is most sensitive; the wheel doesn't turn, only the coil vibrates) | **Quieter** (observed 2026-11-16: the wheel actually turns, so the whine is gone; 122 Hz is a low tone the ear hears less) |
 | Downside | None | The servo can't move while driving (Timer1 drives the motors; the servo only needs to face forward once at startup) |
 | Wiring | ENA 5, IN2 9 / ENB 6, IN3 10 | **Swap 5↔9 and 6↔10** (Timer1 outputs only on pins 9 and 10). Swap back for version C |
