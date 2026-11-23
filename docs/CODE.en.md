@@ -76,7 +76,7 @@ TCCR1B = _BV(CS12);      // prescaler 256 → 16,000,000 ÷ 256 ÷ 510 = 122.5 H
 // High frequency: the current never fills up, so push hard and long to start
 const int KICK_PWM = 255;  const unsigned long KICK_MS = 120;
 // Low frequency: force fills even at small values, so a softer, shorter kick
-const int KICK_PWM = 130;  const unsigned long KICK_MS = 60;   // version E (2026-11-23). D low uses 170
+const int KICK_PWM = 130;  const unsigned long KICK_MS = 60;   // versions E and D low (2026-11-23)
 ```
 
 ---
@@ -113,19 +113,21 @@ A stop sign is handled by the ESP32 sending `x` for 3 s and then `n` (the car tr
 
 ## 4. Settings compared (part: settings)
 
-| Name | Meaning | C · D (high freq.) | **E (low freq., tuned 2026-11-23)** | D low (driving-test values) |
-|---|---|---|---|---|
-| `KP` / `KI` / `KD` | PID gains | 51 / 0.2 / 30 | **30 / 0 / 25** | 51 / 0.2 / 30 |
-| `BASE` | straight base speed | 120 | **90** | 120 |
-| `SLOW_BASE` | yellow-light speed | (D) 100 | — | 100 |
-| `CORNER_OUT` / `CORNER_IN` | corner outer / inner (− = backwards) | 180 / −90 | **150 / −100** | 180 / −90 |
-| `MIN_PWM` | minimum power when non-zero | 90 | **60** | 90 |
-| `KICK_PWM` / `KICK_MS` | start kick | 255 / 0.12 s | **130 / 0.06 s** | 170 / 0.06 s |
-| `MAN_FWD` | manual forward / back | 100 | **80** | 100 |
-| `MAN_CURVE_OUT` / `IN` | manual curve | 100 / 80 | **110 / 60** | 100 / 80 |
-| `MAN_SPIN` | manual spin | 130 | **140** | 130 |
+| Name | Meaning | C · D (high freq.) | **E · D low (low freq., tuned 2026-11-23)** |
+|---|---|---|---|
+| `KP` / `KI` / `KD` | PID gains | 51 / 0.2 / 30 | **30 / 0 / 25** |
+| `BASE` | straight base speed | 120 | **90** |
+| `SLOW_BASE` | yellow-light speed (camera versions) | (D) 100 | **(D low) 70** |
+| `CORNER_OUT` / `CORNER_IN` | corner outer / inner (− = backwards) | 180 / −90 | **150 / −100** |
+| `MIN_PWM` | minimum power when non-zero | 90 | **60** |
+| `KICK_PWM` / `KICK_MS` | start kick | 255 / 0.12 s | **130 / 0.06 s** |
+| `MAN_FWD` | manual forward / back | 100 | **80** |
+| `MAN_CURVE_OUT` / `IN` | manual curve | 100 / 80 | **110 / 60** |
+| `MAN_SPIN` | manual spin | 130 | **140** |
 
-**Why version E's values differ**: at low frequency the same `analogWrite` value drives 1.5–2.6× the coil current ([`PWM.en.md`](PWM.en.md)), so with the values tuned for high frequency the car was faster and corrected harder, and weaved on straights. So:
+(The 2026-11-18 camera driving test passed with D low still on the high-frequency values (BASE 120, KP 51 …). The low-frequency values were then tuned on the track and put into both E and D low.)
+
+**Why the low-frequency values differ**: at low frequency the same `analogWrite` value drives 1.5–2.6× the coil current ([`PWM.en.md`](PWM.en.md)), so with the values tuned for high frequency the car was faster and corrected harder, and weaved on straights. So:
 - lower straight speed (`BASE`) and PID gains (`KP`, `KD`), `KI` to 0
 - low frequency has full force even at 60, so the floor (`MIN_PWM`) goes 90 → 60 and the kick to 130
 - a 4WD car skids when it turns and needs a lot of force there, so the corner and turning values go up
