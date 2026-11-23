@@ -1,7 +1,13 @@
-# Drive logs (SD card, 2026-11-18, version D)
+# Drive logs (SD card, version D)
 
 ESP32-CAM SD recordings from the final track test. Every 0.1 s one row. Analysis: [`docs/REPORT_20261116.en.md`](../REPORT_20261116.en.md) chapter 7 (한국어 [`REPORT_20261116.md`](../REPORT_20261116.md)).
-The matching videos (`rec_0011.mjpeg`, `rec_0012.mjpeg`, HSV view) are in the release **4wd-car ESP32 Car Control V1.0**.
+The matching videos (`rec_0011.mjpeg`, `rec_0012.mjpeg`, `rec_0013.mjpeg`, HSV view) are in the release **4wd-car ESP32 Car Control V1.0** (`drive_rec_NNNN.mjpeg`).
+
+| File | Content |
+|---|---|
+| `log_0011.csv` | 55.6 s : line following, red stop, green go, obstacle stop |
+| `log_0012.csv` | 4 min 26 s : red, green, stop signs, obstacles, corners |
+| `log_0013.csv` | additional run, 5 min 15 s : yellow (slow) test — no yellow sign was available, so yellow wheels stood in for the yellow signal — plus red, green, stop sign, obstacle |
 
 | Column | Meaning |
 |---|---|

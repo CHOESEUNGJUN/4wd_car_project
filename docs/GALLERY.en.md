@@ -25,7 +25,9 @@
 
 ## 2. What the ESP32-CAM saw (SD recording rec_0012, HSV view)
 
-![Red light → green light → stop sign](img/gallery/esp_strip.png)
+![Red light → yellow → green light → stop sign](img/gallery/esp_strip.png)
+
+<p align="center"><img src="img/gallery/drive_0013_yellow.gif" width="45%" alt="Judged yellow"><br><sub>log_0013: yellow wheels judged as yellow → slow (no yellow sign, so yellow wheels were used)</sub></p>
 
 | 🔴 Red light → stop | 🟢 Green light → go | 🛑 Stop sign → stop 3 s |
 |---|---|---|

@@ -23,7 +23,7 @@
 
 <p align="center"><img src="docs/img/web_phone.png" width="320" alt="ESP32-CAM 웹 화면 (폰) : 빨간불 인식, 조종, 신호등 인식, SD 기록, 접속 주소, 차 상태"><br><sub>폰으로 본 ESP32-CAM 웹 화면 (예시 화면 : 빨간불 인식 → 테두리 빨강, 차는 RED 로 정지)</sub></p>
 
-![ESP32-CAM 이 본 장면 : 빨간불 → 초록불 → 정지 표지판](docs/img/gallery/esp_strip.png)
+![ESP32-CAM 이 본 장면 : 빨간불 → 노랑 → 초록불 → 정지 표지판](docs/img/gallery/esp_strip.png)
 
 <img src="docs/img/gallery/drive_0012_red_to_green.gif" width="320" alt="차가 직접 찍은 영상 : 빨간불에 서 있다가 초록불에 출발">
 <sub>ESP32-CAM 이 실제로 본 장면 (SD 기록, HSV 보기) : 🔴 빨간불 → 정지, 🟢 초록불 → 출발, 🛑 정지 표지판 → 3초 정지. **사진 더 보기 : [`docs/GALLERY.md`](docs/GALLERY.md)** (차량 사진, ESP 가 본 장면, 주행 중 웹 화면)</sub>
@@ -108,14 +108,14 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 |---|---|---|
 | 목표 | PID 로 검은 선을 따라가는 자율주행 + 블루투스 수동 / 자동 전환 | ESP32-CAM 이 신호등·정지 표지판을 보고 차가 따르기 (PC 없이 ESP32 안에서 판단) |
 | 만든 것 | 버전 C (PID) → **버전 E** (PID + 저주파 PWM 122.5Hz), 앱 3종 (안드로이드·아이폰·웹), 끊김·장애물 안전장치 | **버전 D** (라인은 라인센서 + PID 그대로, 카메라는 신호만), HSV 색 판단, 웹 화면, SD 기록 |
-| 결과 | **트랙 통과** (2026-11-16, 버전 C·E) | **트랙 통과** (2026-11-18) : 빨간불 7번 정지 (0.21\~0.54초), 초록불 4번 출발 (0.11\~0.33초), 정지 표지판 5번 3초 정지 |
+| 결과 | **트랙 통과** (2026-11-16, 버전 C·E) | **트랙 통과** (2026-11-18) : 빨간불 7번 정지 (0.21\~0.54초), 초록불 4번 출발 (0.11\~0.33초), 정지 표지판 5번 3초 정지. 추가 기록에서 노랑 15번 서행 (노란 바퀴로 시험) |
 | 코드 | `main` 의 [`arduino/`](arduino) | 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 의 `esp32/`, `arduino/*_cam` |
 | 자세히 | [4장 PID](#4-핵심-기술--pid-라인-추종), [5-1 저주파](#5-1-모터--고주파-pwm-버전-c--저주파-pwm-버전-e), [`docs/PWM.md`](docs/PWM.md) | [9장](#9-추가-프로젝트--esp32-cam-카메라-브랜치-extraesp32cam), [`CAMERA.md`](docs/CAMERA.md), [사진·영상](docs/GALLERY.md) |
 
 <p align="center">
-<img src="docs/img/gallery/esp_strip.png" width="62%" alt="ESP32-CAM 이 본 장면 : 빨간불, 초록불, 정지 표지판">
+<img src="docs/img/gallery/esp_strip.png" width="62%" alt="ESP32-CAM 이 본 장면 : 빨간불, 노랑, 초록불, 정지 표지판">
 <img src="docs/img/gallery/drive_0012_red_to_green.gif" width="30%" alt="빨간불에 서 있다가 초록불에 출발"><br>
-<sub>추가 과제 : 차의 ESP32-CAM 이 실제로 본 장면 (SD 기록, HSV 보기) — 빨간불 정지, 초록불 출발, 정지 표지판 3초 정지</sub>
+<sub>추가 과제 : 차의 ESP32-CAM 이 실제로 본 장면 (SD 기록, HSV 보기) — 빨간불 정지, 노랑 서행 (노란 표지판 대신 노란 바퀴), 초록불 출발, 정지 표지판 3초 정지</sub>
 </p>
 
 **통신**

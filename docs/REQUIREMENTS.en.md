@@ -225,7 +225,7 @@ if (strchr("xvn", c)) { sigCmd = c; sigAt = millis(); continue; }            // 
 if (signalNow() == 'x') { stopCar(); stage = "RED"; ... return; }           // stop on red
 int left = baseSpeed() + (int)u, right = baseSpeed() - (int)u;              // slow on yellow
 ```
-**Verified** (track, 2026-11-18, SD logs): stopped at red 7 times, started on green 4 times, 3 s stop at a stop sign 5 times. More in report chapters 2–7; car-side changes in [CODE.en.md ch. 3](CODE.en.md).
+**Verified** (track, 2026-11-18, SD logs): stopped at red 7 times, started on green 4 times, 3 s stop at a stop sign 5 times. Additional log_0013: slowed for yellow 15 times (tested with yellow wheels, as there was no yellow sign), stopped at red 4 times in 0.18–0.34 s. More in report chapters 2–7; car-side changes in [CODE.en.md ch. 3](CODE.en.md).
 
 ---
 

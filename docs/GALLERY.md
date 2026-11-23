@@ -25,7 +25,9 @@
 
 ## 2. ESP32-CAM 이 본 장면 (SD 기록 rec_0012, HSV 보기)
 
-![빨간불 → 초록불 → 정지 표지판](img/gallery/esp_strip.png)
+![빨간불 → 노랑 → 초록불 → 정지 표지판](img/gallery/esp_strip.png)
+
+<p align="center"><img src="img/gallery/drive_0013_yellow.gif" width="45%" alt="노랑으로 판단"><br><sub>log_0013 : 노란 바퀴를 노랑으로 판단 → 서행 (노란 표지판이 없어 노란 바퀴로 시험)</sub></p>
 
 | 🔴 빨간불 → 정지 | 🟢 초록불 → 출발 | 🛑 정지 표지판 → 3초 정지 |
 |---|---|---|
