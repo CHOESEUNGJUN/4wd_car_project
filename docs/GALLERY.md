@@ -70,3 +70,12 @@ ESP32-CAM 이 달리면서 스스로 찍어 SD 카드에 남긴 영상 (초당 5
 | 같은 analogWrite 에서 976.6Hz 와 122.5Hz 의 코일 전류, MATLAB·Simulink (README 5-1) | ESP32 가 보는 색 범위 (README 5-3) |
 | ![HSV 판단 흐름](img/hsv_pipeline.png) | ![빨간불 vs 정지 표지판](img/sign_vs_red.png) |
 | HSV 판단 흐름 (README 5-3) | 빨간불과 정지 표지판을 모양으로 가르기 (README 5-3) |
+
+## 부품
+
+**부품 사진**
+
+<table>
+<tr><td align="center" width="25%"><img src="img/parts/line_sensor.jpg" width="200" alt="디지털 라인센서 ×3"><br><sub>디지털 라인센서 ×3<br>적외선 T(송신)·R(수신), 감도 가변저항, GND·VCC·OUT</sub></td><td align="center" width="25%"><img src="img/parts/tt_motor.jpg" width="200" alt="TT 기어모터 ×4"><br><sub>TT 기어모터 ×4<br>노란 감속기 + DC 모터</sub></td><td align="center" width="25%"><img src="img/parts/motors_on_car.jpg" width="200" alt="차에 단 모터·바퀴 (4륜)"><br><sub>차에 단 모터·바퀴 (4륜)</sub></td><td align="center" width="25%"><img src="img/parts/l298n.jpg" width="200" alt="L298N 모터 드라이버"><br><sub>L298N 모터 드라이버<br>ENA·ENB(속도), IN1~IN4(방향), 모터 출력</sub></td></tr>
+<tr><td align="center" width="25%"><img src="img/parts/ultrasonic.jpg" width="200" alt="초음파 HC-SR04 + 서보 SG90"><br><sub>초음파 HC-SR04 + 서보 SG90<br>차 앞, 10cm 안 장애물 정지</sub></td><td align="center" width="25%"><img src="img/parts/esp32cam.jpg" width="200" alt="ESP32-CAM"><br><sub>ESP32-CAM<br>카메라 OV3660, microSD, 흰 LED</sub></td><td align="center" width="25%"><img src="img/parts/hc06_esp32cam.jpg" width="200" alt="HC-06 블루투스 (브레드보드) + ESP32-CAM (MB 보드, 따로 5V) + 서보"><br><sub>HC-06 블루투스 (브레드보드) + ESP32-CAM (MB 보드, 따로 5V) + 서보</sub></td></tr>
+</table>
