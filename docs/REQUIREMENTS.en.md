@@ -217,3 +217,105 @@ TCCR1A = _BV(WGM10);     // 8-bit phase-correct PWM (triangle)
 TCCR1B = _BV(CS12);      // prescaler 256 → 16,000,000 ÷ 256 ÷ 510 = 122.5 Hz
 ```
 **Verified**: passed the track and smoother (11-16), restart after red / sign in 0.1–0.3 s (11-18), less weaving and good starts with the low-frequency values (11-23). Full calculation and graphs: [PWM.en.md](PWM.en.md).
+
+
+---
+
+## Appendix. ESP32-CAM firmware walkthrough
+
+The firmware is [`esp32cam_line.ino`](../esp32/esp32cam_line/esp32cam_line.ino) (~950 lines) + web page [`page.h`](../esp32/esp32cam_line/page.h) + build settings [`platformio.ini`](../esp32/esp32cam_line/platformio.ini). The ESP32 runs on FreeRTOS; image decisions (`loop`) and Bluetooth / web video run as separate tasks so slow wireless never stalls the signal decision. Flashing: [ESP32_UPLOAD.en.md](../docs/ESP32_UPLOAD.en.md) (not the Arduino IDE; PlatformIO).
+
+### A-1. Overall flow
+
+```
+power on → setup() : build colour table → camera → Wi-Fi → web server → SD check → start Bluetooth task
+
+loop() (one frame every 45 ms, core 1)
+  ① grab a frame (160×120 RGB565, PSRAM)
+  ② detectSignal(): per pixel colour table → count red/green/yellow/white → red blob shape → confirm signal
+  ③ pack HSV video to the WebSocket, car status to the page every 0.2 s
+  ④ send x / v / n to the car over Bluetooth (every 0.2 s), h while the page is open
+
+btTask (separate task) : find / connect / reconnect the HC-06
+web server (ESP-IDF task) : web page, settings, WebSocket (control letters → car)
+recTask (only while recording) : video + log to the SD card
+```
+
+### A-2. Where each part is
+
+| Part | Function | What it does | Line |
+|---|---|---|---|
+| Settings | `[설정]` | frame size, colour thresholds (H·S·V), confirm frames, sign thresholds, Bluetooth PIN, video rate | [30](../esp32/esp32cam_line/esp32cam_line.ino#L30) |
+| Colour table | `colorClass()`, `buildColorLut()`, `lutIndex()` | RGB → HSV → red/green/yellow/white/none, 4096 colours tabulated once at start | [65](../esp32/esp32cam_line/esp32cam_line.ino#L65-L82) |
+| SD recording | `recTask()` | rec_NNNN.mjpeg video + log_NNNN.csv log | [219](../esp32/esp32cam_line/esp32cam_line.ino#L219) |
+| Web server | `startServer()`, `route()` | page, settings, device list, video | [387](../esp32/esp32cam_line/esp32cam_line.ino#L387) |
+| Bluetooth | `btTask()` | memory check → start as master → Wi-Fi first → reconnect every 5 s | [411](../esp32/esp32cam_line/esp32cam_line.ino#L411-L447) |
+| Car status | `readCar()` | read the status line the Arduino sends every 0.2 s | [450](../esp32/esp32cam_line/esp32cam_line.ino#L450) |
+| WebSocket | `wsHandler()`, `wsSendAll()`, `pushStatus()` | receive control letters → car, send video / status (non-blocking) | [507](../esp32/esp32cam_line/esp32cam_line.ino#L507-L524) |
+| Wi-Fi | `startWifi()` | join the saved hotspot, else its own Wi-Fi (setup mode) | [648](../esp32/esp32cam_line/esp32cam_line.ino#L648) |
+| Camera | `startCamera()` | OV3660, RGB565 colour, 2 buffers (PSRAM), latest frame | [694](../esp32/esp32cam_line/esp32cam_line.ino#L694-L713) |
+| Start | `setup()` | start everything in order | [715](../esp32/esp32cam_line/esp32cam_line.ino#L715-L740) |
+| **Signal decision** | `detectSignal()` | count colours per pixel, red blob box and white, decide / confirm, pack HSV video | [776](../esp32/esp32cam_line/esp32cam_line.ino#L776-L860) |
+| **Main loop** | `loop()` | frame → decide → video / status → signal to the car | [863](../esp32/esp32cam_line/esp32cam_line.ino#L863-L915) |
+| Web page | `page.h` | HTML/JS: draw HSV video, control buttons, signal detection, SD recording | [page.h](../esp32/esp32cam_line/page.h) |
+
+### A-3. Key code
+
+**① Colour table: compute once at start** ([65–82](../esp32/esp32cam_line/esp32cam_line.ino#L65-L82))
+
+HSV needs division and is slow, so at start each of the 4096 colours (4 bits each of R, G, B) is classified once into a 4 KB table; while driving each pixel is **just one table lookup**. One frame (19,200 pixels) takes about 7 ms.
+
+```cpp
+uint8_t colorClass(int r, int g, int b) {                  // used only to build the table
+  int mx = max(r, max(g, b)), mn = min(r, min(g, b)), d = mx - mn;
+  int v = mx, sat = mx ? d * 255 / mx : 0;
+  if (sat <= WHITE_S_MAX && v >= WHITE_V_MIN) return C_WHITE;        // white: low saturation, bright
+  if (sat < COLOR_S_MIN || v < COLOR_V_MIN || d == 0) return C_NONE;
+  int h = ...;                                                      // hue 0–359°
+  if (h < RED_H1 || h >= RED_H2) return C_RED;
+  if (h >= YEL_H1 && h < YEL_H2) return C_YELLOW;
+  if (h >= GRN_H1 && h < GRN_H2) return C_GREEN;
+  return C_NONE;
+}
+inline int lutIndex(uint16_t p) { return ((p >> 4) & 0xF00) | ((p >> 3) & 0x0F0) | ((p >> 1) & 0x00F); }  // RGB565 → R4 G4 B4
+```
+
+**② Main loop: frame → decide → send** ([863](../esp32/esp32cam_line/esp32cam_line.ino#L863-L915))
+
+```cpp
+camera_fb_t* fb = esp_camera_fb_get();                       // grab a frame (every 45 ms, set by the sensor)
+bool copied = (sigMode || rleOn) && detectSignal(b, wantView); // decide and copy for video in the same pass (frame read once)
+if (rleOn) { ... wsSendAll(rleBuf, rleN, true); }             // send HSV video
+esp_camera_fb_return(fb);
+if (millis() - lastPush >= 200 || sigState != shownSig) pushStatus();   // status to the page
+if (btOn() && ... ) btSend('h');                             // heartbeat while the page is open
+char want = sigState == 1 || stopLeft() ? 'x' : sigState == 3 ? 'v' : 'n';
+if (... want != sentSig || millis() - lastSig >= 200) btSend(want);   // at once on change, else every 0.2 s
+```
+
+**③ Signal decision** ([776–860](../esp32/esp32cam_line/esp32cam_line.ino#L776-L860)) — copies each row to internal memory, looks up each pixel and counts red / green / yellow, marking white and red pixels as bits. Using only rows and columns with more than 3 red pixels and trimming 3 % at each end, it finds the red blob box, then uses fill (red share of the box) and the white share in the centre 60 % to tell a sign (fill < 80 %, white ≥ 4 %) from a red light. Decision code: "Extra 2" above.
+
+**④ Bluetooth task: connect to the HC-06 as master** ([411–447](../esp32/esp32cam_line/esp32cam_line.ino#L411-L447))
+
+```cpp
+while (heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < BT_NEED) { btFail = true; ... }  // do not start without enough memory (avoids freezing)
+BT.begin("GULNO-CAM", true, true);           // master (the ESP32 connects), BLE memory released
+BT.setPin(BT_PIN, strlen(BT_PIN));           // HC-06 PIN 1234
+esp_coex_preference_set(ESP_COEX_PREFER_WIFI);   // one antenna: Wi-Fi first (less web stalling)
+...
+if (btWant && !BT.connected() && millis() - lastTry > 5000) BT.connect(BTAddress(a));   // reconnect every 5 s
+```
+
+**⑤ Web control: forward the letter to the car** ([507–524](../esp32/esp32cam_line/esp32cam_line.ino#L507-L524))
+
+```cpp
+char c = b[0];                                           // one letter from a web button
+if (c == 'k') { ... vidWait = false; return ESP_OK; }   // page acknowledged a video frame → send the next
+if (strchr("gblrsqwam", c) && btOn()) btSend(c);         // same control letters as the app → car over Bluetooth
+```
+
+**⑥ HSV video (no JPEG)** — `detectSignal()` packs the colour class of each run of pixels into one byte (3-bit class + 5-bit run length), sends it over the WebSocket, and the browser (`page.h`) paints it on a canvas. About 1.4 KB per frame, no JPEG compression (~55 ms). The page answers `k` per frame before the next is sent, so video never floods the link and car status stays on time.
+
+**⑦ Wi-Fi · SD** — `startWifi()` joins the saved hotspot; if it cannot, it starts its own Wi-Fi (setup mode) so a phone can enter the hotspot name and password (like a printer). `recTask()` writes video (`rec_NNNN.mjpeg`) and a log (`log_NNNN.csv`: time, signal, colour pixel counts, fill / white, car status) to the SD card while recording is on. All reaction times in the report come from these logs.
+
+**⑧ Memory (platformio.ini)** — With Bluetooth + Wi-Fi + camera together the internal memory (~320 KB) ran out and the board froze. `custom_sdkconfig` in `platformio.ini` rebuilds the ESP32 libraries to put Bluetooth / Wi-Fi memory in external PSRAM first, drop unused Bluetooth audio and GATT, and shrink stacks and buffers → 33–36 KB left even with the HC-06 connected. That is why it cannot be flashed from the Arduino IDE.

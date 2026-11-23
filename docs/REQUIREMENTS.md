@@ -217,3 +217,105 @@ TCCR1A = _BV(WGM10);     // 8비트 위상 보정 PWM (삼각파)
 TCCR1B = _BV(CS12);      // 분주 256 → 16,000,000 ÷ 256 ÷ 510 = 122.5Hz
 ```
 **확인** : 트랙 주행 통과·더 부드러움 (11-16), 빨간불·표지판 뒤 재출발 0.1~0.3초 (11-18), 저주파 값으로 직선 흔들림 감소·출발 양호 (11-23). 계산과 그래프 전체는 [PWM.md](PWM.md).
+
+
+---
+
+## 부록. ESP32-CAM 펌웨어 코드 해설
+
+펌웨어는 [`esp32cam_line.ino`](../esp32/esp32cam_line/esp32cam_line.ino) (약 950줄) + 웹 화면 [`page.h`](../esp32/esp32cam_line/page.h) + 빌드 설정 [`platformio.ini`](../esp32/esp32cam_line/platformio.ini). ESP32 는 FreeRTOS 위에서 돌고, 사진 판단(`loop`)과 블루투스·웹 영상을 다른 작업으로 나눠서 무선이 느려져도 신호 판단이 멈추지 않게 했다. 올리는 방법은 [ESP32_UPLOAD.md](../docs/ESP32_UPLOAD.md) (Arduino IDE 안 됨, PlatformIO).
+
+### A-1. 전체 흐름
+
+```
+켜짐 → setup() : 색 종류표 만들기 → 카메라 → 와이파이 → 웹 서버 → SD 확인 → 블루투스 작업 시작
+
+loop() (45ms 마다 한 장, 1번 코어)
+  ① 카메라 사진 받기 (160×120 RGB565, PSRAM)
+  ② detectSignal() : 칸마다 색 종류표 → 빨강·초록·노랑·흰색 세기 → 빨강 덩어리 모양 → 신호 확정
+  ③ HSV 영상 묶어서 웹소켓으로, 화면에 차 상태 0.2초마다
+  ④ 차에 블루투스로 x / v / n (0.2초마다), 화면이 열려 있으면 h
+
+btTask (따로 작업) : HC-06 찾기·연결·다시 연결
+웹 서버 (ESP-IDF 작업) : 웹 화면, 설정, 웹소켓 (조종 글자 → 차)
+recTask (기록할 때만) : SD 카드에 영상 + 로그
+```
+
+### A-2. 파트별 위치
+
+| 파트 | 함수 | 하는 일 | 줄 |
+|---|---|---|---|
+| 설정 | `[설정]` | 사진 크기, 색 기준(H·S·V), 신호 확정 장수, 표지판 기준, 블루투스 PIN, 영상 속도 | [30](../esp32/esp32cam_line/esp32cam_line.ino#L30) |
+| 색 종류표 | `colorClass()`, `buildColorLut()`, `lutIndex()` | RGB → HSV → 빨강/초록/노랑/흰색/없음, 4096 색을 켤 때 한 번 표로 | [65](../esp32/esp32cam_line/esp32cam_line.ino#L65-L82) |
+| SD 기록 | `recTask()` | rec_NNNN.mjpeg 영상 + log_NNNN.csv 로그 | [219](../esp32/esp32cam_line/esp32cam_line.ino#L219) |
+| 웹 서버 | `startServer()`, `route()` | 웹 화면, 설정, 기기 목록, 영상 | [387](../esp32/esp32cam_line/esp32cam_line.ino#L387) |
+| 블루투스 | `btTask()` | 메모리 확인 → 마스터로 시작 → 와이파이 먼저 → 5초마다 다시 연결 | [411](../esp32/esp32cam_line/esp32cam_line.ino#L411-L447) |
+| 차 상태 받기 | `readCar()` | 아두이노가 0.2초마다 보내는 상태 줄 읽기 | [450](../esp32/esp32cam_line/esp32cam_line.ino#L450) |
+| 웹소켓 | `wsHandler()`, `wsSendAll()`, `pushStatus()` | 조종 글자 받기 → 차로, 영상·상태 보내기 (기다리지 않는 방식) | [507](../esp32/esp32cam_line/esp32cam_line.ino#L507-L524) |
+| 와이파이 | `startWifi()` | 저장된 핫스팟에 붙기, 못 찾으면 자기 와이파이(설정 모드) | [648](../esp32/esp32cam_line/esp32cam_line.ino#L648) |
+| 카메라 | `startCamera()` | OV3660, RGB565 컬러, 버퍼 2장(PSRAM), 가장 최근 사진 | [694](../esp32/esp32cam_line/esp32cam_line.ino#L694-L713) |
+| 시작 | `setup()` | 위 순서대로 켜기 | [715](../esp32/esp32cam_line/esp32cam_line.ino#L715-L740) |
+| **신호 판단** | `detectSignal()` | 칸마다 색 세기, 빨강 덩어리 네모·흰색, 판단·확정, HSV 영상 묶기 | [776](../esp32/esp32cam_line/esp32cam_line.ino#L776-L860) |
+| **한 바퀴** | `loop()` | 사진 → 판단 → 영상·상태 → 차에 신호 | [863](../esp32/esp32cam_line/esp32cam_line.ino#L863-L915) |
+| 웹 화면 | `page.h` | HTML·JS : HSV 영상 칠하기, 조종 버튼, 신호등 인식, SD 기록 | [page.h](../esp32/esp32cam_line/page.h) |
+
+### A-3. 핵심 코드
+
+**① 색 종류표 : 계산은 켤 때 한 번만** ([65–82](../esp32/esp32cam_line/esp32cam_line.ino#L65-L82))
+
+HSV 계산은 나눗셈이 있어 느리다. 그래서 켤 때 R·G·B 를 4비트씩 나눈 4096 색마다 한 번 계산해 표(4KB)에 넣고, 달리는 동안에는 칸마다 **표를 한 번 보기만** 한다. 사진 한 장(19,200칸)이 약 7ms.
+
+```cpp
+uint8_t colorClass(int r, int g, int b) {                  // 표 만들 때만 씀
+  int mx = max(r, max(g, b)), mn = min(r, min(g, b)), d = mx - mn;
+  int v = mx, sat = mx ? d * 255 / mx : 0;
+  if (sat <= WHITE_S_MAX && v >= WHITE_V_MIN) return C_WHITE;        // 흰색 : 채도 낮고 밝음
+  if (sat < COLOR_S_MIN || v < COLOR_V_MIN || d == 0) return C_NONE;
+  int h = ...;                                                      // 색상 0~359°
+  if (h < RED_H1 || h >= RED_H2) return C_RED;
+  if (h >= YEL_H1 && h < YEL_H2) return C_YELLOW;
+  if (h >= GRN_H1 && h < GRN_H2) return C_GREEN;
+  return C_NONE;
+}
+inline int lutIndex(uint16_t p) { return ((p >> 4) & 0xF00) | ((p >> 3) & 0x0F0) | ((p >> 1) & 0x00F); }  // RGB565 → R4 G4 B4
+```
+
+**② 한 바퀴 : 사진 → 판단 → 보내기** ([863](../esp32/esp32cam_line/esp32cam_line.ino#L863-L915))
+
+```cpp
+camera_fb_t* fb = esp_camera_fb_get();                       // 사진 받기 (45ms 마다, 센서가 정함)
+bool copied = (sigMode || rleOn) && detectSignal(b, wantView); // 판단하면서 같은 줄을 영상용으로도 (사진을 한 번만 읽음)
+if (rleOn) { ... wsSendAll(rleBuf, rleN, true); }             // HSV 영상 보내기
+esp_camera_fb_return(fb);
+if (millis() - lastPush >= 200 || sigState != shownSig) pushStatus();   // 화면에 상태
+if (btOn() && ... ) btSend('h');                             // 화면이 열려 있으면 연결 신호
+char want = sigState == 1 || stopLeft() ? 'x' : sigState == 3 ? 'v' : 'n';
+if (... want != sentSig || millis() - lastSig >= 200) btSend(want);   // 바뀌면 바로, 아니면 0.2초마다
+```
+
+**③ 신호 판단** ([776–860](../esp32/esp32cam_line/esp32cam_line.ino#L776-L860)) — 줄마다 내부 메모리로 옮겨 칸마다 표를 보고 빨강·초록·노랑을 세며, 흰색·빨강 칸은 비트로 적어 둔다. 빨강이 3칸 넘는 줄·칸만 보고 양 끝 3% 를 잘라 빨강 덩어리 네모를 잡고, 네모를 빨강이 채운 비율(채움)과 가운데 60% 의 흰색 비율로 표지판(채움 < 80%, 흰색 ≥ 4%)과 빨간불을 가른다. 판단 코드는 위 "추가 2".
+
+**④ 블루투스 작업 : HC-06 에 마스터로 붙기** ([411–447](../esp32/esp32cam_line/esp32cam_line.ino#L411-L447))
+
+```cpp
+while (heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < BT_NEED) { btFail = true; ... }  // 메모리가 모자라면 켜지 않음 (멈춤 방지)
+BT.begin("GULNO-CAM", true, true);           // 마스터 (ESP32 가 먼저 붙음), BLE 메모리는 돌려받음
+BT.setPin(BT_PIN, strlen(BT_PIN));           // HC-06 PIN 1234
+esp_coex_preference_set(ESP_COEX_PREFER_WIFI);   // 안테나 하나 : 와이파이 먼저 (웹이 덜 멈춤)
+...
+if (btWant && !BT.connected() && millis() - lastTry > 5000) BT.connect(BTAddress(a));   // 끊기면 5초마다 다시
+```
+
+**⑤ 웹으로 조종 : 글자를 그대로 차에** ([507–524](../esp32/esp32cam_line/esp32cam_line.ino#L507-L524))
+
+```cpp
+char c = b[0];                                           // 웹 화면 버튼이 보낸 글자 하나
+if (c == 'k') { ... vidWait = false; return ESP_OK; }   // 화면이 영상 한 장을 받았다는 답 → 다음 장
+if (strchr("gblrsqwam", c) && btOn()) btSend(c);         // 앱과 똑같은 조종 글자 → 블루투스로 차에
+```
+
+**⑥ HSV 영상 (JPEG 없이)** — `detectSignal()` 이 칸마다 색 종류를 "종류 3비트 + 이어진 칸 수 5비트" 1바이트로 묶어 웹소켓으로 보내고, 브라우저(`page.h`)가 캔버스에 칠한다. 한 장 약 1.4KB, JPEG 압축(약 55ms)이 없다. 화면이 한 장마다 `k` 로 답해야 다음 장을 보내서 영상이 연결을 다 차지하지 않고 차 상태가 늦지 않는다.
+
+**⑦ 와이파이 · SD** — `startWifi()` 는 저장된 핫스팟에 붙고, 못 찾으면 자기 와이파이(설정 모드)를 켜서 폰으로 핫스팟 이름·암호를 넣게 한다 (프린터처럼). `recTask()` 는 기록 버튼을 누르는 동안 SD 카드에 영상(`rec_NNNN.mjpeg`)과 로그(`log_NNNN.csv` : 시각, 신호, 색 픽셀 수, 채움·흰색, 차 상태)를 쓴다. 보고서의 반응 시간은 모두 이 로그에서 뽑았다.
+
+**⑧ 메모리 (platformio.ini)** — 블루투스 + 와이파이 + 카메라를 같이 켜면 내부 메모리(약 320KB)가 모자라 멈췄다. `platformio.ini` 의 `custom_sdkconfig` 로 ESP32 라이브러리를 다시 빌드해 블루투스·와이파이 메모리를 외부 PSRAM 에 먼저 잡고, 안 쓰는 블루투스 오디오·GATT 를 빼고, 스택·버퍼를 줄였다 → HC-06 연결 중에도 33~36KB 남음. 그래서 Arduino IDE 로는 올릴 수 없다.
