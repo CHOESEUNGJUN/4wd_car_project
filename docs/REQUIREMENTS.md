@@ -196,9 +196,9 @@ else if (obstacleStopped && ++clearCount >= CLEAR_COUNT) obstacleStopped = false
 
 <p align="center"><img src="img/gallery/esp_strip.png" width="90%" alt="ESP32 가 본 장면"></p>
 
-| 빨간불 → 테두리 빨강, 차 정지 | 초록불 → 테두리 초록, 출발 | 정지 표지판 → 테두리 자홍, 3초 정지 |
-|---|---|---|
-| <img src="img/gallery/web_red.jpg" width="260"> | <img src="img/gallery/web_green.jpg" width="260"> | <img src="img/gallery/web_stop.jpg" width="260"> |
+| 빨간불 → 테두리 빨강, 차 정지 | 노랑 → 테두리 노랑, "노랑 : 서행" (노란 바퀴로 시험) | 초록불 → 테두리 초록, 출발 | 정지 표지판 → 테두리 자홍, 3초 정지 |
+|---|---|---|---|
+| <img src="img/gallery/web_red.jpg" width="200"> | <img src="img/gallery/web_yellow.jpg" width="200"> | <img src="img/gallery/web_green.jpg" width="200"> | <img src="img/gallery/web_stop.jpg" width="200"> |
 
 <sub>주행 중 ESP32 웹 화면 (화면 녹화에서 잘라 냄) : HSV 영상, 테두리 = 지금 신호, 차 상태, 조종 버튼</sub>
 

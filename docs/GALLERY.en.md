@@ -58,9 +58,9 @@ Original videos (1,544 frames in all) and logs: `drive_rec_0011/0012.mjpeg` and 
 
 ## 4. The web page while driving (on a phone or laptop)
 
-| Red light | Green light | Stop sign |
-|---|---|---|
-| <img src="img/gallery/web_red.jpg" alt="Web page, red light"> | <img src="img/gallery/web_green.jpg" alt="Web page, green light"> | <img src="img/gallery/web_stop.jpg" alt="Web page, stop sign"> |
+| Red light | Yellow (yellow wheels) | Green light | Stop sign |
+|---|---|---|---|
+| <img src="img/gallery/web_red.jpg" alt="Web page, red light"> | <img src="img/gallery/web_yellow.jpg" alt="Web page, yellow: slow"> | <img src="img/gallery/web_green.jpg" alt="Web page, green light"> | <img src="img/gallery/web_stop.jpg" alt="Web page, stop sign"> |
 
 Left: the HSV video the ESP32 sees (border = current signal). Right: drive buttons, traffic-light recognition and SD recording, car status (mode, action, distance ahead, line sensors, stage). The page UI is in Korean. Full videos: `screen_web_drive_1~3.mp4` in the release.
 

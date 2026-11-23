@@ -196,9 +196,9 @@ else if (obstacleStopped && ++clearCount >= CLEAR_COUNT) obstacleStopped = false
 
 <p align="center"><img src="img/gallery/esp_strip.png" width="90%" alt="What the ESP32 saw"></p>
 
-| Red → red border, car stops | Green → green border, car goes | Stop sign → magenta border, 3 s stop |
-|---|---|---|
-| <img src="img/gallery/web_red.jpg" width="260"> | <img src="img/gallery/web_green.jpg" width="260"> | <img src="img/gallery/web_stop.jpg" width="260"> |
+| Red → red border, car stops | Yellow → yellow border, "yellow: slow" (tested with yellow wheels) | Green → green border, car goes | Stop sign → magenta border, 3 s stop |
+|---|---|---|---|
+| <img src="img/gallery/web_red.jpg" width="200"> | <img src="img/gallery/web_yellow.jpg" width="200"> | <img src="img/gallery/web_green.jpg" width="200"> | <img src="img/gallery/web_stop.jpg" width="200"> |
 
 <sub>The ESP32 web page while driving (cropped from screen recordings): HSV video, border = current signal, car status, control buttons</sub>
 

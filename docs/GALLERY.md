@@ -58,9 +58,9 @@ ESP32-CAM 이 달리면서 스스로 찍어 SD 카드에 남긴 영상 (초당 5
 
 ## 4. 주행 중 웹 화면 (폰·노트북에서 본 것)
 
-| 빨간불 | 초록불 | 정지 표지판 |
-|---|---|---|
-| <img src="img/gallery/web_red.jpg" alt="웹 화면 빨간불"> | <img src="img/gallery/web_green.jpg" alt="웹 화면 초록불"> | <img src="img/gallery/web_stop.jpg" alt="웹 화면 정지 표지판"> |
+| 빨간불 | 노랑 (노란 바퀴) | 초록불 | 정지 표지판 |
+|---|---|---|---|
+| <img src="img/gallery/web_red.jpg" alt="웹 화면 빨간불"> | <img src="img/gallery/web_yellow.jpg" alt="웹 화면 노랑 : 서행"> | <img src="img/gallery/web_green.jpg" alt="웹 화면 초록불"> | <img src="img/gallery/web_stop.jpg" alt="웹 화면 정지 표지판"> |
 
 화면 왼쪽 = ESP32 가 본 HSV 영상 (테두리 = 지금 신호), 오른쪽 = 조종 버튼, 신호등 인식·SD 기록, 차 상태 (모드, 동작, 앞 거리, 라인센서, 단계). 전체 영상 : 릴리스의 `screen_web_drive_1~3.mp4`.
 
