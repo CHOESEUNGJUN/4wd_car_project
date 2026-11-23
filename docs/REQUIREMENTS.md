@@ -26,7 +26,9 @@
 |---|---|---|---|---|---|---|---|
 | 글자 | `g` 전진 | `b` 후진 | `l` 좌회전 | `r` 우회전 | `q` 제자리 좌 | `w` 제자리 우 | `s` 정지 |
 
-<p align="center"><img src="img/app_web_control.png" width="260" alt="웹 조종 앱 화면"><br><sub>웹 조종 앱 (apps/web/index.html) : 연결, 수동·자동 전환, 방향 버튼</sub></p>
+<p align="center"><img src="img/app_web_control.png" width="240" alt="웹 조종 앱 화면"> <img src="img/web_phone.png" width="240" alt="ESP32 웹 화면으로 조종"><br><sub>왼쪽 : 원래 과제의 조종 앱 (apps/web/index.html, 폰 → HC-06) · 오른쪽 : 추가 과제(버전 D)에서 폰으로 연 ESP32 웹 화면 (폰 → 와이파이 → ESP32 → HC-06). 같은 방향 버튼·자동/수동 전환에 카메라 영상, 신호등 인식, 차 상태가 함께 나온다</sub></p>
+
+버전 D 에서는 HC-06 에 ESP32 가 붙어 있어서, 조종 버튼을 누르면 웹 화면 → 와이파이 → ESP32 → 블루투스로 **같은 글자**(`g b l r q w s a m`)가 차에 간다. 차 코드는 앱으로 조종할 때와 똑같다.
 
 **코드** — 차 [`driveManual()`](../arduino/motor_control_low_frequency/motor_control_low_frequency.ino#L330-L341) :
 ```cpp
@@ -168,6 +170,12 @@ else if (obstacleStopped && ++clearCount >= CLEAR_COUNT) obstacleStopped = false
 **설명** : ESP32-CAM 이 160×120 컬러 사진을 45ms 마다 받아 **칸마다 HSV 색 종류표(4096 색)를 한 번 보고** 빨강·초록·노랑·흰색을 센다. 빨강 덩어리의 모양(채움 < 80%, 가운데 흰색 ≥ 4%)으로 정지 표지판과 빨간불을 가른다. 같은 결과가 2~3장 이어지면 확정하고, **HC-06 에 블루투스로 붙어** 차에 `x`(정지)·`v`(서행)·`n`(보통)을 0.2초마다 보낸다. 차는 라인 주행을 계속하면서 이 글자로 멈추거나 속도만 바꾼다. 웹 화면(와이파이)에서 차 조종·상태 보기도 한다.
 
 <p align="center"><img src="img/gallery/esp_strip.png" width="90%" alt="ESP32 가 본 장면"></p>
+
+| 빨간불 → 테두리 빨강, 차 정지 | 초록불 → 테두리 초록, 출발 | 정지 표지판 → 테두리 자홍, 3초 정지 |
+|---|---|---|
+| <img src="img/gallery/web_red.jpg" width="260"> | <img src="img/gallery/web_green.jpg" width="260"> | <img src="img/gallery/web_stop.jpg" width="260"> |
+
+<sub>주행 중 ESP32 웹 화면 (화면 녹화에서 잘라 냄) : HSV 영상, 테두리 = 지금 신호, 차 상태, 조종 버튼</sub>
 
 ![HSV 판단 흐름](img/hsv_pipeline.png)
 

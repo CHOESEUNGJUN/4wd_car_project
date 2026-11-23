@@ -26,7 +26,9 @@ Line numbers point to the default car code, **version E** ([`motor_control_low_f
 |---|---|---|---|---|---|---|---|
 | Letter | `g` forward | `b` back | `l` left | `r` right | `q` spin left | `w` spin right | `s` stop |
 
-<p align="center"><img src="img/app_web_control.png" width="260" alt="Web control app"><br><sub>Web control app (apps/web/index.html): connect, manual/auto switch, direction buttons</sub></p>
+<p align="center"><img src="img/app_web_control.png" width="240" alt="Web control app"> <img src="img/web_phone.png" width="240" alt="Driving from the ESP32 web page"><br><sub>Left: the control app of the original assignment (apps/web/index.html, phone → HC-06) · right: in the extra assignment (version D), the ESP32 web page on a phone (phone → Wi-Fi → ESP32 → HC-06), with the same direction buttons and auto/manual switch plus camera video, traffic-light detection and car status</sub></p>
+
+In version D the ESP32 holds the HC-06, so a button on the web page goes web page → Wi-Fi → ESP32 → Bluetooth and reaches the car as **the same letters** (`g b l r q w s a m`). The car code is exactly the same as with the app.
 
 **Code** — car [`driveManual()`](../arduino/motor_control_low_frequency/motor_control_low_frequency.ino#L330-L341) :
 ```cpp
@@ -168,6 +170,12 @@ else if (obstacleStopped && ++clearCount >= CLEAR_COUNT) obstacleStopped = false
 **How**: the ESP32-CAM grabs a 160×120 colour frame every 45 ms, **looks up each pixel once in an HSV class table (4096 colours)** and counts red, green, yellow and white. The shape of the red blob (fill < 80 %, centre white ≥ 4 %) separates a stop sign from a red light. After 2–3 matching frames it confirms, then, **connected to the HC-06 over Bluetooth**, sends `x` (stop), `v` (slow) or `n` (normal) to the car every 0.2 s. The car keeps following the line and only stops or changes speed. The web page (Wi-Fi) also drives the car and shows its status.
 
 <p align="center"><img src="img/gallery/esp_strip.png" width="90%" alt="What the ESP32 saw"></p>
+
+| Red → red border, car stops | Green → green border, car goes | Stop sign → magenta border, 3 s stop |
+|---|---|---|
+| <img src="img/gallery/web_red.jpg" width="260"> | <img src="img/gallery/web_green.jpg" width="260"> | <img src="img/gallery/web_stop.jpg" width="260"> |
+
+<sub>The ESP32 web page while driving (cropped from screen recordings): HSV video, border = current signal, car status, control buttons</sub>
 
 ![HSV decision flow](img/hsv_pipeline.en.png)
 
