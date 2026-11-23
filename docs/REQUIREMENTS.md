@@ -225,7 +225,7 @@ if (strchr("xvn", c)) { sigCmd = c; sigAt = millis(); continue; }            // 
 if (signalNow() == 'x') { stopCar(); stage = "RED"; ... return; }           // 빨간불 정지
 int left = baseSpeed() + (int)u, right = baseSpeed() - (int)u;              // 노랑이면 서행
 ```
-**확인** (2026-11-18 트랙, SD 기록) : 빨간불 7번 정지, 초록불 4번 출발, 정지 표지판 5번 3초 정지 후 출발. 자세히는 보고서 2\~7장, 차 쪽 변경은 [CODE.md 3장](CODE.md).
+**확인** (2026-11-18 트랙, SD 기록) : 빨간불 7번 정지, 초록불 4번 출발, 정지 표지판 5번 3초 정지 후 출발. 추가 기록 log_0013 : 노랑 15번 서행 (노란 표지판이 없어 노란 바퀴로 시험), 빨간불 4번 정지 0.18\~0.34초. 자세히는 보고서 2\~7장, 차 쪽 변경은 [CODE.md 3장](CODE.md).
 
 ---
 

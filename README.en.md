@@ -40,14 +40,14 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 |---|---|---|
 | Goal | Follow a black line autonomously with PID + switch between Bluetooth manual and auto | The ESP32-CAM reads traffic lights and stop signs and the car obeys (decided inside the ESP32, no PC) |
 | What we built | Version C (PID) → **version E** (PID + low-frequency PWM 122.5 Hz), 3 apps (Android, iPhone, web), link-loss and obstacle safety | **Version D** (line following unchanged: line sensors + PID; the camera only watches signals), HSV colour detection, web page, SD recording |
-| Result | **Passed the track** (2026-11-16, versions C and E) | **Passed the track** (2026-11-18): stopped at red 7 times (0.21–0.54 s), started on green 4 times (0.11–0.33 s), held 3 s at a stop sign 5 times |
+| Result | **Passed the track** (2026-11-16, versions C and E) | **Passed the track** (2026-11-18): stopped at red 7 times (0.21–0.54 s), started on green 4 times (0.11–0.33 s), held 3 s at a stop sign 5 times; in an additional run slowed for yellow 15 times (tested with yellow wheels) |
 | Code | [`arduino/`](arduino) on `main` | `esp32/` and `arduino/*_cam` on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) |
 | Details | [ch. 4 PID](#4-core-technique-pid-line-following), [5-1 low frequency](#5-1-motors-high-frequency-pwm-version-c--low-frequency-pwm-version-e), [`docs/PWM.en.md`](docs/PWM.en.md) | [ch. 9](#9-extra-project-esp32-cam-camera-branch-extraesp32cam), [`CAMERA.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/CAMERA.md) (Korean), [photos and videos](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.en.md) |
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/esp_strip.png" width="62%" alt="What the ESP32-CAM saw: red light, green light, stop sign">
+<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/esp_strip.png" width="62%" alt="What the ESP32-CAM saw: red light, yellow, green light, stop sign">
 <img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/drive_0012_red_to_green.gif" width="30%" alt="Stopped at red, starts on green"><br>
-<sub>Extra assignment: what the car's ESP32-CAM actually saw (SD recording, HSV view) — stop at red, go on green, 3 s stop at a stop sign</sub>
+<sub>Extra assignment: what the car's ESP32-CAM actually saw (SD recording, HSV view) — stop at red, slow on yellow (yellow wheels instead of a yellow sign), go on green, 3 s stop at a stop sign</sub>
 </p>
 
 **Communication**
