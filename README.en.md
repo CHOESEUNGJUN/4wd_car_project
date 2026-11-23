@@ -29,7 +29,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 | Version | Folder | Motor PWM | Camera | Status |
 |---|---|---|---|---|
 | **C** | `arduino/team2_bt_pid/` | High frequency (default 976.6 Hz) | None | **Passed** (2026-11-16, team car code) |
-| **E (default)** | `arduino/motor_control_low_frequency/` | **Low frequency ~122 Hz** (swap 4 wires) | None | **Passed** (2026-11-16, smoother) — [release 1.0.1](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-low-frequency-pwm-pid-control-car-v1.0.1) |
+| **E (default)** | `arduino/motor_control_low_frequency/` | **Low frequency \~122 Hz** (swap 4 wires) | None | **Passed** (2026-11-16, smoother) — [release 1.0.1](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-low-frequency-pwm-pid-control-car-v1.0.1) |
 | D | `arduino/team2_bt_cam/` on branch `extra/esp32cam` (+ low-frequency `motor_control_low_frequency_cam`) | C or E | ESP32-CAM: traffic lights and stop signs (HSV) | **Passed** (2026-11-18, mounted on the low-frequency car on the track: reacted to red, green and stop signs) |
 
 ---
@@ -85,7 +85,7 @@ How someone who downloads this repository can build the same car and make it dri
 | Ultrasonic sensor + servo | Obstacle stop |
 | Bluetooth module **HC-06** (Android) or **HM-10** (iPhone, web) | 9600 bps |
 | Battery (motors): **six 1.2 V rechargeable cells (7.2 V)** | Freshly charged cells spin harder → see 4-3, 4-4 |
-| Track: bright floor + **black electrical tape (~1.9 cm wide)** | Adjust the corner values on slippery boards |
+| Track: bright floor + **black electrical tape (\~1.9 cm wide)** | Adjust the corner values on slippery boards |
 
 **Parts**
 
@@ -137,7 +137,7 @@ Checklist in the [chapter 3](#3-first-run) table.
 | Folder | What | When |
 |---|---|---|
 | `arduino/team2_bt_pid/` (Arduino IDE → UNO) | **Version C** car sketch (lecture deck's original wiring) | PID line following + separate outer/inner wheel power in corners. See `docs/PID.md` |
-| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **Default: version E = version C + low-frequency PWM (passed 2026-11-16)** | Motor PWM ~122 Hz: more low-speed torque and smoother (track tested), start kick 130 / 0.06 s, PID and speeds tuned for low frequency (2026-11-23). **Swap 4 wires** (ENA 9, IN2 5, ENB 10, IN3 6). With the original wiring, use version C. End of `docs/PID.md` |
+| `arduino/motor_control_low_frequency/` (Arduino IDE → UNO) | **Default: version E = version C + low-frequency PWM (passed 2026-11-16)** | Motor PWM \~122 Hz: more low-speed torque and smoother (track tested), start kick 130 / 0.06 s, PID and speeds tuned for low frequency (2026-11-23). **Swap 4 wires** (ENA 9, IN2 5, ENB 10, IN3 6). With the original wiring, use version C. End of `docs/PID.md` |
 | Camera (extra project) | ESP32-CAM traffic light / stop sign detection (HSV) + Wi-Fi page + Bluetooth | **Only on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam)** (chapter 9) |
 | `arduino/diag/` (Arduino IDE → UNO) | Diagnostic sketch | Only to check that Bluetooth characters arrive and sensors read |
 | `apps/ios_mac/` | iPhone / Mac app (Xcode) | iPhone + **HM-10** |
@@ -165,12 +165,12 @@ Same as the common pin plan in the lecture deck (pp. 131–140). Numbers are the
 
 ### 2-1. Why low frequency moves the pins
 
-The UNO's PWM pins (the ones that can set a speed) belong to **three timers**, and each timer has one PWM frequency. Going to low frequency (~122 Hz) means changing one timer's settings.
+The UNO's PWM pins (the ones that can set a speed) belong to **three timers**, and each timer has one PWM frequency. Going to low frequency (\~122 Hz) means changing one timer's settings.
 
 | Timer | PWM pins | Already used by | If its frequency changes |
 |---|---|---|---|
 | Timer0 | **5, 6** | `millis()`, `delay()` (the Arduino clock) | the clock runs wrong, breaking the 20 ms PID period and link-loss detection → **can't change** |
-| Timer1 | **9, 10** | Servo library (only faces forward once at startup) | **free to change** → ~122 Hz |
+| Timer1 | **9, 10** | Servo library (only faces forward once at startup) | **free to change** → \~122 Hz |
 | Timer2 | 3, 11 | pin 3 = Bluetooth receive (D3), pin 11 = motor direction | not free |
 
 - In the lecture deck's wiring the speed pins (ENA, ENB) are on **5 and 6 = Timer0**, whose frequency can't change → move the speed pins to **9 and 10, where Timer1 comes out**.
@@ -282,7 +282,7 @@ Why textbook PID doesn't work as-is, and the fix:
 
 | Problem | Fix |
 |---|---|
-| Sensors are only 0/1, so the error jumps in **steps** (0 → 1). Normal D lasts only one 20 ms tick and is gone before the motor reacts | D decays by ×0.8 every 20 ms so it lasts ~0.1 s (`D_DECAY` 0.8) |
+| Sensors are only 0/1, so the error jumps in **steps** (0 → 1). Normal D lasts only one 20 ms tick and is gone before the motor reacts | D decays by ×0.8 every 20 ms so it lasts \~0.1 s (`D_DECAY` 0.8) |
 | Accumulated I makes the car swing the other way after a curve | Reset I to 0 when the error crosses to the other side, and clamp to ±50 (`I_LIMIT`) |
 | PID alone can't make sharp corners (only an edge sensor sees the line) | Corners use fixed outer 180 / inner −90 instead of PID. Clear I and D when returning to PID so it doesn't jerk |
 | Small gearbox: small PWM values don't turn the wheels | Minimum 90 when non-zero, plus a start kick when the direction changes (version C: 255 for 0.12 s). The cause is that at high frequency (976.6 Hz) the current never fills up → with **version E** (low frequency 122.5 Hz, swap 4 wires) a kick of 170 → 130 for 0.06 s is enough (5-1) |
@@ -358,7 +358,7 @@ The same `analogWrite` value (30 · 60 · 90 · 120) drives a different current 
 |---|---|
 | The camera found the floor line, cleaned it with morphology, drew the path and target, and drove from the camera | **No camera line following.** The line is followed by the line sensors + PID (same as version C); the camera only gives signals |
 
-- **Why**: on the track the car was faster than expected, so steering from the camera (~20 fps plus Wi-Fi/Bluetooth delay) was too late. The line sensors + PID already follow the line every 20 ms, so the camera does **one job (watching signals)** — faster and safer. If the camera stops, line following continues, and a red light never times out, so the car stays stopped.
+- **Why**: on the track the car was faster than expected, so steering from the camera (\~20 fps plus Wi-Fi/Bluetooth delay) was too late. The line sensors + PID already follow the line every 20 ms, so the camera does **one job (watching signals)** — faster and safer. If the camera stops, line following continues, and a red light never times out, so the car stays stopped.
 - Lecture team 4 sends the video to a PC and decides in Python → we decide **inside the ESP32** with no PC (no Wi-Fi video round trip, so it is faster).
 
 ### 5-3. Colour detection: RGB rules → HSV + class table
@@ -383,21 +383,21 @@ The same `analogWrite` value (30 · 60 · 90 · 120) drives a different current 
 
 
 - **Why**: when the car drove fast, recognition often failed because colours got darker or washed out → HSV separates brightness from hue. HSV is normally slower to compute, but the precomputed table makes it lighter than the RGB comparisons.
-- **HSV view is the fastest video**: no JPEG encoding; only colour classes are packed and sent, and the browser paints them (~1.4 KB per frame; on the same hotspot link JPEG 3–4 fps → HSV 5–11 fps, measured).
+- **HSV view is the fastest video**: no JPEG encoding; only colour classes are packed and sent, and the browser paints them (\~1.4 KB per frame; on the same hotspot link JPEG 3–4 fps → HSV 5–11 fps, measured).
 - Turn on **HSV view** in the web camera settings to paint the video with the colour class the ESP32 sees (red, green, yellow, white; grey = not a signal) — useful for tuning under real lighting.
 
 ### 5-4. Speed: recognition speed over resolution
 
 | Tried | Result | Chosen |
 |---|---|---|
-| 320x240 colour | Sensor gives only 9–10 fps → ~105 ms per loop | ✗ |
+| 320x240 colour | Sensor gives only 9–10 fps → \~105 ms per loop | ✗ |
 | Sensor JPEG (hardware compression) + decode | Decoding takes 95 ms → 110 ms per loop | ✗ |
 | Camera clock 24 MHz | Not faster, only more incomplete frames | ✗ (20 MHz) |
-| **160x120 colour, every pixel** | ~48 ms per loop (~20 fps), catches stop signs down to an 11 px radius | ✓ |
+| **160x120 colour, every pixel** | \~48 ms per loop (\~20 fps), catches stop signs down to an 11 px radius | ✓ |
 
-- Signal response: ~2 s at first → **~0.1–0.15 s** (confirmed after 2 frames for red, 3 for other colours; a change is sent immediately and repeated every 0.2 s).
+- Signal response: \~2 s at first → **\~0.1–0.15 s** (confirmed after 2 frames for red, 3 for other colours; a change is sent immediately and repeated every 0.2 s).
 - Per-frame functions run from IRAM with -O2 (flash code and PSRAM frames share the cache, so code would be evicted); each frame is read once and signal counting and video copy share the same row pass. The field of view is already maximal (the OV3660 scales the full sensor even at small sizes; wider needs a wide-angle lens module).
-- **The camera chip is an OV3660 (confirmed on the board 2026-11-18, not an OV2640).** The sensor sets the frame rate: at 160x120 colour the driver runs the sensor clock at 40 MHz, giving **one frame every 45 ms (22.2 fps)** (measured on the VSYNC pin). Of the 48 ms loop only ~7 ms is processing; the rest is waiting for the next frame, so trimming code no longer helps. Raising the sensor clock (PLL multiplier 8 → 10) makes the sensor output 27.8 fps, but the ESP32 can't capture it: incomplete frames rise from 1 to 28 per 10 s, and multiplier 12 breaks almost every frame → left unchanged. Going faster needs an ESP32-S3 board (faster camera input)
+- **The camera chip is an OV3660 (confirmed on the board 2026-11-18, not an OV2640).** The sensor sets the frame rate: at 160x120 colour the driver runs the sensor clock at 40 MHz, giving **one frame every 45 ms (22.2 fps)** (measured on the VSYNC pin). Of the 48 ms loop only \~7 ms is processing; the rest is waiting for the next frame, so trimming code no longer helps. Raising the sensor clock (PLL multiplier 8 → 10) makes the sensor output 27.8 fps, but the ESP32 can't capture it: incomplete frames rise from 1 to 28 per 10 s, and multiplier 12 breaks almost every frame → left unchanged. Going faster needs an ESP32-S3 board (faster camera input)
 
 ---
 
@@ -556,7 +556,7 @@ Red light and stop sign are both red, so they are told apart by **shape**: how m
 | Get it | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (or `git switch extra/esp32cam`) |
 | Docs | `docs/CAMERA.md` on the branch (handling, signals and signs, wiring, upload, Wi-Fi, web page, speed and memory, SD recording; Korean), report `docs/REPORT_20261111.md` |
 | Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/ESP32_UPLOAD.en.md)** |
-| Status (2026-11-18) | Bluetooth + Wi-Fi + camera together, HSV colour detection and HSV view, signal response ~0.1–0.15 s, SD recording confirmed. Mounted on the low-frequency car and passed the track (stopped at red 7 times, started on green 4 times, held 3 s at a stop sign 5 times) |
+| Status (2026-11-18) | Bluetooth + Wi-Fi + camera together, HSV colour detection and HSV view, signal response \~0.1–0.15 s, SD recording confirmed. Mounted on the low-frequency car and passed the track (stopped at red 7 times, started on green 4 times, held 3 s at a stop sign 5 times) |
 
 ---
 
