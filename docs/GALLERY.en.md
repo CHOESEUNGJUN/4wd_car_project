@@ -42,7 +42,7 @@ Video the ESP32-CAM recorded to its SD card while driving (5 frames per second, 
 | 🔴 Waiting at a red light, 🟢 going on green | 🛑 Stop sign → stop 3 s → go |
 |---|---|
 | ![Red to green](img/gallery/drive_0012_red_to_green.gif) | ![Stop sign](img/gallery/drive_0012_stop_sign.gif) |
-| log_0012, 850–859 s: stays stopped (`RED`) while red, back to `LINE` 0.3 s after green | log_0012, 724–731 s: stop sign (magenta border) → `RED` for ~3 s → drives on |
+| log_0012, 850–859 s: stays stopped (`RED`) while red, back to `LINE` 0.3 s after green | log_0012, 724–731 s: stop sign (magenta border) → `RED` for \~3 s → drives on |
 
 **One whole run (log_0011, 55 s at 2× speed)**: manual → auto start → stop on red for 18 s → go on green → obstacle stop → go → stop on red
 

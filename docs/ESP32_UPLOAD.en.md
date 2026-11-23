@@ -13,7 +13,7 @@ The car (Arduino UNO) is uploaded with the Arduino IDE, but **the ESP32-CAM must
 
 ## 0. Why not the Arduino IDE
 
-- The Arduino IDE's ESP32 board package uses **prebuilt ESP32 libraries**, which put Bluetooth and Wi-Fi memory in **internal RAM (~320 KB)**.
+- The Arduino IDE's ESP32 board package uses **prebuilt ESP32 libraries**, which put Bluetooth and Wi-Fi memory in **internal RAM (\~320 KB)**.
 - Our firmware runs **camera + Wi-Fi + Bluetooth (HC-06 link)** at the same time. With the prebuilt libraries there isn't enough internal memory: it **uploads and starts, but freezes or restarts the moment Bluetooth turns on** (tested 2026-11-11).
 - So `esp32/esp32cam_line/platformio.ini` **rebuilds the ESP32 libraries** through `custom_sdkconfig`:
   - Bluetooth and Wi-Fi memory goes to external PSRAM (4 MB) first
@@ -90,7 +90,7 @@ pio device monitor                       # serial monitor (9600, quit with Ctrl+
 
 (Use the command prefix from the table instead of `pio`. On Windows: `cd esp32\esp32cam_line`.)
 
-- **The first build is slow**: it rebuilds the ESP32 libraries with the `platformio.ini` settings, downloading ~2 GB and taking 20–40 min. After that about a minute.
+- **The first build is slow**: it rebuilds the ESP32 libraries with the `platformio.ini` settings, downloading \~2 GB and taking 20–40 min. After that about a minute.
 - If the first build stops part way (`IncompatiblePlatform … v6.2.0-post.1`, missing `.sconsign…tmp`, etc.), **run the same command again**; it continues and finishes.
 - Changing `custom_sdkconfig` in `platformio.ini` rebuilds the libraries (a few minutes).
 - On Windows, keep the repository in a **short path without spaces or non-ASCII characters** (e.g. `C:\work\4wd_car_project`); the build tools can fail on long or non-ASCII paths.

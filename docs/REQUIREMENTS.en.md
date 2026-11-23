@@ -11,7 +11,7 @@ Line numbers point to the default car code, **version E** ([`motor_control_low_f
 | 3 | Auto mode follows the line (PID for stability) | `pidLine()` | ✅ passed (C·E 11-16, D 11-18) |
 | 4 | Parse Bluetooth commands and act | `serviceBT()` | ✅ |
 | 5 | Keep the mode state and branch the control logic | `enum Mode` + `loop()` | ✅ |
-| 6 | React within 300 ms of a Bluetooth command | non-blocking `loop()` | ✅ ~15 ms by design; log figures below |
+| 6 | React within 300 ms of a Bluetooth command | non-blocking `loop()` | ✅ \~15 ms by design; log figures below |
 | Extra 1 | Detect obstacles with the ultrasonic sensor | `updateObstacle()` | ✅ |
 | Extra 2 | ESP32-CAM controls the car and reads traffic lights and signs | ESP32 firmware + `x v n` on the car | ✅ track (11-18) |
 | Extra 3 | Optimise the DC motor PWM frequency | Timer1 122.5 Hz + low-frequency values | ✅ track (11-16, 11-23) |
@@ -68,7 +68,7 @@ void setMode(Mode m) {
 
 ## 3. Auto line following (PID)
 
-**How**: three line sensors (black = 1) give the error: `010` = 0, `011`/`110` = ±1, `001`/`100` = ±2 (corner), `000` = lost. Within ±1, **PID** computes a correction u every 20 ms: left = BASE + u, right = BASE − u. Since the sensors are only 0/1, D is stretched over ~0.1 s (`D_DECAY`) and I is cleared when the error crosses over. Corners (±2) skip PID and turn with outer 150 / inner −100.
+**How**: three line sensors (black = 1) give the error: `010` = 0, `011`/`110` = ±1, `001`/`100` = ±2 (corner), `000` = lost. Within ±1, **PID** computes a correction u every 20 ms: left = BASE + u, right = BASE − u. Since the sensors are only 0/1, D is stretched over \~0.1 s (`D_DECAY`) and I is cleared when the error crosses over. Corners (±2) skip PID and turn with outer 150 / inner −100.
 
 <p align="center"><img src="img/car_front.jpg" width="32%" alt="Front: 3 line sensors, ultrasonic"> <img src="img/gallery/drive_0011_full.gif" width="58%" alt="Line following"><br><sub>Left: front of the car (3 line sensors underneath) · right: auto line following (recorded by the car)</sub></p>
 
@@ -154,21 +154,21 @@ void loop() {
 
 | What takes time | Time | Why |
 |---|---|---|
-| one character over Bluetooth | ~1 ms | at 9600 bps one character = 10 bits ÷ 9600 ≈ 1 ms |
+| one character over Bluetooth | \~1 ms | at 9600 bps one character = 10 bits ÷ 9600 ≈ 1 ms |
 | pause while the ultrasonic sensor measures | max 12 ms (once every 60 ms) | `pulseIn(echoPin, HIGH, 12000)` **waits up to 12 ms** for the echo (about 2 m). `loop()` is paused meanwhile, so a command arriving then is handled right after; incoming characters wait in the buffer and are not lost |
-| handling the command, setting the wheels | ~1–2 ms | `serviceBT()` → `setMode()` / `driveManual()` → `analogWrite` |
-| **total (command → wheels)** | **~15 ms or less** | 1/20 of the 300 ms limit |
+| handling the command, setting the wheels | \~1–2 ms | `serviceBT()` → `setMode()` / `driveManual()` → `analogWrite` |
+| **total (command → wheels)** | **\~15 ms or less** | 1/20 of the 300 ms limit |
 
 **What the 20 ms PID period is** — the interval at which auto mode **looks at the line and corrects the steering** (first line of `pidLine()`: `if (now - lastPid < PID_MS) return;`). With 0/1 sensors more frequent updates add nothing, and the D term needs a steady interval, so it is 20 ms. **Bluetooth commands do not wait for it.**
 
 | Command | Where it is handled | Waits for the 20 ms PID? | Response |
 |---|---|---|---|
-| manual drive `g b l r q w s` | `serviceBT()` stores `cmd`; `driveManual()` sets the wheels in the same pass (PID does not run in manual) | ❌ | ~15 ms |
-| mode switch `a` / `m` | `setMode()` stops and switches at once (auto then holds 0.5 s for safety before driving) | ❌ | ~15 ms (to stop) |
-| direction button during auto (takeover) | `setMode(MANUAL)` at once → stop → drive | ❌ | ~15 ms |
-| red `x` (camera version) | checked in `loop()` **before** PID → stop at once | ❌ | ~15 ms |
-| green `n` | PID was reset on stop (`lastPid = 0`), so it computes on the next pass | ❌ | ~15 ms |
-| yellow `v` | base speed becomes `SLOW_BASE` at the next PID step | ⭕ | up to ~35 ms (15 + 20) |
+| manual drive `g b l r q w s` | `serviceBT()` stores `cmd`; `driveManual()` sets the wheels in the same pass (PID does not run in manual) | ❌ | \~15 ms |
+| mode switch `a` / `m` | `setMode()` stops and switches at once (auto then holds 0.5 s for safety before driving) | ❌ | \~15 ms (to stop) |
+| direction button during auto (takeover) | `setMode(MANUAL)` at once → stop → drive | ❌ | \~15 ms |
+| red `x` (camera version) | checked in `loop()` **before** PID → stop at once | ❌ | \~15 ms |
+| green `n` | PID was reset on stop (`lastPid = 0`), so it computes on the next pass | ❌ | \~15 ms |
+| yellow `v` | base speed becomes `SLOW_BASE` at the next PID step | ⭕ | up to \~35 ms (15 + 20) |
 
 **Why the drive-log figures are larger** — The signal reactions in report chapter 7 (green 0.11–0.33 s, sign 0.10–0.22 s, red 0.21–0.54 s) are measured in the SD logs **from the moment the ESP32 confirms a signal to the moment the reaction shows up in the car's status line**. They include ① the status line only being sent every 0.2 s (up to 0.2 s of logging gap) and ② Bluetooth delay from Wi-Fi and Bluetooth sharing one antenna. The car itself changes the wheels about 15 ms after a command arrives, as above.
 
@@ -248,7 +248,7 @@ TCCR1B = _BV(CS12);      // prescaler 256 → 16,000,000 ÷ 256 ÷ 510 = 122.5 H
 
 ## Appendix. ESP32-CAM firmware walkthrough
 
-The firmware is [`esp32cam_line.ino`](../esp32/esp32cam_line/esp32cam_line.ino) (~950 lines) + web page [`page.h`](../esp32/esp32cam_line/page.h) + build settings [`platformio.ini`](../esp32/esp32cam_line/platformio.ini). The ESP32 runs on FreeRTOS; image decisions (`loop`) and Bluetooth / web video run as separate tasks so slow wireless never stalls the signal decision. Flashing: [ESP32_UPLOAD.en.md](../docs/ESP32_UPLOAD.en.md) (not the Arduino IDE; PlatformIO).
+The firmware is [`esp32cam_line.ino`](../esp32/esp32cam_line/esp32cam_line.ino) (\~950 lines) + web page [`page.h`](../esp32/esp32cam_line/page.h) + build settings [`platformio.ini`](../esp32/esp32cam_line/platformio.ini). The ESP32 runs on FreeRTOS; image decisions (`loop`) and Bluetooth / web video run as separate tasks so slow wireless never stalls the signal decision. Flashing: [ESP32_UPLOAD.en.md](../docs/ESP32_UPLOAD.en.md) (not the Arduino IDE; PlatformIO).
 
 ### A-1. Overall flow
 
@@ -339,8 +339,8 @@ if (c == 'k') { ... vidWait = false; return ESP_OK; }   // page acknowledged a v
 if (strchr("gblrsqwam", c) && btOn()) btSend(c);         // same control letters as the app → car over Bluetooth
 ```
 
-**⑥ HSV video (no JPEG)** — `detectSignal()` packs the colour class of each run of pixels into one byte (3-bit class + 5-bit run length), sends it over the WebSocket, and the browser (`page.h`) paints it on a canvas. About 1.4 KB per frame, no JPEG compression (~55 ms). The page answers `k` per frame before the next is sent, so video never floods the link and car status stays on time.
+**⑥ HSV video (no JPEG)** — `detectSignal()` packs the colour class of each run of pixels into one byte (3-bit class + 5-bit run length), sends it over the WebSocket, and the browser (`page.h`) paints it on a canvas. About 1.4 KB per frame, no JPEG compression (\~55 ms). The page answers `k` per frame before the next is sent, so video never floods the link and car status stays on time.
 
 **⑦ Wi-Fi · SD** — `startWifi()` joins the saved hotspot; if it cannot, it starts its own Wi-Fi (setup mode) so a phone can enter the hotspot name and password (like a printer). `recTask()` writes video (`rec_NNNN.mjpeg`) and a log (`log_NNNN.csv`: time, signal, colour pixel counts, fill / white, car status) to the SD card while recording is on. All reaction times in the report come from these logs.
 
-**⑧ Memory (platformio.ini)** — With Bluetooth + Wi-Fi + camera together the internal memory (~320 KB) ran out and the board froze. `custom_sdkconfig` in `platformio.ini` rebuilds the ESP32 libraries to put Bluetooth / Wi-Fi memory in external PSRAM first, drop unused Bluetooth audio and GATT, and shrink stacks and buffers → 33–36 KB left even with the HC-06 connected. That is why it cannot be flashed from the Arduino IDE.
+**⑧ Memory (platformio.ini)** — With Bluetooth + Wi-Fi + camera together the internal memory (\~320 KB) ran out and the board froze. `custom_sdkconfig` in `platformio.ini` rebuilds the ESP32 libraries to put Bluetooth / Wi-Fi memory in external PSRAM first, drop unused Bluetooth audio and GATT, and shrink stacks and buffers → 33–36 KB left even with the HC-06 connected. That is why it cannot be flashed from the Arduino IDE.
