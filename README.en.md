@@ -68,7 +68,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 
 The HC-06 accepts only one device at a time, so in the extra assignment (version D) the car is driven from the ESP32 web page instead of the phone app. Letter protocol: [`PROTOCOL.md`](PROTOCOL.md) (Korean).
 
-**Final report**: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md) · **Code walkthrough (4 versions, part by part)**: [`docs/CODE.en.md`](docs/CODE.en.md) · **Release**: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
+**Requirements (explanation, code, photos)**: [`docs/REQUIREMENTS.en.md`](docs/REQUIREMENTS.en.md) · **Final report**: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md) · **Code walkthrough (4 versions, part by part)**: [`docs/CODE.en.md`](docs/CODE.en.md) · **Release**: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
 
 ---
 

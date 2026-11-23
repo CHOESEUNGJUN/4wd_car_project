@@ -68,7 +68,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 
 HC-06 은 한 번에 한 기기만 붙어서, 추가 과제(버전 D)에서는 폰 앱 대신 ESP32 웹 화면으로 조종한다. 글자 약속은 [`PROTOCOL.md`](PROTOCOL.md).
 
-**최종 보고서** : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md) · **코드 해설 (버전 4종 비교, 파트별)** : [`docs/CODE.md`](docs/CODE.md) · **완성 릴리스** : [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
+**요구사항별 구현 (설명·코드·사진)** : [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) · **최종 보고서** : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md) · **코드 해설 (버전 4종 비교, 파트별)** : [`docs/CODE.md`](docs/CODE.md) · **완성 릴리스** : [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
 
 ---
 
