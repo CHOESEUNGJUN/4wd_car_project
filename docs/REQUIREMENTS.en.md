@@ -135,17 +135,42 @@ void loop() {
 
 ## 6. Response within 300 ms
 
-**How**: `loop()` has no `delay()`; every pass reads Bluetooth first and updates the wheels right away. The slowest step in a pass is the ultrasonic reading (max 12 ms, once every 60 ms), and one character takes ~1 ms at 9600 bps. So **the wheels change within ~15 ms of a command arriving** (1/20 of the 300 ms limit).
+**How**: the car's `loop()` has no `delay()`. Every pass **reads Bluetooth first** and handles the command in that same pass, so the wheels change right away without waiting for a later pass.
 
-| Timing | Value | Where |
+```cpp
+void loop() {
+  serviceBT();                      // ① read commands: cmd / mode change right here
+  if (millis() - lastPing >= PING_MS) updateObstacle();   // ② ultrasonic once every 60 ms (max 12 ms)
+  if (mode == AUTO) {
+    if (signalNow() == 'x') { stopCar(); ... return; }   // ③ red: stop before PID (camera version)
+    pidLine();                      // ④ auto: returns at once unless 20 ms have passed
+    return;
+  }
+  driveManual(cmd);                 // ⑤ manual: wheels set every pass
+}
+```
+
+**Worst case: about 15 ms**
+
+| What takes time | Time | Why |
 |---|---|---|
-| one character (9600 bps) | ~1 ms | HC-06 |
-| ultrasonic max wait | 12ms (every 60 ms) | [`pulseIn(echoPin, HIGH, 12000)`](../arduino/motor_control_low_frequency/motor_control_low_frequency.ino#L253) |
-| PID period | 20ms | `PID_MS` |
-| command → wheels | **~15 ms or less** | sum of the above |
-| signal → car reaction (drive log, incl. ESP confirmation, Bluetooth, 0.2 s status interval) | green 0.11–0.33 s, sign 0.10–0.22 s, red 0.21–0.54 s | report ch. 7 |
+| one character over Bluetooth | ~1 ms | at 9600 bps one character = 10 bits ÷ 9600 ≈ 1 ms |
+| pause while the ultrasonic sensor measures | max 12 ms (once every 60 ms) | `pulseIn(echoPin, HIGH, 12000)` **waits up to 12 ms** for the echo (about 2 m). `loop()` is paused meanwhile, so a command arriving then is handled right after; incoming characters wait in the buffer and are not lost |
+| handling the command, setting the wheels | ~1–2 ms | `serviceBT()` → `setMode()` / `driveManual()` → `analogWrite` |
+| **total (command → wheels)** | **~15 ms or less** | 1/20 of the 300 ms limit |
 
-The drive-log figures are measured from the status line the car sends every 0.2 s, so they lag by up to that interval, and they include the ESP32 confirmation time (2–3 frames) and Wi-Fi/Bluetooth antenna sharing. The car-side handling itself takes a few ms, as above.
+**What the 20 ms PID period is** — the interval at which auto mode **looks at the line and corrects the steering** (first line of `pidLine()`: `if (now - lastPid < PID_MS) return;`). With 0/1 sensors more frequent updates add nothing, and the D term needs a steady interval, so it is 20 ms. **Bluetooth commands do not wait for it.**
+
+| Command | Where it is handled | Waits for the 20 ms PID? | Response |
+|---|---|---|---|
+| manual drive `g b l r q w s` | `serviceBT()` stores `cmd`; `driveManual()` sets the wheels in the same pass (PID does not run in manual) | ❌ | ~15 ms |
+| mode switch `a` / `m` | `setMode()` stops and switches at once (auto then holds 0.5 s for safety before driving) | ❌ | ~15 ms (to stop) |
+| direction button during auto (takeover) | `setMode(MANUAL)` at once → stop → drive | ❌ | ~15 ms |
+| red `x` (camera version) | checked in `loop()` **before** PID → stop at once | ❌ | ~15 ms |
+| green `n` | PID was reset on stop (`lastPid = 0`), so it computes on the next pass | ❌ | ~15 ms |
+| yellow `v` | base speed becomes `SLOW_BASE` at the next PID step | ⭕ | up to ~35 ms (15 + 20) |
+
+**Why the drive-log figures are larger** — The signal reactions in report chapter 7 (green 0.11–0.33 s, sign 0.10–0.22 s, red 0.21–0.54 s) are measured in the SD logs **from the moment the ESP32 confirms a signal to the moment the reaction shows up in the car's status line**. They include ① the status line only being sent every 0.2 s (up to 0.2 s of logging gap) and ② Bluetooth delay from Wi-Fi and Bluetooth sharing one antenna. The car itself changes the wheels about 15 ms after a command arrives, as above.
 
 ---
 
