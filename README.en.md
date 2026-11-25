@@ -60,7 +60,7 @@
 | Docs | [`docs/CAMERA.md`](docs/CAMERA.md) (Korean): handling, structure, signals, wiring (5V external power), upload, Wi-Fi (printer-style setup), web page, speed and memory, mounting, troubleshooting, SD recording |
 | Command table | [`PROTOCOL.md`](PROTOCOL.md) (`x v n` are version D only) |
 | Reports | [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md) (11-12 → 11-16, English) · [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) (Korean) |
-| Next steps | [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) on `main` (checklist, Korean) |
+| Next steps | [`docs/NEXT.md`](docs/NEXT.md) on `main` (checklist, Korean) |
 | Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](docs/ESP32_UPLOAD.en.md)**  The car is uploaded from the Arduino IDE (default `motor_control_low_frequency_cam`) |
 | Status (2026-11-18) | Confirmed: Bluetooth + Wi-Fi + camera together (after the memory rebuild), web control, HSV colour detection and HSV view (HSV view is the default at power-on), signal response \~0.1–0.15 s, SD recording (keeps the HSV view), **mounted on the low-frequency car (`motor_control_low_frequency_cam`) and passed the track**: stopped at a red light 7 times, started on green 4 times, held 3 s at a stop sign 5 times (logs in `docs/drive_logs/`). Camera line detection and camera driving removed by the principle change. The ESP's own Wi-Fi (192.168.4.1) only comes up when the hotspot can't be found. Android app not yet tested on a phone |
 
@@ -82,7 +82,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 <img src="docs/img/car_side.jpg" width="23%" alt="Side">
 <img src="docs/img/car_rear.jpg" width="23%" alt="Rear">
 <img src="docs/img/car_bt.jpg" width="23%" alt="HC-06 Bluetooth">
-<br><sub>The finished car (2026-11-18): front · side · rear · HC-06 Bluetooth</sub>
+<br><sub>The finished car (2026-11-18): front · side · rear · HC-06 Bluetooth — <b><a href="docs/GALLERY.en.md">more photos</a></b> (what the ESP32-CAM saw, the web page while driving)</sub>
 </p>
 
 - Folders: **`arduino/`** = code uploaded to the UNO (the car) with the Arduino IDE. The camera (ESP32, PlatformIO) lives in **`esp32/`** on the branch `extra/esp32cam`.
@@ -92,7 +92,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 - Extra project **ESP32-CAM camera** lives on the branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (chapter 9).
 - **What we changed in driving and image processing, and why: [chapter 5](#5-what-we-changed-and-why-high--low-frequency-pwm-hsv-image-processing)** (high → low frequency PWM, camera line following → traffic lights and signs only, RGB → HSV)
 - **Finished release: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)** (Arduino sketches, ESP32-CAM firmware, Android app, drive logs and videos, how-to) · **Final report: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md)**
-- Next steps: [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) (retune signal thresholds, test the Android app on a phone; Korean)
+- Next steps: [`docs/NEXT.md`](docs/NEXT.md) (retune signal thresholds, test the Android app on a phone; Korean)
 
 | Version | Folder | Motor PWM | Camera | Status |
 |---|---|---|---|---|

@@ -60,7 +60,7 @@
 | 설명 | [`docs/CAMERA.md`](docs/CAMERA.md) : 다루기, 구조, 신호등, 배선(5V 외부 전원), 올리기, 와이파이(프린터처럼), 웹 화면, 속도·메모리, 카메라 달기, 문제 해결, SD 기록 |
 | 명령표 | [`PROTOCOL.md`](PROTOCOL.md) (`x v n` 은 버전 D 만) |
 | 작업 보고 | [`docs/REPORT_20261111.md`](docs/REPORT_20261111.md) : 잘된 점, 안된 점, 앞으로 할 것 |
-| 다음에 할 일 | `main` 의 [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) (체크리스트) |
+| 다음에 할 일 | `main` 의 [`docs/NEXT.md`](docs/NEXT.md) (체크리스트) |
 | 업로드 | **Arduino IDE 로 올리면 안 됨** (미리 만든 라이브러리라 블루투스를 켜면 메모리 부족으로 멈춤). 완성 펌웨어(`.bin`)를 크롬·esptool 로 올리거나 PlatformIO 로 빌드 → **[ESP32 올리기 안내 (윈도우·리눅스·맥)](docs/ESP32_UPLOAD.md)**  차는 Arduino IDE 로 (기본 `motor_control_low_frequency_cam`) |
 | 지금 상태 (2026-11-18) | 확인됨 : 블루투스 + 와이파이 + 카메라 동시 동작 (메모리 다시 빌드 후), 웹 조종, HSV 색 판단·HSV 보기(전원을 켜면 HSV 보기가 기본), 신호 반응 약 0.1\~0.15초, SD 기록(HSV 보기 그대로), **저주파 차(`motor_control_low_frequency_cam`)에 달고 트랙 주행 통과** : 빨간불 7번 정지, 초록불 4번 출발, 정지 표지판 5번 3초 정지 (기록 `docs/drive_logs/`). 원칙 변경으로 카메라 라인 인식·카메라 주행은 뺌. ESP 자기 와이파이(192.168.4.1)는 핫스팟을 못 찾을 때만. 안드로이드 앱 폰 시험은 아직 |
 
@@ -82,7 +82,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 <img src="docs/img/car_side.jpg" width="23%" alt="옆">
 <img src="docs/img/car_rear.jpg" width="23%" alt="뒤">
 <img src="docs/img/car_bt.jpg" width="23%" alt="HC-06 블루투스">
-<br><sub>완성 차량 (2026-11-18) : 앞 · 옆 · 뒤 · HC-06 블루투스</sub>
+<br><sub>완성 차량 (2026-11-18) : 앞 · 옆 · 뒤 · HC-06 블루투스 — <b><a href="docs/GALLERY.md">사진 더 보기</a></b> (ESP32-CAM 이 본 장면, 주행 중 웹 화면)</sub>
 </p>
 
 - 폴더 : **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 코드. 카메라(ESP32, PlatformIO)는 브랜치 `extra/esp32cam` 의 **`esp32/`** 에 있다.
@@ -92,7 +92,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 - 추가 프로젝트 **ESP32-CAM 카메라** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (9장).
 - **주행 방식과 영상 처리를 무엇을, 왜 바꿨는지 : [5장](#5-무엇을-왜-바꿨나--고주파저주파-주행-hsv-영상-처리)** (고주파 → 저주파 PWM, 카메라 라인 인식 → 신호등·표지판만, RGB → HSV)
 - **완성 릴리스 : [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)** (아두이노 스케치, ESP32-CAM 펌웨어, 안드로이드 앱, 주행 기록·영상, 사용법) · **최종 보고서 : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md)**
-- 다음에 할 일 : [`docs/NEXT.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/docs/NEXT.md) (신호 기준 다시 맞추기, 안드로이드 앱 폰 시험)
+- 다음에 할 일 : [`docs/NEXT.md`](docs/NEXT.md) (신호 기준 다시 맞추기, 안드로이드 앱 폰 시험)
 
 | 버전 | 폴더 | 모터 PWM | 카메라 | 상태 |
 |---|---|---|---|---|
