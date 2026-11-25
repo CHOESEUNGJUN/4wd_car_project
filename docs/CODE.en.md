@@ -143,4 +143,4 @@ A stop sign is handled by the ESP32 sending `x` for 3 s and then `n` (the car tr
 | Camera, wires swapped | `motor_control_low_frequency_cam` (D low) |
 | Camera, original wiring | `team2_bt_cam` (D) |
 
-**The wiring and the code must match**: uploading low-frequency code to the original wiring swaps the speed and direction pins and the wheels behave strangely. Wiring: [README chapter 2](../README.en.md#2-wiring).
+**The wiring and the code must match**: uploading low-frequency code to the original wiring swaps the speed and direction pins and the wheels behave strangely. Wiring: [README chapter 2](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.en.md#2-wiring).

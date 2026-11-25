@@ -1,6 +1,6 @@
 # PWM 과 타이머 : 122.5Hz 는 어떻게 나오고, 왜 Timer1 인가
 
-> English : [PWM.en.md](PWM.en.md) · 짧은 요약은 README [2-1](../README.md#2-1-저주파는-왜-핀을-바꾸나), [5-1](../README.md#5-1-모터--고주파-pwm-버전-c--저주파-pwm-버전-e)
+> English : [PWM.en.md](PWM.en.md) · 짧은 요약은 README [2-1](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.md#2-1-저주파는-왜-핀을-바꾸나), [5-1](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.md#5-1-모터--고주파-pwm-버전-c--저주파-pwm-버전-e)
 
 **한 줄 요약** : 아두이노는 칩 안의 **타이머 카운터**로 PWM 을 만든다. 주파수는 `16,000,000 ÷ 분주 ÷ 한 주기 칸 수` 로 정해지고, 듀티는 코드의 `analogWrite` 값으로 정해진다. 우리 차는 **Timer1 을 삼각파·분주 256** 으로 바꿔 **122.5Hz** 를 쓴다. Timer0 은 `millis()`·`delay()` 시계라서 건드리면 안 된다.
 
@@ -156,7 +156,7 @@ analogWrite(LeftMotor_E_pin,  leftSpeed);
 | 톱니파, 256 | 256 × 256 ÷ 16MHz = 4.096ms | 4배 느림 | 약 4초 |
 | 삼각파, 256 | 510 × 256 ÷ 16MHz = 8.16ms | 약 8배 느림 | 약 8초 |
 
-그러면 PID 20ms 주기, 수동 조종 끊김 정지(0.45초), 출발 킥(0.06초)이 다 틀어진다. 그래서 **Timer1 만** 바꾸고, 속도 핀(ENA, ENB)을 Timer1 이 나오는 9·10번으로 옮겼다 (배선 5↔9, 6↔10 맞바꿈, README [2-1](../README.md#2-1-저주파는-왜-핀을-바꾸나)).
+그러면 PID 20ms 주기, 수동 조종 끊김 정지(0.45초), 출발 킥(0.06초)이 다 틀어진다. 그래서 **Timer1 만** 바꾸고, 속도 핀(ENA, ENB)을 Timer1 이 나오는 9·10번으로 옮겼다 (배선 5↔9, 6↔10 맞바꿈, README [2-1](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.md#2-1-저주파는-왜-핀을-바꾸나)).
 
 ### 코드 : `setup()` 의 세 줄
 

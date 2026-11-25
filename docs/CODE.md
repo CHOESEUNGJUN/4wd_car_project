@@ -143,4 +143,4 @@ int left = baseSpeed() + (int)u, right = baseSpeed() - (int)u;
 | 카메라 있음, 배선 맞바꿈 | `motor_control_low_frequency_cam` (D 저주파) |
 | 카메라 있음, 교안 원래 배선 | `team2_bt_cam` (D) |
 
-**배선과 코드는 짝이 맞아야 한다** : 저주파 코드를 원래 배선에 올리면 속도 핀과 방향 핀이 뒤바뀌어 바퀴가 이상하게 돈다. 배선은 [README 2장](../README.md#2-배선).
+**배선과 코드는 짝이 맞아야 한다** : 저주파 코드를 원래 배선에 올리면 속도 핀과 방향 핀이 뒤바뀌어 바퀴가 이상하게 돈다. 배선은 [README 2장](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.md#2-배선).

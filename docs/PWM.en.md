@@ -1,6 +1,6 @@
 # PWM and timers: where 122.5 Hz comes from, and why Timer1
 
-> 한국어 : [PWM.md](PWM.md) · Short version in README [2-1](../README.en.md#2-1-why-low-frequency-moves-the-pins), [5-1](../README.en.md#5-1-motors-high-frequency-pwm-version-c--low-frequency-pwm-version-e)
+> 한국어 : [PWM.md](PWM.md) · Short version in README [2-1](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.en.md#2-1-why-low-frequency-moves-the-pins), [5-1](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.en.md#5-1-motors-high-frequency-pwm-version-c--low-frequency-pwm-version-e)
 
 **In one line**: the Arduino makes PWM with a **timer counter** inside the chip. The frequency is `16,000,000 ÷ prescaler ÷ steps per period`, and the duty is the `analogWrite` value from the code. Our car sets **Timer1 to triangle, prescaler 256** for **122.5 Hz**. Timer0 runs `millis()` and `delay()`, so it must not be changed.
 
@@ -157,7 +157,7 @@ Going to low frequency did not change the PID (the control). It changed the **fr
 | sawtooth, 256 | 256 × 256 ÷ 16 MHz = 4.096 ms | 4× slow | about 4 s |
 | triangle, 256 | 510 × 256 ÷ 16 MHz = 8.16 ms | about 8× slow | about 8 s |
 
-That would break the 20 ms PID cycle, the manual-mode link-loss stop (0.45 s) and the start kick (0.06 s). So we change **only Timer1** and move the speed pins (ENA, ENB) to pins 9 and 10, where Timer1 comes out (swap wires 5↔9, 6↔10, README [2-1](../README.en.md#2-1-why-low-frequency-moves-the-pins)).
+That would break the 20 ms PID cycle, the manual-mode link-loss stop (0.45 s) and the start kick (0.06 s). So we change **only Timer1** and move the speed pins (ENA, ENB) to pins 9 and 10, where Timer1 comes out (swap wires 5↔9, 6↔10, README [2-1](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/main/README.en.md#2-1-why-low-frequency-moves-the-pins)).
 
 ### The code: three lines in `setup()`
 
