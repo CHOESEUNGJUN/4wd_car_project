@@ -2,7 +2,7 @@
 
 > **Usage terms:** Code is MIT open source. Original photos, videos and other non-code materials are for non-commercial education and learning only; commercial use is prohibited. See [NOTICE.md](NOTICE.md), including the exception for prior permissions.
 
-PID line follower + low-frequency PWM driving + Bluetooth manual / auto switch + ESP32-CAM traffic lights and stop signs
+PID line follower + low-frequency PWM driving + Bluetooth manual / auto switch
 
 > 한국어 : [README.md](README.md)
 
@@ -14,7 +14,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 <img src="docs/img/car_side.jpg" width="23%" alt="Side">
 <img src="docs/img/car_rear.jpg" width="23%" alt="Rear">
 <img src="docs/img/car_bt.jpg" width="23%" alt="HC-06 Bluetooth">
-<br><sub>The finished car (2026-11-18): front · side · rear · HC-06 Bluetooth — <b><a href="https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.en.md">more photos</a></b> (what the ESP32-CAM saw, the web page while driving)</sub>
+<br><sub>The finished car (2026-11-18): front · side · rear · HC-06 Bluetooth</sub>
 </p>
 
 - Folders: **`arduino/`** = code uploaded to the UNO (the car) with the Arduino IDE. The camera (ESP32, PlatformIO) lives in **`esp32/`** on the branch `extra/esp32cam`.
@@ -22,7 +22,7 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 - Lecture deck: team 2 in the course deck (`minicar_lecture_deck_all_teams_v5.pdf`, pages 34–48) — not in the repository for copyright reasons ([license](#license-and-copyright))
 - Protocol (team agreement): [`PROTOCOL.md`](PROTOCOL.md) — change this document first, and agree on it, before changing the communication code in the apps or sketches.
 - Extra project **ESP32-CAM camera** lives on the branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (chapter 9).
-- **What we changed in driving and image processing, and why: [chapter 5](#5-what-we-changed-and-why-high--low-frequency-pwm-hsv-image-processing)** (high → low frequency PWM, camera line following → traffic lights and signs only, RGB → HSV)
+- **What we changed in driving, and why: [chapter 5](#5-what-we-changed-and-why-high--low-frequency-pwm)** (high → low-frequency PWM, PID and speeds tuned for low frequency)
 - **Finished release: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)** (Arduino sketches, ESP32-CAM firmware, Android app, drive logs and videos, how-to) · **Final report: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md)**
 - Next steps: [`docs/NEXT.md`](docs/NEXT.md) (retune signal thresholds, test the Android app on a phone; Korean)
 
@@ -30,45 +30,24 @@ If the link drops, the car stops by itself, and while it drives on its own the p
 |---|---|---|---|---|
 | **C** | `arduino/team2_bt_pid/` | High frequency (default 976.6 Hz) | None | **Passed** (2026-11-16, team car code) |
 | **E (default)** | `arduino/motor_control_low_frequency/` | **Low frequency \~122 Hz** (swap 4 wires) | None | **Passed** (2026-11-16, smoother) — [release 1.0.1](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-low-frequency-pwm-pid-control-car-v1.0.1) |
-| D | `arduino/team2_bt_cam/` on branch `extra/esp32cam` (+ low-frequency `motor_control_low_frequency_cam`) | C or E | ESP32-CAM: traffic lights and stop signs (HSV) | **Passed** (2026-11-18, mounted on the low-frequency car on the track: reacted to red, green and stop signs) |
+| D | branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (**ESP32-CAM only**, extra assignment) | low | ESP32-CAM: traffic lights and stop signs | **Passed** (2026-11-18) — branch README |
 
 ---
 
-## The assignment at a glance: original + extra
+## At a glance
 
-| | **Original assignment** (lecture deck, team 2) | **Extra assignment** (beyond team 2's advanced task B, "first-person view") |
-|---|---|---|
-| Goal | Follow a black line autonomously with PID + switch between Bluetooth manual and auto | The ESP32-CAM reads traffic lights and stop signs and the car obeys (decided inside the ESP32, no PC) |
-| What we built | Version C (PID) → **version E** (PID + low-frequency PWM 122.5 Hz), 3 apps (Android, iPhone, web), link-loss and obstacle safety | **Version D** (line following unchanged: line sensors + PID; the camera only watches signals), HSV colour detection, web page, SD recording |
-| Result | **Passed the track** (2026-11-16, versions C and E) | **Passed the track** (2026-11-18): stopped at red 7 times (0.21–0.54 s), started on green 4 times (0.11–0.33 s), held 3 s at a stop sign 5 times; in an additional run slowed for yellow 15 times (tested with yellow wheels) |
-| Code | [`arduino/`](arduino) on `main` | `esp32/` and `arduino/*_cam` on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) |
-| Details | [ch. 4 PID](#4-core-technique-pid-line-following), [5-1 low frequency](#5-1-motors-high-frequency-pwm-version-c--low-frequency-pwm-version-e), [`docs/PWM.en.md`](docs/PWM.en.md) | [ch. 9](#9-extra-project-esp32-cam-camera-branch-extraesp32cam), [`CAMERA.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/CAMERA.md) (Korean), [photos and videos](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.en.md) |
+| | **This branch (main): original assignment** |
+|---|---|
+| Goal | Follow a black line autonomously with PID + Bluetooth manual / auto switch |
+| What we built | Version C (PID) → **version E** (PID + low-frequency PWM 122.5 Hz, PID and speeds tuned for it), 3 apps (Android, iPhone, web), link-loss and obstacle safety |
+| Result | **Passed the track** (2026-11-16 versions C and E; low-frequency values tuned 2026-11-23) |
+| Details | [ch. 4 PID](#4-core-technique-pid-line-following), [ch. 5 low frequency](#5-what-we-changed-and-why-high--low-frequency-pwm), [`docs/PWM.en.md`](docs/PWM.en.md), [`docs/CODE.en.md`](docs/CODE.en.md) |
 
-<p align="center">
-<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/esp_strip.png" width="62%" alt="What the ESP32-CAM saw: red light, yellow, green light, stop sign">
-<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/drive_0012_red_to_green.gif" width="30%" alt="Stopped at red, starts on green"><br>
-<sub>Extra assignment: what the car's ESP32-CAM actually saw (SD recording, HSV view) — stop at red, slow on yellow (yellow wheels instead of a yellow sign), go on green, 3 s stop at a stop sign</sub>
-</p>
+**The extra assignment (ESP32-CAM traffic lights and stop signs)** lives on branch [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (chapter 9).
 
-**Communication**
+**Communication** : phone app ──Bluetooth (HC-06 SPP / HM-10 BLE)──▶ module ──UART 9600 bps──▶ Arduino D3·D4 (SoftwareSerial). Phone → car one-letter commands, car → phone one status line every 0.2 s (ch. 7, report 6-1)
 
-```
- [Gulno phone app] ──Bluetooth Classic (SPP 9600)──▶ [HC-06] ──D3/D4 SoftwareSerial──▶ [Arduino UNO car]   ← original
-                                                        ▲
- [ESP32-CAM] ──connects to the same HC-06 over Bluetooth (instead of the phone)──┘                       ← extra
-      ▲
-      └──Wi-Fi (your hotspot): web HTTP + WebSocket──── [phone / laptop browser http://gulno-cam.local]
-```
-
-| Between | How | What goes over it |
-|---|---|---|
-| Phone app ↔ car | Bluetooth Classic HC-06, 9600 bps (HM-10 BLE for iPhone) | one-letter commands `g b l r q w s a m h` (ch. 7); car → phone status line every 0.2 s `ag,23,010,LINE` |
-| ESP32-CAM ↔ car | the same HC-06 Bluetooth (the ESP32 connects as master) | signal letters `x` stop · `v` slow · `n` normal (every 0.2 s), heartbeat `h` |
-| Phone / laptop ↔ ESP32-CAM | Wi-Fi (hotspot), HTTP + WebSocket | web page, HSV video, car status, drive and control buttons |
-
-The HC-06 accepts only one device at a time, so in the extra assignment (version D) the car is driven from the ESP32 web page instead of the phone app. Letter protocol: [`PROTOCOL.md`](PROTOCOL.md) (Korean).
-
-**Requirements (explanation, code, photos)**: [`docs/REQUIREMENTS.en.md`](docs/REQUIREMENTS.en.md) · **Final report**: [`docs/REPORT_20261116.en.md`](docs/REPORT_20261116.en.md) · **Code walkthrough (4 versions, part by part)**: [`docs/CODE.en.md`](docs/CODE.en.md) · **Release**: [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
+**Requirements (explanation, code, photos)** : [docs/REQUIREMENTS.en.md](docs/REQUIREMENTS.en.md) · **Final report** : [docs/REPORT_20261116.en.md](docs/REPORT_20261116.en.md) · **Code walkthrough** : [docs/CODE.en.md](docs/CODE.en.md)
 
 ---
 
@@ -90,8 +69,8 @@ How someone who downloads this repository can build the same car and make it dri
 **Parts**
 
 <table>
-<tr><td align="center" width="25%"><img src="docs/img/parts/uno_shield.jpg" width="200" alt="Arduino UNO (ATmega328P) + Sensor Shield V4.0"><br><sub>Arduino UNO (ATmega328P) + Sensor Shield V4.0<br>sensors, motor driver and Bluetooth plug into the shield's S·V·G pins</sub></td><td align="center" width="25%"><img src="docs/img/parts/line_sensor.jpg" width="200" alt="Digital line sensor ×3"><br><sub>Digital line sensor ×3<br>IR T (emitter) · R (receiver), sensitivity pot, GND·VCC·OUT</sub></td><td align="center" width="25%"><img src="docs/img/parts/tt_motor.jpg" width="200" alt="TT gear motor ×4"><br><sub>TT gear motor ×4<br>yellow gearbox + DC motor</sub></td><td align="center" width="25%"><img src="docs/img/parts/l298n.jpg" width="200" alt="L298N motor driver"><br><sub>L298N motor driver<br>ENA·ENB (speed), IN1–IN4 (direction), motor outputs</sub></td></tr>
-<tr><td align="center" width="25%"><img src="docs/img/parts/ultrasonic.jpg" width="200" alt="Ultrasonic HC-SR04 + SG90 servo"><br><sub>Ultrasonic HC-SR04 + SG90 servo<br>front of the car, stops within 10 cm</sub></td><td align="center" width="25%"><img src="docs/img/parts/esp32cam.jpg" width="200" alt="ESP32-CAM"><br><sub>ESP32-CAM<br>OV3660 camera, microSD, white LED</sub></td><td align="center" width="25%"><img src="docs/img/parts/hc06_esp32cam.jpg" width="200" alt="HC-06 Bluetooth (breadboard) + ESP32-CAM (MB board, separate 5 V) + servo"><br><sub>HC-06 Bluetooth (breadboard) + ESP32-CAM (MB board, separate 5 V) + servo</sub></td></tr>
+<tr><td align="center" width="33%"><img src="docs/img/parts/uno_shield.jpg" width="200" alt="Arduino UNO (ATmega328P) + Sensor Shield V4.0"><br><sub>Arduino UNO (ATmega328P) + Sensor Shield V4.0<br>sensors, motor driver and Bluetooth plug into the shield's S·V·G pins</sub></td><td align="center" width="33%"><img src="docs/img/parts/line_sensor.jpg" width="200" alt="Digital line sensor ×3"><br><sub>Digital line sensor ×3<br>IR T (emitter) · R (receiver), sensitivity pot, GND·VCC·OUT</sub></td><td align="center" width="33%"><img src="docs/img/parts/tt_motor.jpg" width="200" alt="TT gear motor ×4"><br><sub>TT gear motor ×4<br>yellow gearbox + DC motor</sub></td></tr>
+<tr><td align="center" width="33%"><img src="docs/img/parts/l298n.jpg" width="200" alt="L298N motor driver"><br><sub>L298N motor driver<br>ENA·ENB (speed), IN1–IN4 (direction), motor outputs</sub></td><td align="center" width="33%"><img src="docs/img/parts/ultrasonic.jpg" width="200" alt="Ultrasonic HC-SR04 + SG90 servo"><br><sub>Ultrasonic HC-SR04 + SG90 servo<br>front of the car, stops within 10 cm</sub></td><td align="center" width="33%"><img src="docs/img/parts/hc06_esp32cam.jpg" width="200" alt="HC-06 Bluetooth"><br><sub>HC-06 Bluetooth module (breadboard, 9600 bps)</sub></td></tr>
 </table>
 
 
@@ -312,7 +291,7 @@ Tuning order (one at a time): with **Ki = Kd = 0, raise Kp** until just before i
 
 ---
 
-## 5. What we changed and why: high / low frequency PWM, HSV image processing
+## 5. What we changed and why: high → low-frequency PWM
 
 ### 5-1. Motors: high-frequency PWM (version C) → low-frequency PWM (version E)
 
@@ -351,53 +330,6 @@ The same `analogWrite` value (30 · 60 · 90 · 120) drives a different current 
 
 - **Why**: version C was a half fix that forced starts with a kick and a minimum power. The real cause (low-speed torque) was the PWM frequency; lowering it lets the car start with a much smaller kick. The goal is following the line precisely, not top speed, so we fixed the low frequency.
 - Result (2026-11-16): passed the track, smoother. Version C is kept as-is for rollback. `millis()`, Bluetooth and ultrasonic use Timer0 / SoftwareSerial and are unaffected. Details: "버전 E" at the end of [`docs/PID.md`](docs/PID.md).
-
-### 5-2. Camera: line following → traffic lights and signs only
-
-| First (2026-11-11) | Now (2026-11-16) |
-|---|---|
-| The camera found the floor line, cleaned it with morphology, drew the path and target, and drove from the camera | **No camera line following.** The line is followed by the line sensors + PID (same as version C); the camera only gives signals |
-
-- **Why**: on the track the car was faster than expected, so steering from the camera (\~20 fps plus Wi-Fi/Bluetooth delay) was too late. The line sensors + PID already follow the line every 20 ms, so the camera does **one job (watching signals)** — faster and safer. If the camera stops, line following continues, and a red light never times out, so the car stays stopped.
-- Lecture team 4 sends the video to a PC and decides in Python → we decide **inside the ESP32** with no PC (no Wi-Fi video round trip, so it is faster).
-
-### 5-3. Colour detection: RGB rules → HSV + class table
-
-| | RGB (first) | **HSV + table (now)** |
-|---|---|---|
-| Method | Compare R, G, B directly, e.g. "R high and G, B low = red" | Convert to hue H (0–359°), saturation S, value V and decide by **hue** (lecture team 3's method). Red H < 20 or ≥ 330, yellow 35–75, green 85–170, white = low saturation and bright |
-| Weakness / strength | Misses dark or faded colours; when exposure changes while driving, all three values shift together | Hue stays the same when brightness changes → **same colour in a dark room or at speed** |
-| Test (17 synthetic scenes) | 12 correct (missed dark red, green, yellow, faded red, dark sign) | **All 17 correct**; floor (beige, wood) and white walls are not signals |
-| Speed | Comparisons for every pixel | A 4096-colour (4 bits per R, G, B) class table (4 KB) built once at boot; per pixel just **one table lookup** → no math |
-
-
-**How it decides**: one camera pixel → colour index (12 bits) → precomputed class table → count per class → decide → Bluetooth letter. The HSV math runs only 4096 times when the table is built at boot; while driving each pixel is a single table lookup, so a frame (19,200 pixels) takes about 7 ms.
-
-![How the HSV decision works: from one camera pixel to the signal letter sent to the car](docs/img/hsv_pipeline.en.png)
-
-![Colour ranges the ESP32 uses, and its decision when brightness or saturation changes](docs/img/hsv_ranges.en.png)
-
-**Red light vs stop sign**: both are red, so colour alone can't tell them apart → the ESP32 looks at the red blob's **shape**. The phone's red screen almost fills its box (99 %) with no white; the octagon leaves the corners empty (73 %) and has white text in the middle (15 %). Below: the boxes the firmware's rule finds on real frames from the drive.
-
-![Red light vs stop sign](docs/img/sign_vs_red.en.png)
-
-
-- **Why**: when the car drove fast, recognition often failed because colours got darker or washed out → HSV separates brightness from hue. HSV is normally slower to compute, but the precomputed table makes it lighter than the RGB comparisons.
-- **HSV view is the fastest video**: no JPEG encoding; only colour classes are packed and sent, and the browser paints them (\~1.4 KB per frame; on the same hotspot link JPEG 3–4 fps → HSV 5–11 fps, measured).
-- Turn on **HSV view** in the web camera settings to paint the video with the colour class the ESP32 sees (red, green, yellow, white; grey = not a signal) — useful for tuning under real lighting.
-
-### 5-4. Speed: recognition speed over resolution
-
-| Tried | Result | Chosen |
-|---|---|---|
-| 320x240 colour | Sensor gives only 9–10 fps → \~105 ms per loop | ✗ |
-| Sensor JPEG (hardware compression) + decode | Decoding takes 95 ms → 110 ms per loop | ✗ |
-| Camera clock 24 MHz | Not faster, only more incomplete frames | ✗ (20 MHz) |
-| **160x120 colour, every pixel** | \~48 ms per loop (\~20 fps), catches stop signs down to an 11 px radius | ✓ |
-
-- Signal response: \~2 s at first → **\~0.1–0.15 s** (confirmed after 2 frames for red, 3 for other colours; a change is sent immediately and repeated every 0.2 s).
-- Per-frame functions run from IRAM with -O2 (flash code and PSRAM frames share the cache, so code would be evicted); each frame is read once and signal counting and video copy share the same row pass. The field of view is already maximal (the OV3660 scales the full sensor even at small sizes; wider needs a wide-angle lens module).
-- **The camera chip is an OV3660 (confirmed on the board 2026-11-18, not an OV2640).** The sensor sets the frame rate: at 160x120 colour the driver runs the sensor clock at 40 MHz, giving **one frame every 45 ms (22.2 fps)** (measured on the VSYNC pin). Of the 48 ms loop only \~7 ms is processing; the rest is waiting for the next frame, so trimming code no longer helps. Raising the sensor clock (PLL multiplier 8 → 10) makes the sensor output 27.8 fps, but the ESP32 can't capture it: incomplete frames rise from 1 to 28 per 10 s, and multiplier 12 breaks almost every frame → left unchanged. Going faster needs an ESP32-S3 board (faster camera input)
 
 ---
 
@@ -529,34 +461,16 @@ Version C appends error and correction: `ar,23,011,LINE,1,60`. PID values are se
 
 ---
 
-## 9. Extra project: ESP32-CAM camera (branch `extra/esp32cam`)
+## 9. Extra assignment: ESP32-CAM (branch `extra/esp32cam`)
 
-**Version D (also submitted)** = version C plus an ESP32-CAM. **The car follows the line with its 3 line sensors + PID; the camera only watches traffic lights and stop signs** (no camera line following — see 5-2). The ESP32 decides the colour itself and sends a signal character to the car over Bluetooth (no PC). Not on `main`; developed only on the branch.
-
-```
- 5V external power ──▶ ESP32-CAM ── Wi-Fi ──▶ any phone/laptop: http://gulno-cam.local (http://192.168.4.1 only when the hotspot can't be found)
-                         │          colour video (border = current signal), HSV view, pixel counts, car status, drive buttons, SD recording
-                         └──── Bluetooth ──▶ HC-06 ──▶ Arduino (version D, line following with line sensors + PID)
- Phone app Gulno (iPhone / Android) "traffic light screen" / "stop sign" ──▶ hold it in front of the camera
-```
-
-**What it detects**
-
-| Seen | Character sent by the ESP32 | Car (stays in auto) |
-|---|---|---|
-| 🔴 red light | `x` (every 0.2 s) | Stop, until another signal arrives or a person sends `a`/`m` (doesn't drive even if the ESP32 dies) |
-| 🟡 yellow light | `v` | Slow: base speed 120 → 100 (back to normal after 1 s without `v`) |
-| 🟢 green light / no signal | `n` | Normal |
-| 🛑 stop sign (red octagon + white text) | `x` for 3 s → `n` | Stops 3 s then drives on, ignores the same sign for 5 s |
-
-Red light and stop sign are both red, so they are told apart by **shape**: how much of the red blob's bounding box is red (phone red screen 86–100 %, octagon 61–68 %) and how much white (text, border) is inside.
+**Version D**, where the ESP32-CAM reads traffic lights and stop signs and the car obeys, is on this repository’s **ESP32-CAM-only branch**. Line following stays this branch’s car code (line sensors + PID, low frequency); the camera only watches signals.
 
 | | |
 |---|---|
-| Get it | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (or `git switch extra/esp32cam`) |
-| Docs | `docs/CAMERA.md` on the branch (handling, signals and signs, wiring, upload, Wi-Fi, web page, speed and memory, SD recording; Korean), report `docs/REPORT_20261111.md` |
-| Upload | **Not from the Arduino IDE** (its prebuilt libraries run out of memory once Bluetooth turns on). Flash the finished firmware (`.bin`) with Chrome or esptool, or build with PlatformIO → **[ESP32 flashing guide (Windows · Linux · macOS)](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/ESP32_UPLOAD.en.md)** |
-| Status (2026-11-18) | Bluetooth + Wi-Fi + camera together, HSV colour detection and HSV view, signal response \~0.1–0.15 s, SD recording confirmed. Mounted on the low-frequency car and passed the track (stopped at red 7 times, started on green 4 times, held 3 s at a stop sign 5 times) |
+| Branch | [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) · README : [Korean](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/README.md) · [English](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/README.en.md) |
+| Get it | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` |
+| Result | passed the track (2026-11-18): stop on red, slow on yellow, go on green, 3 s at a stop sign |
+| Release | [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0) |
 
 ---
 

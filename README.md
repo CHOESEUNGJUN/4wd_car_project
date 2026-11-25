@@ -2,7 +2,7 @@
 
 > **이용 조건:** 코드는 MIT 오픈소스입니다. 직접 제작한 사진·영상·문서 등은 비상업적 교육·학습 목적만 허용하며 상업적 이용은 금지합니다. 기존 허락의 예외를 포함한 상세 조건은 [NOTICE.md](NOTICE.md)를 확인하세요.
 
-PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전환 + ESP32-CAM 신호등·정지 표지판
+PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전환
 
 > English : [README.en.md](README.en.md) · 보고서 메모 : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md)
 
@@ -14,7 +14,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 <img src="docs/img/car_side.jpg" width="23%" alt="옆">
 <img src="docs/img/car_rear.jpg" width="23%" alt="뒤">
 <img src="docs/img/car_bt.jpg" width="23%" alt="HC-06 블루투스">
-<br><sub>완성 차량 (2026-11-18) : 앞 · 옆 · 뒤 · HC-06 블루투스 — <b><a href="https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.md">사진 더 보기</a></b> (ESP32-CAM 이 본 장면, 주행 중 웹 화면)</sub>
+<br><sub>완성 차량 (2026-11-18) : 앞 · 옆 · 뒤 · HC-06 블루투스</sub>
 </p>
 
 - 폴더 : **`arduino/`** = Arduino IDE 로 UNO(차)에 올리는 코드. 카메라(ESP32, PlatformIO)는 브랜치 `extra/esp32cam` 의 **`esp32/`** 에 있다.
@@ -22,7 +22,7 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 - 교안 : 수업 교안 (`minicar_lecture_deck_all_teams_v5.pdf`) 의 2팀 (34\~48쪽) — 저작권 때문에 저장소에는 없음 ([라이선스](#라이선스--저작권))
 - 통신 프로토콜 (팀 합의 문서) : [`PROTOCOL.md`](PROTOCOL.md) — 앱이나 스케치의 통신 부분을 고치기 전에 먼저 이 문서를 바꾸고 합의한다.
 - 추가 프로젝트 **ESP32-CAM 카메라** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (9장).
-- **주행 방식과 영상 처리를 무엇을, 왜 바꿨는지 : [5장](#5-무엇을-왜-바꿨나--고주파저주파-주행-hsv-영상-처리)** (고주파 → 저주파 PWM, 카메라 라인 인식 → 신호등·표지판만, RGB → HSV)
+- **주행 방식을 무엇을, 왜 바꿨는지 : [5장](#5-무엇을-왜-바꿨나--고주파--저주파-주행)** (고주파 → 저주파 PWM, 저주파에 맞춘 PID·속도)
 - **완성 릴리스 : [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)** (아두이노 스케치, ESP32-CAM 펌웨어, 안드로이드 앱, 주행 기록·영상, 사용법) · **최종 보고서 : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md)**
 - 다음에 할 일 : [`docs/NEXT.md`](docs/NEXT.md) (신호 기준 다시 맞추기, 안드로이드 앱 폰 시험)
 
@@ -30,45 +30,24 @@ PID 라인트레이서 + 저주파 PWM 주행 + 블루투스 수동 / 자동 전
 |---|---|---|---|---|
 | **C** | `arduino/team2_bt_pid/` | 고주파 (기본 976.6Hz) | 없음 | **통과** (2026-11-16, 팀 차량 코드) |
 | **E (기본)** | `arduino/motor_control_low_frequency/` | **저주파 약 122Hz** (배선 4개 맞바꿈) | 없음 | **통과** (2026-11-16, 더 부드러움) |
-| D | 브랜치 `extra/esp32cam` 의 `arduino/team2_bt_cam/` (+ 저주파판 `motor_control_low_frequency_cam`) | C 또는 E | ESP32-CAM : 신호등·정지 표지판 (HSV) | **통과** (2026-11-18, 저주파 차에 달고 트랙 주행 : 빨간불·초록불·정지 표지판 모두 반응) |
+| D | 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) (**ESP32-CAM 전용**, 추가 과제) | 저주파 | ESP32-CAM : 신호등·정지 표지판 | **통과** (2026-11-18) — 브랜치 README |
 
 ---
 
-## 과제 한눈에 : 원래 과제 + 추가 과제
+## 과제 한눈에
 
-| | **원래 과제** (교안 2팀) | **추가 과제** (교안 2팀 심화 B "1인칭 시점" 을 넘어서) |
-|---|---|---|
-| 목표 | PID 로 검은 선을 따라가는 자율주행 + 블루투스 수동 / 자동 전환 | ESP32-CAM 이 신호등·정지 표지판을 보고 차가 따르기 (PC 없이 ESP32 안에서 판단) |
-| 만든 것 | 버전 C (PID) → **버전 E** (PID + 저주파 PWM 122.5Hz), 앱 3종 (안드로이드·아이폰·웹), 끊김·장애물 안전장치 | **버전 D** (라인은 라인센서 + PID 그대로, 카메라는 신호만), HSV 색 판단, 웹 화면, SD 기록 |
-| 결과 | **트랙 통과** (2026-11-16, 버전 C·E) | **트랙 통과** (2026-11-18) : 빨간불 7번 정지 (0.21\~0.54초), 초록불 4번 출발 (0.11\~0.33초), 정지 표지판 5번 3초 정지. 추가 기록에서 노랑 15번 서행 (노란 바퀴로 시험) |
-| 코드 | `main` 의 [`arduino/`](arduino) | 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 의 `esp32/`, `arduino/*_cam` |
-| 자세히 | [4장 PID](#4-핵심-기술--pid-라인-추종), [5-1 저주파](#5-1-모터--고주파-pwm-버전-c--저주파-pwm-버전-e), [`docs/PWM.md`](docs/PWM.md) | [9장](#9-추가-프로젝트--esp32-cam-카메라-브랜치-extraesp32cam), [`CAMERA.md`](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/CAMERA.md), [사진·영상](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/GALLERY.md) |
+| | **이 브랜치 (main) : 원래 과제** |
+|---|---|
+| 목표 | PID 로 검은 선을 따라가는 자율주행 + 블루투스 수동 / 자동 전환 |
+| 만든 것 | 버전 C (PID) → **버전 E** (PID + 저주파 PWM 122.5Hz, 저주파에 맞춘 PID·속도), 앱 3종 (안드로이드·아이폰·웹), 끊김·장애물 안전장치 |
+| 결과 | **트랙 통과** (2026-11-16 버전 C·E, 2026-11-23 저주파 값 맞춤) |
+| 자세히 | [4장 PID](#4-핵심-기술--pid-라인-추종), [5장 저주파](#5-무엇을-왜-바꿨나--고주파--저주파-주행), [`docs/PWM.md`](docs/PWM.md), [`docs/CODE.md`](docs/CODE.md) |
 
-<p align="center">
-<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/esp_strip.png" width="62%" alt="ESP32-CAM 이 본 장면 : 빨간불, 노랑, 초록불, 정지 표지판">
-<img src="https://raw.githubusercontent.com/CHOESEUNGJUN/4wd_car_project/extra/esp32cam/docs/img/gallery/drive_0012_red_to_green.gif" width="30%" alt="빨간불에 서 있다가 초록불에 출발"><br>
-<sub>추가 과제 : 차의 ESP32-CAM 이 실제로 본 장면 (SD 기록, HSV 보기) — 빨간불 정지, 노랑 서행 (노란 표지판 대신 노란 바퀴), 초록불 출발, 정지 표지판 3초 정지</sub>
-</p>
+**추가 과제 (ESP32-CAM 신호등·정지 표지판)** 는 브랜치 [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) 에 따로 있다 (9장).
 
-**통신**
+**통신** : 폰 앱 ──블루투스 (HC-06 SPP / HM-10 BLE)──▶ 모듈 ──UART 9600bps──▶ 아두이노 D3·D4 (SoftwareSerial). 폰 → 차 한 글자 명령, 차 → 폰 0.2초마다 상태 한 줄 (7장, 보고서 6-1)
 
-```
- [폰 앱 굴노] ──블루투스 클래식 (SPP 9600)──▶ [HC-06] ──D3/D4 소프트웨어 시리얼──▶ [Arduino UNO 차]   ← 원래 과제
-                                                 ▲
- [ESP32-CAM] ──같은 HC-06 에 블루투스로 붙음 (폰 대신)──┘                                          ← 추가 과제
-      ▲
-      └──와이파이 (내 핫스팟) : 웹 HTTP + 웹소켓──── [폰·노트북 브라우저 http://gulno-cam.local]
-```
-
-| 어디 ↔ 어디 | 방식 | 오가는 것 |
-|---|---|---|
-| 폰 앱 ↔ 차 | 블루투스 클래식 HC-06, 9600bps (아이폰은 HM-10 BLE) | 명령 한 글자 `g b l r q w s a m h` (7장), 차 → 폰 상태 줄 0.2초마다 `ag,23,010,LINE` |
-| ESP32-CAM ↔ 차 | 같은 HC-06 블루투스 (ESP32 가 마스터로 연결) | 신호 글자 `x` 정지 · `v` 서행 · `n` 보통 (0.2초마다), 연결 신호 `h` |
-| 폰·노트북 ↔ ESP32-CAM | 와이파이 (핫스팟), HTTP + 웹소켓 | 웹 화면, HSV 영상, 차 상태, 주행·조종 버튼 |
-
-HC-06 은 한 번에 한 기기만 붙어서, 추가 과제(버전 D)에서는 폰 앱 대신 ESP32 웹 화면으로 조종한다. 글자 약속은 [`PROTOCOL.md`](PROTOCOL.md).
-
-**요구사항별 구현 (설명·코드·사진)** : [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) · **최종 보고서** : [`docs/REPORT_20261116.md`](docs/REPORT_20261116.md) · **코드 해설 (버전 4종 비교, 파트별)** : [`docs/CODE.md`](docs/CODE.md) · **완성 릴리스** : [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0)
+**요구사항별 구현 (설명·코드·사진)** : [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) · **최종 보고서** : [docs/REPORT_20261116.md](docs/REPORT_20261116.md) · **코드 해설** : [docs/CODE.md](docs/CODE.md)
 
 ---
 
@@ -90,8 +69,8 @@ HC-06 은 한 번에 한 기기만 붙어서, 추가 과제(버전 D)에서는 �
 **부품 사진**
 
 <table>
-<tr><td align="center" width="25%"><img src="docs/img/parts/uno_shield.jpg" width="200" alt="Arduino UNO (ATmega328P) + 센서 확장 쉴드 V4.0"><br><sub>Arduino UNO (ATmega328P) + 센서 확장 쉴드 V4.0<br>센서·모터 드라이버·블루투스를 쉴드의 S·V·G 핀에</sub></td><td align="center" width="25%"><img src="docs/img/parts/line_sensor.jpg" width="200" alt="디지털 라인센서 ×3"><br><sub>디지털 라인센서 ×3<br>적외선 T(송신)·R(수신), 감도 가변저항, GND·VCC·OUT</sub></td><td align="center" width="25%"><img src="docs/img/parts/tt_motor.jpg" width="200" alt="TT 기어모터 ×4"><br><sub>TT 기어모터 ×4<br>노란 감속기 + DC 모터</sub></td><td align="center" width="25%"><img src="docs/img/parts/l298n.jpg" width="200" alt="L298N 모터 드라이버"><br><sub>L298N 모터 드라이버<br>ENA·ENB(속도), IN1~IN4(방향), 모터 출력</sub></td></tr>
-<tr><td align="center" width="25%"><img src="docs/img/parts/ultrasonic.jpg" width="200" alt="초음파 HC-SR04 + 서보 SG90"><br><sub>초음파 HC-SR04 + 서보 SG90<br>차 앞, 10cm 안 장애물 정지</sub></td><td align="center" width="25%"><img src="docs/img/parts/esp32cam.jpg" width="200" alt="ESP32-CAM"><br><sub>ESP32-CAM<br>카메라 OV3660, microSD, 흰 LED</sub></td><td align="center" width="25%"><img src="docs/img/parts/hc06_esp32cam.jpg" width="200" alt="HC-06 블루투스 (브레드보드) + ESP32-CAM (MB 보드, 따로 5V) + 서보"><br><sub>HC-06 블루투스 (브레드보드) + ESP32-CAM (MB 보드, 따로 5V) + 서보</sub></td></tr>
+<tr><td align="center" width="33%"><img src="docs/img/parts/uno_shield.jpg" width="200" alt="Arduino UNO (ATmega328P) + 센서 확장 쉴드 V4.0"><br><sub>Arduino UNO (ATmega328P) + 센서 확장 쉴드 V4.0<br>센서·모터 드라이버·블루투스를 쉴드의 S·V·G 핀에</sub></td><td align="center" width="33%"><img src="docs/img/parts/line_sensor.jpg" width="200" alt="디지털 라인센서 ×3"><br><sub>디지털 라인센서 ×3<br>적외선 T(송신)·R(수신), 감도 가변저항, GND·VCC·OUT</sub></td><td align="center" width="33%"><img src="docs/img/parts/tt_motor.jpg" width="200" alt="TT 기어모터 ×4"><br><sub>TT 기어모터 ×4<br>노란 감속기 + DC 모터</sub></td></tr>
+<tr><td align="center" width="33%"><img src="docs/img/parts/l298n.jpg" width="200" alt="L298N 모터 드라이버"><br><sub>L298N 모터 드라이버<br>ENA·ENB(속도), IN1~IN4(방향), 모터 출력</sub></td><td align="center" width="33%"><img src="docs/img/parts/ultrasonic.jpg" width="200" alt="초음파 HC-SR04 + 서보 SG90"><br><sub>초음파 HC-SR04 + 서보 SG90<br>차 앞, 10cm 안 장애물 정지</sub></td><td align="center" width="33%"><img src="docs/img/parts/hc06_esp32cam.jpg" width="200" alt="HC-06 블루투스"><br><sub>HC-06 블루투스 모듈 (브레드보드, 9600bps)</sub></td></tr>
 </table>
 
 
@@ -311,7 +290,7 @@ driveManualLR(constrain(left, 0, 255), constrain(right, 0, 255));
 
 ---
 
-## 5. 무엇을 왜 바꿨나 : 고주파·저주파 주행, HSV 영상 처리
+## 5. 무엇을 왜 바꿨나 : 고주파 → 저주파 주행
 
 ### 5-1. 모터 : 고주파 PWM (버전 C) → 저주파 PWM (버전 E)
 
@@ -350,52 +329,6 @@ PWM 은 모터 전원을 아주 빠르게 켰다 껐다 하며, 켜 둔 시간�
 
 - **왜 바꿨나** : 버전 C 는 킥과 최소 힘으로 "출발은 되게" 만든 반쪽 해결이었다. 원인(저속 토크 부족)은 PWM 주파수였고, 주파수를 낮추니 킥을 크게 줄여도 출발한다. 빨리 달리는 대회가 아니라 정확히 따라가는 게 목적이라 저주파로 고정.
 - 결과 (2026-11-16) : 트랙 주행 통과, 더 부드러움. 버전 C 는 롤백용으로 그대로 둠. `millis()`·블루투스·초음파는 Timer0·SoftwareSerial 이라 영향 없음. 자세히는 [`docs/PID.md`](docs/PID.md) 끝 "버전 E".
-
-### 5-2. 카메라 : 라인 인식 → 신호등·표지판만
-
-| 처음 (2026-11-11) | 지금 (2026-11-16) |
-|---|---|
-| 카메라가 바닥 라인을 찾아 모폴로지로 다듬고, 경로·향할 곳을 그려서 카메라로 주행 | **카메라로 라인 주행은 안 한다.** 라인은 라인센서 + PID (버전 C 그대로), 카메라는 신호만 |
-
-- **왜 바꿨나** : 트랙에서 달려 보니 차가 생각보다 빨라서, 카메라(초당 약 20장 + 와이파이·블루투스 지연)로 라인을 보고 조향하면 늦었다. 라인은 이미 라인센서 + PID 로 20ms 마다 잘 따라가므로, 카메라는 **한 가지 일(신호 보기)** 에 전부 쓰는 게 빠르고 안전하다. 카메라가 꺼지거나 멈춰도 라인 주행은 계속되고, 빨간불은 시간으로 안 풀려서 안전 쪽으로 멈춰 있다.
-- 교안 4팀은 PC 파이썬이 영상을 받아 판단 → 우리는 PC 없이 **ESP32 안에서** 판단 (와이파이 영상 왕복이 없어 빠름).
-
-### 5-3. 색 판단 : RGB 기준 → HSV + 색 종류표
-
-| | RGB (처음) | **HSV + 표 (지금)** |
-|---|---|---|
-| 방법 | "R 이 크고 G·B 가 작으면 빨강" 처럼 R·G·B 값을 직접 비교 | 색상 H(0\~359°)·채도 S·밝기 V 로 바꿔서 **색상**으로 가름 (교안 3팀 방식). 빨강 H < 20 또는 ≥ 330, 노랑 35\~75, 초록 85\~170, 흰색 = 채도 낮고 밝음 |
-| 약점 / 장점 | 어둡거나 바랜 색, 달리면서 노출이 바뀌면 값이 다 같이 변해서 놓침 | 밝기가 바뀌어도 색상은 그대로라 **어두운 방, 빠른 주행에서도 같은 색** |
-| 시험 (가짜 사진 17가지) | 12개 맞음 (어두운 빨강·초록·노랑, 바랜 빨강, 어두운 표지판 놓침) | **17개 모두 맞음**, 바닥(베이지·나무)·흰 벽은 신호로 안 봄 |
-| 속도 | 칸마다 비교 계산 | 켤 때 한 번 4096 색(R·G·B 각 4비트) 종류표(4KB)를 만들고 칸마다 **표 한 번 보기** → 계산 없음 |
-
-
-**어떻게 판단하나** : 카메라 칸 하나 → 색 번호(12비트) → 미리 만든 색 종류표 → 종류별로 세기 → 판단 → 블루투스 글자. HSV 계산은 켤 때 표를 만들 때 4096번만 하고, 달리는 동안에는 칸마다 표를 한 번 볼 뿐이라 사진 한 장(19,200칸)이 약 7ms.
-
-![HSV 판단 흐름 : 카메라 칸 하나가 차로 가는 신호 글자가 되기까지](docs/img/hsv_pipeline.png)
-
-![ESP32 가 보는 색 범위와 밝기·채도가 바뀌었을 때의 판단](docs/img/hsv_ranges.png)
-
-**빨간불과 정지 표지판 가르기** : 둘 다 빨강이라 색만으로는 못 가른다 → 빨강 덩어리의 **모양**을 본다. 폰 빨간 화면은 네모를 거의 다 채우고(99%) 흰색이 없고, 팔각형 표지판은 모서리가 비고(73%) 가운데에 흰 글자가 있다(15%). 아래는 실제 주행 중 ESP32 화면에서 펌웨어와 같은 규칙으로 잡은 네모.
-
-![빨간불 vs 정지 표지판](docs/img/sign_vs_red.png)
-
-- **왜 바꿨나** : 트랙에서 빨리 달리면 인식이 잘 안 됐다. 원인은 색이 어두워지거나 바래는 것 → 밝기와 색상을 떼어 보는 HSV 로. HSV 계산은 원래 느리지만 표로 미리 만들어 두어 RGB 비교보다 오히려 가벼움.
-- **HSV 보기 = 가장 빠른 영상** : 켜면 JPEG 압축 없이 색 종류만 묶어 보내 브라우저가 칠한다 (한 장 약 1.4KB, 같은 핫스팟 연결에서 JPEG 초당 3\~4장 → HSV 5\~11장 실측).
-- 웹 카메라 설정의 **HSV 보기** 를 켜면 영상을 ESP32 가 본 색 종류(빨강·초록·노랑·흰색, 회색 = 신호 아님)로 칠해 보여 준다 → 실제 조명에서 기준을 맞출 때.
-
-### 5-4. 속도 : 해상도보다 인지 속도
-
-| 시험한 것 | 결과 | 고른 것 |
-|---|---|---|
-| 320x240 컬러 | 센서가 초당 9\~10장만 줌 → 한 바퀴 약 105ms | ✗ |
-| 센서 JPEG (하드웨어 압축) 받아 풀기 | 푸는 데 95ms → 한 바퀴 110ms | ✗ |
-| 카메라 클럭 24MHz | 빨라지지 않고 덜 찍힌 사진만 늘어남 | ✗ (20MHz) |
-| **160x120 컬러, 모든 칸 보기** | 한 바퀴 약 48ms (초당 약 20장), 반지름 11px 작은 표지판도 잡음 | ✓ |
-
-- 신호 반응 : 처음 약 2초 → **약 0.1\~0.15초** (빨강 2장, 다른 색 3장 연속이면 확정, 바뀌면 바로 보내고 0.2초마다 다시).
-- 사진마다 도는 함수는 IRAM + -O2 (플래시 코드와 PSRAM 사진이 캐시를 같이 써서 밀려나지 않게), 사진은 한 번만 읽고 신호 세기와 영상 복사를 같은 줄에서. 화각은 카메라 칩(OV3660)이 작은 크기에서도 센서 전체를 줄여 써서 이미 최대 (더 넓게는 광각 렌즈 모듈).
-- **카메라 칩은 OV3660 (2026-11-18 보드에서 확인, OV2640 이 아님).** 초당 장수는 센서가 정함 : 컬러 160x120 에서 드라이버가 센서 클럭을 40MHz 로 잡아 **45ms 마다 한 장 (초당 22.2장)** (VSYNC 핀으로 실측). 한 바퀴 48ms 중 처리는 약 7ms 뿐이고 나머지는 다음 사진을 기다리는 시간 → 코드를 더 줄여도 빨라지지 않음. 센서 클럭을 올려 보면 (PLL 배수 8 → 10) 센서는 초당 27.8장을 내지만 ESP32 가 못 받아 덜 찍힌 사진이 10초에 1장 → 28장으로 늘고, 배수 12 는 거의 다 깨짐 → 그대로 둠. 더 빠르게는 ESP32-S3 보드 (카메라 입력이 빠름)
 
 ---
 
@@ -524,34 +457,16 @@ ag,23,010,LINE
 
 ---
 
-## 9. 추가 프로젝트 : ESP32-CAM 카메라 (브랜치 `extra/esp32cam`)
+## 9. 추가 과제 : ESP32-CAM (브랜치 `extra/esp32cam`)
 
-버전 C 에 ESP32-CAM 카메라를 더한 **버전 D (제출용)**. **라인은 차가 라인센서 3개 + PID 로 따라가고, 카메라는 신호등과 정지 표지판만 본다** (카메라로 라인 주행은 하지 않는다 — 이유는 5-2). ESP32 가 직접 색을 판단해서 블루투스로 차에 신호 글자를 보낸다 (PC 없음). `main` 에는 없고 브랜치에서만 이어 간다.
-
-```
- 5V 외부 전원 ──▶ ESP32-CAM ── 와이파이 ──▶ 어느 폰·노트북이든 http://gulno-cam.local (핫스팟을 못 찾을 때만 http://192.168.4.1)
-                      │         컬러 영상(테두리 = 지금 신호), HSV 보기, 색 픽셀 수, 차 상태, 주행 버튼, SD 기록
-                      └──── 블루투스 ──▶ HC-06 ──▶ 아두이노 (버전 D, 라인센서 + PID 로 라인 주행)
- 폰 앱 굴노 (아이폰·안드로이드) "신호등 화면" / "정지 표지판" ──▶ 카메라 앞에 들고 있으면 신호등·표지판
-```
-
-**감지하는 것**
-
-| 보이는 것 | ESP32 가 보내는 글자 | 차 (자동 모드 그대로) |
-|---|---|---|
-| 🔴 빨간불 | `x` (0.2초마다) | 정지. 다른 신호가 오거나 사람이 `a`/`m` 을 보낼 때까지 (ESP32 가 꺼져도 안 달림) |
-| 🟡 노란불 | `v` | 서행 : 기본 속도 120 → 100 (1초 넘게 안 오면 보통) |
-| 🟢 초록불 / 신호 없음 | `n` | 보통 |
-| 🛑 정지 표지판 (빨간 팔각형 + 흰 글자) | `x` 3초 → `n` | 3초 서 있다가 스스로 출발, 그 뒤 5초는 같은 표지판 무시 |
-
-빨간불과 정지 표지판은 둘 다 빨강이라 **모양**으로 가른다 : 빨강 덩어리를 감싼 네모를 빨강이 얼마나 채우는지(폰 빨간 화면 86\~100%, 팔각형 61\~68%)와 그 안의 흰색(글자·테두리) 비율.
+ESP32-CAM 이 신호등·정지 표지판을 보고 차가 따르는 **버전 D** 는 이 저장소의 **ESP32-CAM 전용 브랜치**에 따로 있다. 라인은 이 브랜치의 차 코드(라인센서 + PID, 저주파)가 그대로 따라가고, 카메라는 신호만 본다.
 
 | | |
 |---|---|
-| 받기 | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` (이미 받았으면 `git switch extra/esp32cam`) |
-| 설명 | 브랜치의 `docs/CAMERA.md` (다루기, 신호등·표지판, 배선, 업로드, 와이파이, 웹 화면, 속도·메모리, SD 기록), 작업 보고 `docs/REPORT_20261111.md` |
-| 업로드 | **Arduino IDE 로 올리면 안 됨** (미리 만든 라이브러리라 블루투스를 켜면 메모리 부족으로 멈춤). 완성 펌웨어(`.bin`)를 크롬·esptool 로 올리거나 PlatformIO 로 빌드 → **[ESP32 올리기 안내 (윈도우·리눅스·맥)](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/docs/ESP32_UPLOAD.md)** |
-| 상태 (2026-11-18) | 블루투스 + 와이파이 + 카메라 동시 동작, HSV 색 판단·HSV 보기, 신호 반응 약 0.1\~0.15초, SD 기록 확인. 저주파 차에 달고 트랙 주행 통과 (빨간불 7번 정지, 초록불 4번 출발, 정지 표지판 5번 3초 정지) |
+| 브랜치 | [`extra/esp32cam`](https://github.com/CHOESEUNGJUN/4wd_car_project/tree/extra/esp32cam) · README : [한국어](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/README.md) · [English](https://github.com/CHOESEUNGJUN/4wd_car_project/blob/extra/esp32cam/README.en.md) |
+| 받기 | `git clone -b extra/esp32cam https://github.com/CHOESEUNGJUN/4wd_car_project.git` |
+| 결과 | 트랙 통과 (2026-11-18) : 빨간불 정지, 노랑 서행, 초록불 출발, 정지 표지판 3초 정지 |
+| 릴리스 | [4wd-car ESP32 Car Control V1.0](https://github.com/CHOESEUNGJUN/4wd_car_project/releases/tag/4wd-car-esp32-car-control-v1.0) |
 
 ---
 
